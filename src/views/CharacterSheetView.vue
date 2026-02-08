@@ -3,12 +3,15 @@
     <PageHeader
       :title="isNew ? '创建角色' : (form.name || '未命名')"
       icon="mdi:card-account-details"
-      show-back
+      :show-back="false"
       back-label="返回列表"
       @back="goBack"
     >
       <template #actions>
-        <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
+        <div class="flex items-center gap-2">
+          <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
+          <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
+        </div>
       </template>
     </PageHeader>
 
@@ -25,6 +28,9 @@
     <DiceRollModal
       :open="diceRollOpen"
       :batch="diceRollBatch"
+      :max-rolls="diceRollMaxRolls"
+      :initial-all-results="diceRollInitialResults"
+      @results="onDiceRollResults"
       @confirm="onDiceRollConfirm"
       @close="closeDiceRoll"
     />
@@ -60,6 +66,6 @@ import DiceRollModal from '../components/DiceRollModal.vue'
 const ctx = useCharacterForm()
 provide('characterForm', ctx)
 
-const { form, isNew, sheetTab, save, goBack, diceRollOpen, diceRollBatch, onDiceRollConfirm, closeDiceRoll } = ctx
+const { form, isNew, sheetTab, save, goBack, diceRollOpen, diceRollBatch, diceRollMaxRolls, diceRollInitialResults, onDiceRollResults, onDiceRollConfirm, closeDiceRoll } = ctx
 </script>
 

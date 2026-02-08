@@ -1,21 +1,9 @@
 <script setup>
 import { inject } from 'vue'
 import { labelCls, inputCls, sectionCls, sectionTitleCls } from '../../composables/useCharacterForm'
+import { STORY_LABELS, STORY_KEYS } from '../../data/characterConstants'
 
 const { form, creditDerived } = inject('characterForm')
-
-const storyLabels = {
-  intro: '个人介绍',
-  appearance: '形象描述',
-  belief: '思想与信念',
-  importantPerson: '重要之人',
-  significantPlace: '意义非凡之地',
-  preciousThing: '宝贵之物',
-  traits: '特质',
-  woundsScars: '伤口与疤痕',
-  mentalDisorder: '精神症状',
-}
-const storyKeys = ['intro', 'appearance', 'belief', 'importantPerson', 'significantPlace', 'preciousThing', 'traits', 'woundsScars', 'mentalDisorder']
 </script>
 
 <template>
@@ -33,8 +21,8 @@ const storyKeys = ['intro', 'appearance', 'belief', 'importantPerson', 'signific
     <section :class="sectionCls">
       <h2 :class="sectionTitleCls">背景故事（Story）</h2>
       <div class="space-y-3">
-        <div v-for="key in storyKeys" :key="key">
-          <label :class="labelCls">{{ storyLabels[key] }}</label>
+        <div v-for="key in STORY_KEYS" :key="key">
+          <label :class="labelCls">{{ STORY_LABELS[key] }}</label>
           <textarea v-model="form.story[key]" :class="inputCls" rows="2" class="resize-y" />
         </div>
       </div>

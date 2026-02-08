@@ -19,10 +19,15 @@
 
 ## 生产
 
-1. 构建前端：`npm run build`
-2. 启动服务（会托管 `dist` 并提供 API）：`npm start`
+### 方式一：同机部署（推荐）
 
-需设置 `NODE_ENV=production`；建议配置 `PORT`、`JWT_SECRET`、`FOXTRPG_USERS`。
+1. 构建前端：`npm run build`
+2. 启动服务（会托管 `dist` 并提供 `/api`）：`npm start`
+
+需设置 `NODE_ENV=production`；建议配置 `PORT`、`JWT_SECRET`、`FOXTRPG_USERS`。  
+域名指向这台机器时，访问 `https://你的域名` 即可，登录请求会走同域的 `/api/auth/login`。
+
+若只把 **dist 目录** 上传到域名而未跑 Node，会出现 `/api` 404。请在同一台机跑 Node（见方式一），使 API 与页面同域。
 
 ## 项目结构
 

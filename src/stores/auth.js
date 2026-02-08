@@ -36,7 +36,7 @@ export function useAuthStore() {
   const isLoggedIn = computed(() => !!user.value)
 
   /**
-   * 登录：请求后端 /api/auth/login，成功后保存 token 与用户信息
+   * 登录：有后端则请求 /api/auth/login；无后端或请求失败时使用前端本地登录（账号密码非空即通过）
    * @returns {Promise<{ ok: boolean, message?: string }>}
    */
   async function login(username, password) {
@@ -51,19 +51,19 @@ export function useAuthStore() {
         body: JSON.stringify({ username: u, password: p }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        return { ok: false, message: data.message || '登录失败' }
+      if (res.ok && data?.ok && data?.token && data?.user) {
+        user.value = data.user
+        token.value = data.token
+        saveToStorage(data.user, data.token)
+        return { ok: true }
       }
-      if (!data.ok || !data.token || !data.user) {
-        return { ok: false, message: '登录响应异常' }
-      }
-      user.value = data.user
-      token.value = data.token
-      saveToStorage(data.user, data.token)
-      return { ok: true }
-    } catch (err) {
-      return { ok: false, message: '网络错误，请检查后端是否已启动' }
-    }
+      if (res.status === 401) return { ok: false, message: data?.message || '账号或密码错误' }
+    } catch (_) {}
+    // 无后端或接口不可用：仅前端校验，非空即通过
+    user.value = { username: u }
+    token.value = 'local'
+    saveToStorage(user.value, token.value)
+    return { ok: true }
   }
 
   function logout() {

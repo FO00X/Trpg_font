@@ -237,8 +237,8 @@
         </transition>
       </Menu>
 
-      <!-- 修改昵称弹窗 -->
-      <Dialog :open="nicknameDialogOpen" @close="nicknameDialogOpen = false" class="relative z-[10000]">
+      <!-- 修改昵称弹窗：仅打开时挂载，避免 Portal 在渲染外调用 slot 触发 Vue 警告 -->
+      <Dialog v-if="nicknameDialogOpen" :open="true" @close="closeNicknameDialog" class="relative z-[10000]">
         <DialogOverlay class="fixed inset-0 bg-black/50" />
         <div class="fixed inset-0 flex items-center justify-center p-4">
           <DialogPanel class="w-full max-w-sm rounded-xl bg-sidebar border border-chat-border shadow-xl p-4 focus:outline-none">
@@ -265,7 +265,7 @@
               <button
                 type="button"
                 class="px-3 py-1.5 rounded-lg text-accent-muted hover:text-white text-sm"
-                @click="nicknameDialogOpen = false"
+                @click="closeNicknameDialog"
               >
                 取消
               </button>
@@ -274,8 +274,8 @@
         </div>
       </Dialog>
 
-      <!-- 创建子频道弹窗（仅 KP） -->
-      <Dialog :open="createSubChannelDialogOpen" @close="createSubChannelDialogOpen = false" class="relative z-[10000]">
+      <!-- 创建子频道弹窗（仅 KP）：仅打开时挂载 -->
+      <Dialog v-if="createSubChannelDialogOpen" :open="true" @close="closeCreateSubChannelDialog" class="relative z-[10000]">
         <DialogOverlay class="fixed inset-0 bg-black/50" />
         <div class="fixed inset-0 flex items-center justify-center p-4">
           <DialogPanel class="w-full max-w-sm rounded-xl bg-sidebar border border-chat-border shadow-xl p-4 focus:outline-none">
@@ -293,7 +293,7 @@
               <button
                 type="button"
                 class="px-3 py-1.5 rounded-lg text-accent-muted hover:text-white text-sm"
-                @click="createSubChannelDialogOpen = false"
+                @click="closeCreateSubChannelDialog"
               >
                 取消
               </button>
@@ -309,8 +309,8 @@
         </div>
       </Dialog>
 
-      <!-- 子频道用户设置弹窗 下拉选择 -->
-      <Dialog :open="accessDialogOpen" @close="accessDialogOpen = false" class="relative z-[10000]">
+      <!-- 子频道用户设置弹窗：仅打开时挂载 -->
+      <Dialog v-if="accessDialogOpen" :open="true" @close="closeAccessDialog" class="relative z-[10000]">
         <DialogOverlay class="fixed inset-0 bg-black/50" />
         <div class="fixed inset-0 flex items-center justify-center p-4">
           <DialogPanel class="w-full max-w-md rounded-xl bg-sidebar border border-chat-border shadow-xl p-4 max-h-[80vh] overflow-y-auto focus:outline-none">
@@ -340,7 +340,7 @@
               <button
                 type="button"
                 class="px-3 py-1.5 rounded-lg text-accent-muted hover:text-white text-sm"
-                @click="accessDialogOpen = false"
+                @click="closeAccessDialog"
               >
                 取消
               </button>
@@ -423,6 +423,10 @@ function confirmNickname() {
   nicknameDialogOpen.value = false
 }
 
+function closeNicknameDialog() {
+  nicknameDialogOpen.value = false
+}
+
 function handleLogout() {
   const auth = useAuthStore()
   auth.logout()
@@ -474,6 +478,10 @@ function confirmCreateSubChannel() {
   createSubChannelModule.value = null
 }
 
+function closeCreateSubChannelDialog() {
+  createSubChannelDialogOpen.value = false
+}
+
 const accessDialogOpen = ref(false)
 const accessSubChannel = ref(null)
 const accessModule = ref(null)
@@ -509,6 +517,10 @@ function saveSubChannelAccess() {
   accessDialogOpen.value = false
   accessSubChannel.value = null
   accessModule.value = null
+}
+
+function closeAccessDialog() {
+  accessDialogOpen.value = false
 }
 </script>
 

@@ -4,10 +4,10 @@ import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 
 const friends = ref([
-  { id: '1', name: '熊猫', status: 'online', lastMsg: '最近聊了什么' },
-  { id: '2', name: '田中', status: 'online', lastMsg: '在吗？' },
-  { id: '3', name: '方糕', status: 'offline', lastMsg: '明天见' },
-  { id: '4', name: '言安', status: 'offline', lastMsg: '明天见' },
+  { id: '1', name: '熊猫', status: 'online', lastMsg: '私聊消息' },
+  { id: '2', name: '田中', status: 'online', lastMsg: '私聊消息2' },
+  { id: '3', name: '方糕', status: 'offline', lastMsg: '私聊消息3' },
+  { id: '4', name: '言安', status: 'offline', lastMsg: '私聊消息4' },
 ])
 </script>
 

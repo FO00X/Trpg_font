@@ -1,17 +1,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCharactersStore } from '../stores/characters'
-
-const CREDIT_TABLE = [
-  { max: 4, creditRating: '无', cash: '$0', spendingLevelDesc: '无', assetsDesc: '一无所有' },
-  { max: 9, creditRating: '赤贫', cash: '$5', spendingLevelDesc: '仅能糊口', assetsDesc: '极少' },
-  { max: 19, creditRating: '贫困', cash: '$20', spendingLevelDesc: '勉强维持', assetsDesc: '很少' },
-  { max: 29, creditRating: '一般偏下', cash: '$50', spendingLevelDesc: '日常温饱', assetsDesc: '有限' },
-  { max: 49, creditRating: '一般', cash: '$100', spendingLevelDesc: '一般生活', assetsDesc: '一般' },
-  { max: 69, creditRating: '小康', cash: '$200', spendingLevelDesc: '舒适', assetsDesc: '可观' },
-  { max: 89, creditRating: '富裕', cash: '$500', spendingLevelDesc: '宽裕', assetsDesc: '丰厚' },
-  { max: 99, creditRating: '极富', cash: '$2,000', spendingLevelDesc: '奢华', assetsDesc: '巨额' },
-]
+import { generateName } from '../utils/randomName'
+import { SKILL_GROUP_ORDER, getSkillGroupLabel } from '../data/skillGroups'
+import { OCCUPATION_GROUPS } from '../data/occupationGroups'
 
 export const SHEET_TABS = [
   { id: 'basic', label: '基础信息', icon: 'mdi:account' },
@@ -32,6 +24,23 @@ export const labelCls = 'block text-sm text-[#a6adc8] mb-1'
 export const sectionCls = 'rounded-xl bg-chat-panel border border-chat-border p-4'
 export const sectionTitleCls = 'text-sm font-medium text-accent-muted uppercase tracking-wider mb-3'
 
+const ROLL_CACHE_STORAGE_KEY = 'foxtrpg-roll-cache'
+function loadRollCacheFromStorage() {
+  try {
+    const raw = localStorage.getItem(ROLL_CACHE_STORAGE_KEY)
+    if (!raw) return {}
+    const data = JSON.parse(raw)
+    return data && typeof data === 'object' ? data : {}
+  } catch {
+    return {}
+  }
+}
+function saveRollCacheToStorage(all) {
+  try {
+    localStorage.setItem(ROLL_CACHE_STORAGE_KEY, JSON.stringify(all))
+  } catch (_) {}
+}
+
 export function useCharacterForm() {
   const route = useRoute()
   const router = useRouter()
@@ -39,11 +48,18 @@ export function useCharacterForm() {
     getById,
     getDefaultSheet,
     getDerived,
+    normalizeCharacter,
+    getCreditDerived,
+    skillSuccess,
+    skillDisplayName,
+    getCareerSkillNames,
+    penetrateLabel,
     create,
     update,
     PRESET_SKILLS,
     SKILL_TYPE_OPTIONS,
     PRESET_WEAPONS,
+    WEAPON_CATEGORIES,
     WEAPON_PENETRATE_OPTIONS,
     normalizeWeapons,
   } = useCharactersStore()
@@ -74,15 +90,36 @@ export function useCharacterForm() {
       interestPointsRemain: Math.max(0, interestTotal - interestUsed),
     }
   })
-  const creditDerived = computed(() => {
+  const creditDerived = computed(() => getCreditDerived(form.value.skills || []))
+
+  /** 按技能分组顺序分组的技能列表，用于能力体系表按分类展示 */
+  const skillsByGroup = computed(() => {
     const skills = form.value.skills || []
-    const creditSkill = skills.find(s => s.id === 'credit')
-    const value = creditSkill
-      ? Math.min(99, (creditSkill.base || 0) + (creditSkill.career || 0) + (creditSkill.interest || 0) + (creditSkill.growth || 0))
-      : 0
-    const row = CREDIT_TABLE.find(r => value <= r.max) || CREDIT_TABLE[CREDIT_TABLE.length - 1]
-    return { creditRating: row.creditRating, cash: row.cash, spendingLevel: row.spendingLevelDesc, assets: row.assetsDesc }
+    const order = SKILL_GROUP_ORDER || []
+    const byGroup = {}
+    for (const s of skills) {
+      const group = getSkillGroupLabel(s)
+      if (!byGroup[group]) byGroup[group] = []
+      byGroup[group].push(s)
+    }
+    return order.map((group) => ({ group, skills: byGroup[group] || [] })).filter((g) => g.skills.length > 0)
   })
+
+  /** 当前职业本职技能名集合（用于判断是否在技能名前加星号） */
+  const careerSkillNames = computed(() => {
+    const names = getCareerSkillNames(form.value.occupation) || []
+    return new Set(names)
+  })
+
+  /** 判断某技能是否为当前职业的本职技能 */
+  function isCareerSkill(skill) {
+    if (!skill) return false
+    const displayName = skillDisplayName(skill)
+    if (careerSkillNames.value.has(displayName)) return true
+    const baseName = (skill.name || '').replace(/\d$/, '')
+    if (careerSkillNames.value.has(baseName)) return true
+    return false
+  }
 
   watch(
     () => ({ hpMax: derived.value.hpMax, mpMax: derived.value.mpMax, sanInitial: derived.value.sanInitial }),
@@ -94,20 +131,23 @@ export function useCharacterForm() {
     { immediate: true }
   )
 
+  /** 按卡片区分：每张卡的幸运/全属性掷骰结果独立，不跨卡 */
+  const rollCacheByCard = ref({})
+  const currentRollCacheKey = computed(() => (isNew.value ? 'new' : (id.value || 'new')))
+
   onMounted(() => {
+    if (isNew.value) {
+      rollCacheByCard.value = { ...rollCacheByCard.value, new: { luck: [], full: [] } }
+    }
     if (!isNew.value && id.value) {
+      const stored = loadRollCacheFromStorage()
+      const cardCache = stored[id.value]
+      if (cardCache && (cardCache.luck?.length || cardCache.full?.length)) {
+        rollCacheByCard.value = { ...rollCacheByCard.value, [id.value]: { luck: cardCache.luck || [], full: cardCache.full || [] } }
+      }
       const c = getById(id.value)
       if (c) {
-        const def = getDefaultSheet()
-        form.value = { ...def, ...c }
-        form.value.skillRule = { ...def.skillRule, ...(c.skillRule || {}) }
-        form.value.combat = { ...def.combat, ...(c.combat || {}) }
-        form.value.possessions = { ...def.possessions, ...(c.possessions || {}) }
-        form.value.mythos = { ...def.mythos, ...(c.mythos || {}) }
-        form.value.story = { ...def.story, ...(c.story || {}) }
-        form.value.weapons = normalizeWeapons(c.weapons)
-        form.value.companions = Array.isArray(c.companions) ? c.companions : def.companions
-        form.value.scenarios = Array.isArray(c.scenarios) ? c.scenarios : def.scenarios
+        form.value = normalizeCharacter(c)
         if (!form.value.skills || form.value.skills.length !== PRESET_SKILLS.length) {
           form.value.skills = getDefaultSheet().skills
         }
@@ -120,15 +160,19 @@ export function useCharacterForm() {
   function save() {
     const name = form.value.name?.trim() || '未命名'
     if (isNew.value) {
-      const newId = create({ ...form.value, name })
-      router.replace(`/characters/${newId}`)
+      create({ ...form.value, name })
     } else {
       update(id.value, { ...form.value, name })
     }
+    goBack()
   }
 
   function goBack() {
-    router.push('/characters')
+    if (window.history.length > 1) {
+      router.back()
+    } else {
+      router.replace('/characters')
+    }
   }
 
   const addWeaponDialogOpen = ref(false)
@@ -186,14 +230,48 @@ export function useCharacterForm() {
     form.value.scenarios.splice(idx, 1)
   }
 
-  function penetrateLabel(value) {
-    const opt = WEAPON_PENETRATE_OPTIONS.find(o => o.value === value)
-    return opt ? opt.label : '-'
+  // 随机生成姓名弹窗（国家/地区 + 性别）
+  const randomNameModalOpen = ref(false)
+  const randomNameCountry = ref('china')
+  const randomNameGender = ref('unknown')
+  const generatedName = ref('')
+  function openRandomNameModal() {
+    randomNameCountry.value = 'china'
+    randomNameGender.value = 'unknown'
+    generatedName.value = generateName(randomNameCountry.value, randomNameGender.value)
+    randomNameModalOpen.value = true
+  }
+  function doGenerateRandomName() {
+    generatedName.value = generateName(randomNameCountry.value, randomNameGender.value)
+  }
+  function confirmRandomName() {
+    if (generatedName.value?.trim()) {
+      form.value.name = generatedName.value.trim()
+    }
+    randomNameModalOpen.value = false
+  }
+  function closeRandomNameModal() {
+    randomNameModalOpen.value = false
   }
 
-  // 掷骰弹窗：一键随机全部属性时先播动画再应用
-  const diceRollOpen = ref(false)
-  const diceRollBatch = ref([])
+  // 职业选择弹窗（从列表快速选择）
+  const occupationPickerOpen = ref(false)
+  function openOccupationPicker() {
+    occupationPickerOpen.value = true
+  }
+  function closeOccupationPicker() {
+    occupationPickerOpen.value = false
+  }
+  function selectOccupation(occupation) {
+    form.value.occupation = occupation ?? ''
+    occupationPickerOpen.value = false
+  }
+
+  // 核心属性：上限 90；自行填写时 8 项共享点数池，幸运单独掷 3 选 1
+  const CHAR_MIN = 30
+  const CHAR_MAX = 90
+  const CHAR_ATTRS = ['str', 'dex', 'siz', 'app', 'con', 'int', 'pow', 'edu']
+  const CHAR_POINTS_TOTAL = 480 // 自行填写时 8 项总点数
   const CHAR_ROLL_BATCH = [
     { notation: '3d6', key: 'str', label: '力量STR', multiply: 5 },
     { notation: '3d6', key: 'dex', label: '敏捷DEX', multiply: 5 },
@@ -205,21 +283,71 @@ export function useCharacterForm() {
     { notation: '2d6+6', key: 'edu', label: '教育EDU', multiply: 5 },
     { notation: '3d6', key: 'luc', label: '幸运LUC', multiply: 5 },
   ]
+  const LUCK_ROLL_BATCH = [{ notation: '3d6', key: 'luc', label: '幸运LUC', multiply: 5 }]
+
+  const diceRollOpen = ref(false)
+  const diceRollBatch = ref([])
+  const diceRollMaxRolls = ref(1)
+
+  const diceRollInitialResults = ref([])
+  function getCacheForCard(key) {
+    let cache = rollCacheByCard.value[key]
+    if (key !== 'new' && (!cache || (!cache.luck?.length && !cache.full?.length))) {
+      const stored = loadRollCacheFromStorage()
+      cache = stored[key] || { luck: [], full: [] }
+      rollCacheByCard.value = { ...rollCacheByCard.value, [key]: cache }
+    }
+    return cache || { luck: [], full: [] }
+  }
   function openRollAllChars() {
     diceRollBatch.value = [...CHAR_ROLL_BATCH]
+    diceRollMaxRolls.value = 5
+    const key = currentRollCacheKey.value
+    const cache = getCacheForCard(key)
+    const full = (cache.full || [])
+    diceRollInitialResults.value = full.length ? full.map((g) => g.map((r) => ({ ...r }))) : []
     diceRollOpen.value = true
   }
+  function openRollLuckOnly() {
+    diceRollBatch.value = [...LUCK_ROLL_BATCH]
+    diceRollMaxRolls.value = 3
+    const key = currentRollCacheKey.value
+    const cache = getCacheForCard(key)
+    const luck = (cache.luck || [])
+    diceRollInitialResults.value = luck.length ? luck.map((g) => g.map((r) => ({ ...r }))) : []
+    diceRollOpen.value = true
+  }
+  function onDiceRollResults(allResults) {
+    if (!diceRollBatch.value.length) return
+    const key = currentRollCacheKey.value
+    const isLuckOnly = diceRollBatch.value.length === 1 && diceRollBatch.value[0].key === 'luc'
+    const copy = allResults.map((g) => g.map((r) => ({ ...r })))
+    const prev = rollCacheByCard.value[key] || { luck: [], full: [] }
+    const next = isLuckOnly ? { ...prev, luck: copy } : { ...prev, full: copy }
+    rollCacheByCard.value = { ...rollCacheByCard.value, [key]: next }
+    if (key !== 'new') {
+      const stored = loadRollCacheFromStorage()
+      stored[key] = next
+      saveRollCacheToStorage(stored)
+    }
+  }
   function onDiceRollConfirm(payload) {
-    Object.keys(payload).forEach((key) => { form.value[key] = payload[key] })
+    const keys = Object.keys(payload)
+    keys.forEach((key) => {
+      const v = Math.min(CHAR_MAX, Math.max(0, Number(payload[key]) || 0))
+      form.value[key] = v
+    })
+    if (keys.length > 1) form.value.attributesSource = 'rolled'
     diceRollOpen.value = false
   }
   function closeDiceRoll() {
     diceRollOpen.value = false
   }
-
-  function skillSuccess(s) {
-    return (s.base || 0) + (s.career || 0) + (s.interest || 0) + (s.growth || 0)
-  }
+  const charPointsRemaining = computed(() => {
+    if (form.value.attributesSource !== 'manual') return 0
+    const used = CHAR_ATTRS.reduce((sum, k) => sum + Math.min(CHAR_MAX, Math.max(0, Number(form.value[k]) || 0)), 0)
+    return CHAR_POINTS_TOTAL - used
+  })
 
   return {
     form,
@@ -245,17 +373,45 @@ export function useCharacterForm() {
     openScenarioDialog,
     confirmScenario,
     removeScenario,
+    randomNameModalOpen,
+    randomNameCountry,
+    randomNameGender,
+    generatedName,
+    openRandomNameModal,
+    doGenerateRandomName,
+    confirmRandomName,
+    closeRandomNameModal,
+    occupationPickerOpen,
+    openOccupationPicker,
+    closeOccupationPicker,
+    selectOccupation,
     penetrateLabel,
     openRollAllChars,
+    openRollLuckOnly,
     diceRollOpen,
     diceRollBatch,
+    diceRollMaxRolls,
+    diceRollInitialResults,
+    onDiceRollResults,
     onDiceRollConfirm,
     closeDiceRoll,
+    CHAR_ATTRS,
+    CHAR_MIN,
+    CHAR_MAX,
+    CHAR_POINTS_TOTAL,
+    charPointsRemaining,
     skillSuccess,
+    skillDisplayName,
+    skillsByGroup,
+    isCareerSkill,
+    getSkillGroupLabel,
+    SKILL_GROUP_ORDER,
     PRESET_SKILLS,
     SKILL_TYPE_OPTIONS,
     PRESET_WEAPONS,
+    WEAPON_CATEGORIES,
     WEAPON_PENETRATE_OPTIONS,
     getDefaultSheet,
+    occupationGroups: OCCUPATION_GROUPS,
   }
 }

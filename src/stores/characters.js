@@ -1,4 +1,7 @@
 import { ref, computed } from 'vue'
+import { CREDIT_TABLE } from '../data/characterConstants'
+import { PRESET_WEAPONS_FULL, WEAPON_CATEGORIES } from '../data/presetWeapons'
+import { OCCUPATION_CAREER_SKILLS } from '../data/occupationCareers'
 
 // COC 7th 伤害加值/体型表
 const strSizTable = [
@@ -80,9 +83,6 @@ const PRESET_SKILLS = [
   { id: 'art_1', name: '技艺', base: 0, typeOption: 'art' },
   { id: 'art_2', name: '技艺', base: 0, typeOption: 'art' },
   { id: 'art_3', name: '技艺', base: 0, typeOption: 'art' },
-  { id: 'custom_1', name: '自定义技能1', base: 0, custom: true },
-  { id: 'custom_2', name: '自定义技能2', base: 0, custom: true },
-  { id: 'custom_3', name: '自定义技能3', base: 0, custom: true },
 ]
 
 // 武器使用技能选项（参考规则书）
@@ -99,17 +99,8 @@ export const WEAPON_PENETRATE_OPTIONS = [
   { value: '1', label: '✓' },
 ]
 
-// 可选择的预设武器（填充到武器行）
-export const PRESET_WEAPONS = [
-  { id: 'pistol_small', name: '小型手枪(.22/32)', skill: '射击(手枪)', success: 20, damage: '1D6', range: '15', penetrate: '1', attacks: '1', ammo: '6', malfunction: '100' },
-  { id: 'pistol_38', name: '手枪(.38)', skill: '射击(手枪)', success: 20, damage: '1D10', range: '15', penetrate: '1', attacks: '1', ammo: '6', malfunction: '100' },
-  { id: 'shotgun', name: '霰弹枪', skill: '射击(步/霰)', success: 25, damage: '4D6/1D6', range: '30/10', penetrate: '0', attacks: '1/2', ammo: '2', malfunction: '100' },
-  { id: 'rifle', name: '步枪', skill: '射击(步/霰)', success: 25, damage: '2D6+4', range: '100', penetrate: '1', attacks: '1', ammo: '1', malfunction: '100' },
-  { id: 'knife', name: '小刀', skill: '格斗(刀剑)', success: 25, damage: '1D4+2', range: '接触', penetrate: '', attacks: '1', ammo: '', malfunction: '' },
-  { id: 'baton', name: '警棍', skill: '格斗(斗殴)', success: 25, damage: '1D8', range: '接触', penetrate: '', attacks: '1', ammo: '', malfunction: '' },
-  { id: 'axe', name: '手斧', skill: '格斗(斧)', success: 15, damage: '1D6+2', range: '接触', penetrate: '', attacks: '1', ammo: '', malfunction: '' },
-  { id: 'heavy_weapon', name: '冲锋枪', skill: '射击(冲锋枪)', success: 15, damage: '1D10', range: '50', penetrate: '1', attacks: '1或连射', ammo: '30', malfunction: '100' },
-]
+// 可选择的预设武器（来自规则书，见 src/data/presetWeapons.js），供本 store 与外部使用
+export { PRESET_WEAPONS_FULL as PRESET_WEAPONS, WEAPON_CATEGORIES }
 
 // 技能类型选项
 export const SKILL_TYPE_OPTIONS = {
@@ -157,6 +148,62 @@ function normalizeWeapons(arr) {
   return arr.map((w) => normalizeWeapon(w))
 }
 
+/** 将存储中的原始角色与默认表合并，返回完整 sheet（供表单/弹窗使用） */
+function normalizeCharacter(c) {
+  if (!c) return null
+  const def = getDefaultSheet()
+  return {
+    ...def,
+    ...c,
+    skillRule: { ...def.skillRule, ...(c.skillRule || {}) },
+    combat: { ...def.combat, ...(c.combat || {}) },
+    possessions: { ...def.possessions, ...(c.possessions || {}) },
+    mythos: { ...def.mythos, ...(c.mythos || {}) },
+    story: { ...def.story, ...(c.story || {}) },
+    weapons: normalizeWeapons(c.weapons),
+    companions: Array.isArray(c.companions) ? c.companions : def.companions,
+    scenarios: Array.isArray(c.scenarios) ? c.scenarios : def.scenarios,
+  }
+}
+
+/** 技能成功率：基础+职业+兴趣+成长 */
+function skillSuccess(s) {
+  return (s?.base || 0) + (s?.career || 0) + (s?.interest || 0) + (s?.growth || 0)
+}
+
+/** 技能显示名（含类型选项时带括号） */
+function skillDisplayName(s) {
+  if (!s) return '-'
+  return s.typeOption
+    ? (s.name?.replace(/\d$/, '') || '') + (s.typeValue ? `(${s.typeValue})` : '')
+    : (s.name || '-')
+}
+
+/** 根据职业名得到本职技能名数组（与规则书一致，用于在技能表前加星号） */
+function getCareerSkillNames(occupationName) {
+  if (!occupationName || !OCCUPATION_CAREER_SKILLS) return []
+  const name = String(occupationName).trim()
+  if (OCCUPATION_CAREER_SKILLS[name]) return OCCUPATION_CAREER_SKILLS[name]
+  const suffixes = ['(原作向)', '(古典)', '(现代)']
+  for (const suffix of suffixes) {
+    const key = name + suffix
+    if (OCCUPATION_CAREER_SKILLS[key]) return OCCUPATION_CAREER_SKILLS[key]
+  }
+  return []
+}
+
+/** 根据信用技能值从 CREDIT_TABLE 得到描述 */
+function getCreditFromSkillValue(value) {
+  const v = Math.min(99, Math.max(0, Number(value) || 0))
+  const row = CREDIT_TABLE.find((r) => v <= r.max) || CREDIT_TABLE[CREDIT_TABLE.length - 1]
+  return {
+    creditRating: row.creditRating,
+    cash: row.cash,
+    spendingLevel: row.spendingLevelDesc,
+    assets: row.assetsDesc,
+  }
+}
+
 function getDefaultSheet() {
   const basic = {
     name: '', occupation: '', age: 18, gender: '男',
@@ -165,6 +212,7 @@ function getDefaultSheet() {
   const characteristics = {
     str: 0, dex: 0, siz: 0, app: 0, con: 0, int: 0, pow: 0, edu: 0, luc: 0,
   }
+  const attributesSource = 'manual'
   const corePanel = {
     hpCurrent: 0, mpCurrent: 0, sanCurrent: 0,
   }
@@ -196,6 +244,7 @@ function getDefaultSheet() {
     campaign: '',
     era: '1920',
     skillCap: 99,
+    attributesSource,
     ...basic,
     ...characteristics,
     ...corePanel,
@@ -252,6 +301,18 @@ export function useCharactersStore() {
     return characters.value.find(c => c.id === id)
   }
 
+  function getCreditDerived(skills) {
+    if (!Array.isArray(skills)) return getCreditFromSkillValue(0)
+    const creditSkill = skills.find((s) => s.id === 'credit')
+    const value = creditSkill ? skillSuccess(creditSkill) : 0
+    return getCreditFromSkillValue(value)
+  }
+
+  function penetrateLabel(value) {
+    const opt = WEAPON_PENETRATE_OPTIONS.find((o) => o.value === value)
+    return opt ? opt.label : '-'
+  }
+
   function create(draft) {
     const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const sheet = { ...getDefaultSheet(), ...draft, id, updated: new Date().toISOString().slice(0, 10) }
@@ -277,12 +338,19 @@ export function useCharactersStore() {
     getDefaultSheet,
     getDerived,
     getById,
+    normalizeCharacter,
+    getCreditDerived,
+    skillSuccess,
+    skillDisplayName,
+    getCareerSkillNames,
+    penetrateLabel,
     create,
     update,
     remove,
     PRESET_SKILLS,
     SKILL_TYPE_OPTIONS,
-    PRESET_WEAPONS,
+    PRESET_WEAPONS: PRESET_WEAPONS_FULL,
+    WEAPON_CATEGORIES,
     WEAPON_SKILL_OPTIONS,
     WEAPON_PENETRATE_OPTIONS,
     normalizeWeapons,
