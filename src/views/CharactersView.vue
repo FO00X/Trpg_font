@@ -1,11 +1,9 @@
 <script setup>
-import { inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useCharactersStore } from '../stores/characters'
+import PageHeader from '../components/PageHeader.vue'
 
-const sidebarOpen = inject('sidebarOpen')
-const toggleSidebar = inject('toggleSidebar')
 const router = useRouter()
 const { characters } = useCharactersStore()
 
@@ -20,26 +18,18 @@ function openCharacter(c) {
 
 <template>
   <div class="flex flex-col h-full">
-    <header class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-chat-border bg-chat-panel">
-      <button
-        type="button"
-        class="p-2 -ml-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 transition-colors"
-        :title="sidebarOpen ? '收起侧边栏' : '展开侧边栏'"
-        @click="toggleSidebar"
-      >
-        <Icon :icon="sidebarOpen ? 'mdi:backburger' : 'mdi:menu'" class="text-xl" />
-      </button>
-      <Icon icon="mdi:card-account-details" class="text-xl text-accent" />
-      <h1 class="font-semibold text-white">角色卡</h1>
-      <button
-        type="button"
-        class="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90"
-        @click="createNew"
-      >
-        <Icon icon="mdi:plus" class="text-lg" />
-        创建角色
-      </button>
-    </header>
+    <PageHeader title="角色卡" icon="mdi:card-account-details">
+      <template #actions>
+        <button
+          type="button"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90"
+          @click="createNew"
+        >
+          <Icon icon="mdi:plus" class="text-lg" />
+          创建角色
+        </button>
+      </template>
+    </PageHeader>
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <div class="max-w-2xl mx-auto space-y-2">
         <div

@@ -1,9 +1,7 @@
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
-
-const sidebarOpen = inject('sidebarOpen')
-const toggleSidebar = inject('toggleSidebar')
+import PageHeader from '../components/PageHeader.vue'
 
 const notes = ref([
   { id: '1', title: '跑团规则备忘', preview: '骰子规则：d20 用于主要判定...', updated: '2024-01-15' },
@@ -13,18 +11,7 @@ const notes = ref([
 
 <template>
   <div class="flex flex-col h-full">
-    <header class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-chat-border bg-chat-panel">
-      <button
-        type="button"
-        class="p-2 -ml-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 transition-colors"
-        :title="sidebarOpen ? '收起侧边栏' : '展开侧边栏'"
-        @click="toggleSidebar"
-      >
-        <Icon :icon="sidebarOpen ? 'mdi:backburger' : 'mdi:menu'" class="text-xl" />
-      </button>
-      <Icon icon="mdi:note-text-outline" class="text-xl text-accent" />
-      <h1 class="font-semibold text-white">笔记</h1>
-    </header>
+    <PageHeader title="笔记" icon="mdi:note-text-outline" />
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <div class="space-y-2">
         <div

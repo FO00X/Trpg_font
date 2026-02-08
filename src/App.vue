@@ -1,11 +1,14 @@
 <script setup>
-import { ref, provide, onMounted } from 'vue'
-import { RouterView } from 'vue-router'
+import { ref, provide, watch, computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
 import { useChatStore } from './stores/chat'
 
+const route = useRoute()
 const sidebarOpen = ref(false)
 const { initSocket } = useChatStore()
+
+const isLoginPage = computed(() => route.name === 'login')
 
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
@@ -14,9 +17,9 @@ function toggleSidebar() {
 provide('sidebarOpen', sidebarOpen)
 provide('toggleSidebar', toggleSidebar)
 
-onMounted(() => {
-  initSocket()
-})
+watch(isLoginPage, (isLogin) => {
+  if (!isLogin) initSocket()
+}, { immediate: true })
 </script>
 
 <template>
@@ -24,6 +27,6 @@ onMounted(() => {
     <main class="h-full w-full flex flex-col overflow-hidden">
       <RouterView />
     </main>
-    <Sidebar v-model:open="sidebarOpen" />
+    <Sidebar v-if="!isLoginPage" v-model:open="sidebarOpen" />
   </div>
 </template>

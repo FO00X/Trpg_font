@@ -1,47 +1,61 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { APP_TITLE } from '../constants/app'
+import { useAuthStore } from '../stores/auth'
 
 const routes = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('../views/LoginView.vue'),
+    meta: { title: '登录', requiresAuth: false },
+  },
   {
     path: '/',
     name: 'chat',
     component: () => import('../views/ChatView.vue'),
-    meta: { title: '聊天' },
+    meta: { title: '聊天', requiresAuth: true },
   },
   {
     path: '/friends',
     name: 'friends',
     component: () => import('../views/FriendsView.vue'),
-    meta: { title: '好友' },
+    meta: { title: '好友', requiresAuth: true },
   },
   {
     path: '/characters',
     name: 'characters',
     component: () => import('../views/CharactersView.vue'),
-    meta: { title: '角色卡' },
+    meta: { title: '角色卡', requiresAuth: true },
   },
   {
     path: '/characters/new',
     name: 'character-new',
     component: () => import('../views/CharacterSheetView.vue'),
-    meta: { title: '创建角色' },
+    meta: { title: '创建角色', requiresAuth: true },
   },
   {
     path: '/characters/:id',
     name: 'character-edit',
     component: () => import('../views/CharacterSheetView.vue'),
-    meta: { title: '角色卡' },
+    meta: { title: '角色卡', requiresAuth: true },
   },
   {
     path: '/notifications',
     name: 'notifications',
     component: () => import('../views/NotificationsView.vue'),
-    meta: { title: '系统通知' },
+    meta: { title: '系统通知', requiresAuth: true },
   },
   {
     path: '/notes',
     name: 'notes',
     component: () => import('../views/NotesView.vue'),
-    meta: { title: '笔记' },
+    meta: { title: '笔记', requiresAuth: true },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('../views/NotFoundView.vue'),
+    meta: { title: '页面不存在', requiresAuth: false },
   },
 ]
 
@@ -50,8 +64,19 @@ const router = createRouter({
   routes,
 })
 
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  const requiresAuth = to.meta.requiresAuth !== false
+  if (requiresAuth && !auth.isLoggedIn) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.name === 'login' && auth.isLoggedIn) {
+    return { path: '/' }
+  }
+})
+
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} - FOXTrpg` : 'FOXTrpg'
+  document.title = to.meta.title ? `${to.meta.title} - ${APP_TITLE}` : APP_TITLE
 })
 
 export default router

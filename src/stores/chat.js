@@ -158,10 +158,10 @@ export function useChatStore() {
       })
     })
     s.on('connect', () => {
-      console.log('[Socket] 已连接')
+      if (import.meta.env.DEV) console.log('[Socket] 已连接')
     })
     s.on('disconnect', () => {
-      console.log('[Socket] 已断开')
+      if (import.meta.env.DEV) console.log('[Socket] 已断开')
     })
   }
 

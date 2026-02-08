@@ -1,9 +1,7 @@
 <script setup>
-import { ref, inject } from 'vue'
+import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
-
-const sidebarOpen = inject('sidebarOpen')
-const toggleSidebar = inject('toggleSidebar')
+import PageHeader from '../components/PageHeader.vue'
 
 const notifications = ref([
   { id: '1', type: 'system', title: '系统维护通知', content: '将于本周六 2:00-4:00 进行维护', time: '2024-01-14 10:00', read: false },
@@ -14,18 +12,7 @@ const notifications = ref([
 
 <template>
   <div class="flex flex-col h-full">
-    <header class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-chat-border bg-chat-panel">
-      <button
-        type="button"
-        class="p-2 -ml-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 transition-colors"
-        :title="sidebarOpen ? '收起侧边栏' : '展开侧边栏'"
-        @click="toggleSidebar"
-      >
-        <Icon :icon="sidebarOpen ? 'mdi:backburger' : 'mdi:menu'" class="text-xl" />
-      </button>
-      <Icon icon="mdi:bell-outline" class="text-xl text-accent" />
-      <h1 class="font-semibold text-white">系统通知</h1>
-    </header>
+    <PageHeader title="系统通知" icon="mdi:bell-outline" />
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <div class="space-y-2">
         <div

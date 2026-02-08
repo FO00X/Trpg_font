@@ -212,17 +212,37 @@ function getDefaultSheet() {
   }
 }
 
+const STORAGE_KEY = 'foxtrpg-characters'
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return Array.isArray(data) ? data : null
+  } catch {
+    return null
+  }
+}
+
+function saveToStorage(list) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  } catch (_) {}
+}
+
 export function useCharactersStore() {
-  const characters = ref([
+  const defaultList = [
     { id: '1', name: '艾莉娅', campaign: '星海传说', updated: '2024-01-15', ...getDefaultSheet() },
     { id: '2', name: '索伦', campaign: '黑暗森林', updated: '2024-01-10', ...getDefaultSheet() },
-  ])
+  ]
+  const characters = ref(loadFromStorage() ?? defaultList)
 
   function getDerived(sheet) {
     const con = sheet.con || 0, siz = sheet.siz || 0, pow = sheet.pow || 0, edu = sheet.edu || 0, str = sheet.str || 0
     const hpMax = Math.ceil((con + siz) / 10)
     const mpMax = Math.ceil(pow / 5)
-    const sanInitial = Math.max(pow * 5, edu * 5)
+    const sanInitial = pow // SAN 与意志 POW 同值
     const move = 9
     const { damageBonus, build } = getDamageBonusAndBuild(str, siz)
     return { hpMax, mpMax, sanInitial, move, damageBonus, build }
@@ -236,6 +256,7 @@ export function useCharactersStore() {
     const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const sheet = { ...getDefaultSheet(), ...draft, id, updated: new Date().toISOString().slice(0, 10) }
     characters.value.push(sheet)
+    saveToStorage(characters.value)
     return id
   }
 
@@ -243,10 +264,12 @@ export function useCharactersStore() {
     const i = characters.value.findIndex(c => c.id === id)
     if (i === -1) return
     characters.value[i] = { ...characters.value[i], ...draft, updated: new Date().toISOString().slice(0, 10) }
+    saveToStorage(characters.value)
   }
 
   function remove(id) {
     characters.value = characters.value.filter(c => c.id !== id)
+    saveToStorage(characters.value)
   }
 
   return {

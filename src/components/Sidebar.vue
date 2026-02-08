@@ -366,6 +366,7 @@ import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems, MenuItem, Dialog, DialogOverlay, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 import { useChatStore } from '../stores/chat'
+import { useAuthStore } from '../stores/auth'
 
 const props = defineProps({
   open: { type: Boolean, default: true },
@@ -423,7 +424,9 @@ function confirmNickname() {
 }
 
 function handleLogout() {
+  useAuthStore().logout()
   logout()
+  router.push('/login')
 }
 
 const navItems = [
