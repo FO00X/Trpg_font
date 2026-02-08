@@ -192,15 +192,13 @@ function getCareerSkillNames(occupationName) {
   return []
 }
 
-/** 根据信用技能值从 CREDIT_TABLE 得到描述 */
+/** 根据信用技能值从 CREDIT_TABLE 得到描述（含信用等级与生活规格描述） */
 function getCreditFromSkillValue(value) {
   const v = Math.min(99, Math.max(0, Number(value) || 0))
   const row = CREDIT_TABLE.find((r) => v <= r.max) || CREDIT_TABLE[CREDIT_TABLE.length - 1]
   return {
     creditRating: row.creditRating,
-    cash: row.cash,
-    spendingLevel: row.spendingLevelDesc,
-    assets: row.assetsDesc,
+    lifeStyleDesc: row.lifeStyleDesc ?? '',
   }
 }
 

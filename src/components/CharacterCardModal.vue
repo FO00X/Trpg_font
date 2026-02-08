@@ -5,6 +5,7 @@ import { Dialog, DialogOverlay, DialogPanel } from '@headlessui/vue'
 import { useCharactersStore } from '../stores/characters'
 import { SHEET_TABS, labelCls, sectionCls, sectionTitleCls } from '../composables/useCharacterForm'
 import { CHAR_LABELS, STORY_LABELS, STORY_KEYS } from '../data/characterConstants'
+import { SKILL_GROUP_ORDER, getSkillGroupLabel } from '../data/skillGroups'
 import HpMpSanBar from './character/HpMpSanBar.vue'
 import StatusBadges from './character/StatusBadges.vue'
 
@@ -78,6 +79,38 @@ const visibleTabs = computed(() => {
   const all = SHEET_TABS.filter(t => t.id !== 'ability' || props.isOwn)
   return all
 })
+
+/** 能力体系内按技能分组（与编辑页一致） */
+const skillsByGroup = computed(() => {
+  const skills = sheet.value?.skills || []
+  const order = SKILL_GROUP_ORDER || []
+  const byGroup = {}
+  for (const s of skills) {
+    const group = getSkillGroupLabel(s)
+    if (!byGroup[group]) byGroup[group] = []
+    byGroup[group].push(s)
+  }
+  return order.map((group) => ({ group, skills: byGroup[group] || [] })).filter((g) => g.skills.length > 0)
+})
+
+const abilityGroupTab = ref('')
+const currentAbilityGroupSkills = computed(() => {
+  const list = skillsByGroup.value || []
+  const current = abilityGroupTab.value
+  const found = list.find((g) => g.group === current)
+  return found ? found.skills : (list[0]?.skills || [])
+})
+
+watch(
+  () => skillsByGroup.value,
+  (list) => {
+    if (list.length && !list.some((g) => g.group === abilityGroupTab.value))
+      abilityGroupTab.value = list[0].group
+    else if (list.length && !abilityGroupTab.value)
+      abilityGroupTab.value = list[0].group
+  },
+  { immediate: true }
+)
 
 const currentTabId = ref('basic')
 
@@ -173,9 +206,25 @@ function setTab(id) {
             <!-- 能力体系（仅自己可见） -->
             <div v-show="currentTabId === 'ability' && isOwn" class="space-y-6">
               <section :class="sectionCls" class="relative">
+                <nav class="flex flex-wrap gap-1 border-b border-chat-border pb-2 mb-3">
+                  <button
+                    v-for="({ group }) in skillsByGroup"
+                    :key="group"
+                    type="button"
+                    :class="[
+                      'px-3 py-1.5 rounded-t-lg text-sm font-medium transition-colors',
+                      abilityGroupTab === group
+                        ? 'bg-chat-bg border border-chat-border border-b-0 -mb-px text-accent'
+                        : 'text-accent-muted hover:text-white border border-transparent',
+                    ]"
+                    @click="abilityGroupTab = group"
+                  >
+                    {{ group }}
+                  </button>
+                </nav>
                 <div class="grid grid-cols-3 gap-x-6 gap-y-3 text-sm">
                   <div
-                    v-for="s in (sheet?.skills || [])"
+                    v-for="s in currentAbilityGroupSkills"
                     :key="s.id"
                     class="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg bg-chat-bg/60 border border-chat-border/50 cursor-pointer hover:border-accent/40 transition-colors"
                     @click="showSkillTooltip(s, $event)"
@@ -241,12 +290,15 @@ function setTab(id) {
             <!-- 资产背景 -->
             <div v-show="currentTabId === 'assets'" class="space-y-6">
               <section :class="sectionCls">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div><label :class="labelCls">信用评级</label><span class="text-white">{{ creditDerived.creditRating }}</span></div>
-                  <div><label :class="labelCls">现金</label><span class="text-white">{{ creditDerived.cash }}</span></div>
-                  <div><label :class="labelCls">消费水平</label><span class="text-white">{{ creditDerived.spendingLevel }}</span></div>
-                  <div><label :class="labelCls">资产</label><span class="text-white">{{ creditDerived.assets }}</span></div>
-                  <div class="sm:col-span-2"><label :class="labelCls">随身携带物品/装备</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white text-sm whitespace-pre-wrap">{{ sheet.possessions?.other || '-' }}</div></div>
+                <div class="space-y-4">
+                  <div>
+                    <label :class="labelCls">信用评价</label>
+                    <div class="mt-1 px-3 py-2 rounded-lg bg-chat-bg border border-chat-border">
+                      <span class="font-medium text-accent">{{ creditDerived.creditRating }}</span>
+                      <p v-if="creditDerived.lifeStyleDesc" class="mt-2 text-sm text-[#a6adc8] whitespace-pre-line leading-relaxed">{{ creditDerived.lifeStyleDesc }}</p>
+                    </div>
+                  </div>
+                  <div><label :class="labelCls">随身携带物品/装备</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white text-sm whitespace-pre-wrap">{{ sheet.possessions?.other || '-' }}</div></div>
                 </div>
               </section>
               <section :class="sectionCls">

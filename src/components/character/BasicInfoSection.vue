@@ -217,6 +217,9 @@ function clampChar(key) {
             <button v-for="g in occupationGroups" :key="g.name" type="button" class="px-2.5 py-1 rounded-lg text-xs transition-colors" :class="occupationCategoryFilter === g.name ? 'bg-accent/20 border border-accent/40 text-accent' : 'border border-chat-border text-accent-muted hover:text-white'" @click="occupationCategoryFilter = g.name">{{ g.name }}</button>
           </div>
           <div class="overflow-y-auto flex-1 min-h-0 space-y-1">
+            <button type="button" class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-sm border border-dashed border-chat-border text-accent-muted hover:bg-sidebar-hover hover:text-white hover:border-accent/40 transition-colors" :class="!form.occupation ? 'bg-accent/10 text-accent border-accent/40' : ''" @click="onSelectOccupation('')">
+              <span>自定义职业（不套用模板，点数手动填写）</span>
+            </button>
             <button v-for="item in filteredOccupationJobs" :key="item.job" type="button" class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-left text-sm text-[#a6adc8] hover:bg-sidebar-hover hover:text-white transition-colors" :class="form.occupation === item.job ? 'bg-accent/10 text-accent' : ''" @click="onSelectOccupation(item.job)">
               <span>{{ item.job }}</span>
               <span class="text-xs text-accent-muted shrink-0">{{ item.groupName }}</span>

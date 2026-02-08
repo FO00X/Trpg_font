@@ -3,44 +3,65 @@
   <div class="space-y-6">
     <section :class="sectionCls">
       <h2 :class="sectionTitleCls">技能（Skill）</h2>
-      <p class="text-xs text-accent-muted mb-2">剩余点数根据总数与技能表已用自动计算。</p>
-      <div class="flex flex-wrap gap-4 mb-4">
-        <div><label :class="labelCls">职业点数剩余</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white">{{ skillPoints.careerPointsRemain }}</div></div>
-        <div><label :class="labelCls">兴趣点数剩余</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white">{{ skillPoints.interestPointsRemain }}</div></div>
-      </div>
+      <!-- 技能分类 Tab -->
+      <nav class="flex flex-wrap gap-1 border-b border-chat-border pb-2 mb-3">
+        <button
+          v-for="({ group }) in skillsByGroup"
+          :key="group"
+          type="button"
+          :class="[
+            'px-3 py-1.5 rounded-t-lg text-sm font-medium transition-colors',
+            currentSkillGroupTab === group
+              ? 'bg-chat-bg border border-chat-border border-b-0 -mb-px text-accent'
+              : 'text-accent-muted hover:text-white border border-transparent',
+          ]"
+          @click="currentSkillGroupTab = group"
+        >
+          {{ group }}
+        </button>
+      </nav>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead><tr class="text-left text-accent-muted border-b border-chat-border"><th class="py-2 pr-2">技能</th><th class="py-2 px-1 w-14">职业</th><th class="py-2 px-1 w-14">兴趣</th><th class="py-2 px-1 w-14">成长</th><th class="py-2 px-1 w-14">成功率</th></tr></thead>
           <tbody>
-            <template v-for="({ group, skills }) in skillsByGroup" :key="group">
-              <tr class="border-b border-chat-border/30 bg-chat-bg/30">
-                <td colspan="5" class="py-1.5 pr-2 text-accent-muted text-xs font-medium uppercase tracking-wider">{{ group }}</td>
-              </tr>
-              <tr v-for="s in skills" :key="s.id" class="border-b border-chat-border/50">
-                <td class="py-1 pr-2 min-w-[120px]">
-                  <template v-if="s.custom"><input v-model="s.name" type="text" :class="inputCls" class="!py-1 !text-sm" placeholder="自定义" /></template>
-                  <template v-else>
-                    <span v-if="!s.typeOption">
-                      <button v-if="getSkillIntro(s)" type="button" class="text-left text-accent hover:text-accent/80 cursor-pointer" :title="skillDisplayName(s)" @click="showSkillIntro(s, $event)"><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name }}</button>
-                      <span v-else><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name }}</span>
-                    </span>
-                    <span v-else class="flex items-center gap-1">
-                      <button v-if="getSkillIntro(s)" type="button" class="text-left text-accent hover:text-accent/80 underline decoration-dotted cursor-pointer shrink-0" :title="skillDisplayName(s)" @click="showSkillIntro(s, $event)"><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name.replace(/\d$/, '') }}</button>
-                      <span v-else><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name.replace(/\d$/, '') }}</span>
-                      <select v-model="s.typeValue" :class="inputCls" class="!py-0.5 !text-xs w-20 inline-block"><option value="">-</option><option v-for="opt in (SKILL_TYPE_OPTIONS[s.typeOption] || [])" :key="opt" :value="opt">{{ opt }}</option></select>
-                    </span>
-                  </template>
-                </td>
-                <td class="py-1 px-1"><input v-model.number="s.career" type="number" min="0" class="w-full px-1 py-0.5 rounded bg-chat-bg border border-chat-border text-white text-sm" /></td>
-                <td class="py-1 px-1"><input v-model.number="s.interest" type="number" min="0" class="w-full px-1 py-0.5 rounded bg-chat-bg border border-chat-border text-white text-sm" /></td>
-                <td class="py-1 px-1"><input v-model.number="s.growth" type="number" min="0" class="w-full px-1 py-0.5 rounded bg-chat-bg border border-chat-border text-white text-sm" /></td>
-                <td class="py-1 px-1 font-mono">{{ skillSuccess(s) }}</td>
-              </tr>
-            </template>
+            <tr v-for="s in currentGroupSkills" :key="s.id" class="border-b border-chat-border/50">
+              <td class="py-1 pr-2 min-w-[120px]">
+                <template v-if="s.custom"><input v-model="s.name" type="text" :class="inputCls" class="!py-1 !text-sm" placeholder="自定义" /></template>
+                <template v-else>
+                  <span v-if="!s.typeOption">
+                    <button v-if="getSkillIntro(s)" type="button" class="text-left text-accent hover:text-accent/80 cursor-pointer" :title="skillDisplayName(s)" @click="showSkillIntro(s, $event)"><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name }}</button>
+                    <span v-else><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name }}</span>
+                  </span>
+                  <span v-else class="flex items-center gap-1">
+                    <button v-if="getSkillIntro(s)" type="button" class="text-left text-accent hover:text-accent/80 underline decoration-dotted cursor-pointer shrink-0" :title="skillDisplayName(s)" @click="showSkillIntro(s, $event)"><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name.replace(/\d$/, '') }}</button>
+                    <span v-else><span v-if="isCareerSkill(s)" class="text-accent mr-0.5">*</span>{{ s.name.replace(/\d$/, '') }}</span>
+                    <select v-model="s.typeValue" :class="inputCls" class="!py-0.5 !text-xs w-20 inline-block"><option value="">-</option><option v-for="opt in (SKILL_TYPE_OPTIONS[s.typeOption] || [])" :key="opt" :value="opt">{{ opt }}</option></select>
+                  </span>
+                </template>
+              </td>
+              <td class="py-1 px-1"><input v-model.number="s.career" type="number" min="0" class="w-full px-1 py-0.5 rounded bg-chat-bg border border-chat-border text-white text-sm" /></td>
+              <td class="py-1 px-1"><input v-model.number="s.interest" type="number" min="0" class="w-full px-1 py-0.5 rounded bg-chat-bg border border-chat-border text-white text-sm" /></td>
+              <td class="py-1 px-1"><input v-model.number="s.growth" type="number" min="0" class="w-full px-1 py-0.5 rounded bg-chat-bg border border-chat-border text-white text-sm" /></td>
+              <td class="py-1 px-1 font-mono">{{ skillSuccess(s) }}</td>
+            </tr>
           </tbody>
         </table>
       </div>
-      <p class="text-xs text-accent-muted mt-1">* 表示当前职业本职技能</p>
+      <div class="flex flex-wrap items-center justify-between gap-3 mt-2">
+        <p class="text-xs text-accent-muted">* 表示当前职业本职技能</p>
+        <template v-if="form.occupation">
+          <div class="flex items-center gap-4 text-xs">
+            <span class="text-accent-muted">本职剩余 <span :class="skillPoints.careerPointsRemain > 0 ? 'font-semibold text-accent' : 'text-white'">{{ skillPoints.careerPointsRemain }}</span></span>
+            <span class="text-accent-muted">兴趣剩余 <span :class="skillPoints.interestPointsRemain > 0 ? 'font-semibold text-accent' : 'text-white'">{{ skillPoints.interestPointsRemain }}</span></span>
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex items-center gap-4 text-xs">
+            <label class="flex items-center gap-1.5 text-accent-muted">本职点数总额 <input v-model.number="form.skillRule.careerPointsTotal" type="number" min="0" class="w-16 px-2 py-1 rounded bg-chat-bg border border-chat-border text-white text-center" /></label>
+            <label class="flex items-center gap-1.5 text-accent-muted">兴趣点数总额 <input v-model.number="form.skillRule.interestPointsTotal" type="number" min="0" class="w-16 px-2 py-1 rounded bg-chat-bg border border-chat-border text-white text-center" /></label>
+          </div>
+        </template>
+      </div>
     </section>
     <section :class="sectionCls">
       <h2 :class="sectionTitleCls">武器（Weapons）</h2>
@@ -133,7 +154,7 @@
 </template>
 
 <script setup>
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
 import { inputCls, labelCls, sectionCls, sectionTitleCls } from '../../composables/useCharacterForm'
@@ -156,6 +177,24 @@ const {
   PRESET_WEAPONS,
   WEAPON_CATEGORIES,
 } = ctx
+
+const currentSkillGroupTab = ref('')
+const currentGroupSkills = computed(() => {
+  const list = skillsByGroup.value || []
+  const current = currentSkillGroupTab.value
+  const found = list.find((g) => g.group === current)
+  return found ? found.skills : (list[0]?.skills || [])
+})
+watch(
+  skillsByGroup,
+  (list) => {
+    if (list.length && !list.some((g) => g.group === currentSkillGroupTab.value))
+      currentSkillGroupTab.value = list[0].group
+    else if (list.length && !currentSkillGroupTab.value)
+      currentSkillGroupTab.value = list[0].group
+  },
+  { immediate: true }
+)
 
 const weaponCategoryFilter = ref('')
 const filteredPresetWeapons = computed(() => {

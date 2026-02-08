@@ -58,6 +58,13 @@ const onlineUsers = ref([
   { id: 'u4', name: '言安', status: 'online' },
 ])
 
+// 子频道内玩家选中的角色：{ [channelId]: { [userId]: characterId | null } }
+const subChannelMemberCharacter = ref({
+  'wangdie-1': { me: '1', u1: '1', u2: '2', u3: null, u4: null },
+  'wangdie-2': { me: null, u1: null, u2: '2', u3: null, u4: null },
+  'zhivo-1': { me: '2', u1: '1', u2: null, u3: '2', u4: null },
+})
+
 const socket = shallowRef(null)
 
 export function useChatStore() {
@@ -136,6 +143,27 @@ export function useChatStore() {
     return [...list].sort((a, b) => a.time - b.time)
   })
 
+  /** 当前频道是否为子频道（跑团频道） */
+  const isSubChannel = computed(() => !!getSubChannelById(currentChannelId.value))
+
+  /** 当前跑团频道内的玩家列表（含玩家名与选中的角色 id），仅子频道有值 */
+  const currentChannelMembers = computed(() => {
+    const channelId = currentChannelId.value
+    if (!getSubChannelById(channelId)) return []
+    const map = subChannelMemberCharacter.value[channelId] || {}
+    const members = []
+    const add = (user) => {
+      members.push({
+        userId: user.id,
+        userName: user.name,
+        characterId: map[user.id] ?? null,
+      })
+    }
+    add(currentUser.value)
+    onlineUsers.value.forEach(add)
+    return members
+  })
+
   function initSocket() {
     if (socket.value) return
     const s = useSocket()
@@ -212,6 +240,17 @@ export function useChatStore() {
     }
   }
 
+  /** 设置当前用户在当前子频道选中的角色（后续可接持久化/同步） */
+  function setMyCharacterInChannel(characterId) {
+    const channelId = currentChannelId.value
+    if (!getSubChannelById(channelId)) return
+    const prev = subChannelMemberCharacter.value[channelId] || {}
+    subChannelMemberCharacter.value = {
+      ...subChannelMemberCharacter.value,
+      [channelId]: { ...prev, [currentUser.value.id]: characterId || null },
+    }
+  }
+
   return {
     channels,
     modules,
@@ -220,10 +259,14 @@ export function useChatStore() {
     currentMessages,
     currentUser,
     onlineUsers,
+    subChannelMemberCharacter,
+    isSubChannel,
+    currentChannelMembers,
     initSocket,
     sendMessage,
     setChannel,
     updateNickname,
+    setMyCharacterInChannel,
     logout,
     getSubChannelById,
     isModuleKP,

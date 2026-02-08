@@ -10,12 +10,15 @@ const { form, creditDerived } = inject('characterForm')
   <div class="space-y-6">
     <section :class="sectionCls">
       <h2 :class="sectionTitleCls">物品与装备（Possessions）</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div><label :class="labelCls">信用评级</label><span class="text-white">{{ creditDerived.creditRating }}</span></div>
-        <div><label :class="labelCls">现金</label><span class="text-white">{{ creditDerived.cash }}</span></div>
-        <div><label :class="labelCls">消费水平</label><span class="text-white">{{ creditDerived.spendingLevel }}</span></div>
-        <div><label :class="labelCls">资产</label><span class="text-white">{{ creditDerived.assets }}</span></div>
-        <div class="sm:col-span-2"><label :class="labelCls">随身携带物品/装备</label><textarea v-model="form.possessions.other" rows="2" :class="inputCls" placeholder="请输入随身携带物品/装备，可补充描述" /></div>
+      <div class="space-y-4">
+        <div>
+          <label :class="labelCls">信用评价</label>
+          <div class="mt-1 rounded-lg border border-chat-border bg-chat-bg px-3 py-2 text-white">
+            <span class="font-medium text-accent">{{ creditDerived.creditRating }}</span>
+            <p v-if="creditDerived.lifeStyleDesc" class="mt-2 text-sm text-[#a6adc8] whitespace-pre-line leading-relaxed">{{ creditDerived.lifeStyleDesc }}</p>
+          </div>
+        </div>
+        <div><label :class="labelCls">随身携带物品/装备</label><textarea v-model="form.possessions.other" rows="2" :class="inputCls" placeholder="请输入随身携带物品/装备，可补充描述" /></div>
       </div>
     </section>
     <section :class="sectionCls">

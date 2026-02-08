@@ -4,6 +4,7 @@ import { useCharactersStore } from '../stores/characters'
 import { generateName } from '../utils/randomName'
 import { SKILL_GROUP_ORDER, getSkillGroupLabel } from '../data/skillGroups'
 import { OCCUPATION_GROUPS } from '../data/occupationGroups'
+import { getOccupationMeta, evalCareerFormula, evalInterestFormula } from '../data/occupationMeta'
 
 export const SHEET_TABS = [
   { id: 'basic', label: '基础信息', icon: 'mdi:account' },
@@ -91,6 +92,47 @@ export function useCharacterForm() {
     }
   })
   const creditDerived = computed(() => getCreditDerived(form.value.skills || []))
+
+  /** 根据所选职业与核心属性同步本职/兴趣点数；职业为空时置 0（自定义职业） */
+  function syncSkillRuleFromOccupation() {
+    const occ = form.value.occupation?.trim()
+    if (!occ) {
+      form.value.skillRule = { ...form.value.skillRule, careerPointsTotal: 0, interestPointsTotal: 0 }
+      return
+    }
+    const meta = getOccupationMeta(occ)
+    const attrs = {
+      str: form.value.str,
+      dex: form.value.dex,
+      siz: form.value.siz,
+      app: form.value.app,
+      int: form.value.int,
+      pow: form.value.pow,
+      edu: form.value.edu,
+    }
+    const careerTotal = meta?.pointFormula ? evalCareerFormula(meta.pointFormula, attrs) : 0
+    const interestTotal = evalInterestFormula(attrs)
+    form.value.skillRule = {
+      ...form.value.skillRule,
+      careerPointsTotal: careerTotal,
+      interestPointsTotal: interestTotal,
+    }
+  }
+
+  watch(
+    () => [
+      form.value.occupation,
+      form.value.str,
+      form.value.dex,
+      form.value.siz,
+      form.value.app,
+      form.value.int,
+      form.value.pow,
+      form.value.edu,
+    ],
+    () => syncSkillRuleFromOccupation(),
+    { immediate: true }
+  )
 
   /** 按技能分组顺序分组的技能列表，用于能力体系表按分类展示 */
   const skillsByGroup = computed(() => {
