@@ -1,0 +1,32 @@
+# 依赖包文件夹
+node_modules/
+
+# 打包构建产物
+dist/
+build/
+out/
+coverage/
+
+# 环境变量文件（里面有私密配置，绝对不能提交）
+.env
+.env.local
+.env.development.local
+.env.production.local
+
+# 编辑器/IDE的配置文件
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 日志文件
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 临时文件
+tmp/
+temp/
