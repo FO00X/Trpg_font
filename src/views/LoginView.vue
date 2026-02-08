@@ -17,12 +17,12 @@ const loading = ref(false)
 async function handleSubmit() {
   error.value = ''
   loading.value = true
-  const result = login(username.value, password.value)
+  const result = await login(username.value, password.value)
   loading.value = false
   if (result.ok) {
     const { useChatStore } = await import('../stores/chat')
     useChatStore().updateNickname(user.value?.username ?? username.value.trim())
-    const redirect = route.query.redirect || '/'
+    const redirect = route.query.redirect || '/chat'
     router.replace(redirect)
   } else {
     error.value = result.message || '登录失败'
@@ -73,7 +73,6 @@ async function handleSubmit() {
           {{ loading ? '登录中…' : '登录' }}
         </button>
       </form>
-      <p class="mt-4 text-center text-xs text-accent-muted">暂无注册功能，请使用已有账号登录。</p>
     </div>
   </div>
 </template>

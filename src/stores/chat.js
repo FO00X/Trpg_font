@@ -6,9 +6,6 @@ const channels = ref([
   { id: 'general', name: '大厅', icon: 'mdi:home', unread: 0 },
 ])
 
-// 子频道用户权限：userAccess[userId] = 'none' | 'readonly' | 'full'
-// none=禁止进入, readonly=仅进入, full=可发言；未配置用户默认 full
-// 加入的模组（跑团内展示），KP 为 ownerId（守密人/拥有人）
 const modules = ref([
   {
     id: 'wangdie',

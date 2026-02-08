@@ -227,7 +227,7 @@
                   'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
                   active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
                 ]"
-                @click="handleLogout"
+                @click.prevent="handleLogout"
               >
                 <Icon icon="mdi:logout" class="text-lg shrink-0" />
                 退出登录
@@ -424,13 +424,15 @@ function confirmNickname() {
 }
 
 function handleLogout() {
-  useAuthStore().logout()
+  const auth = useAuthStore()
+  auth.logout()
   logout()
-  router.push('/login')
+  emit('update:open', false)
+  router.replace({ path: '/', query: {} })
 }
 
 const navItems = [
-  { path: '/', name: '消息', icon: 'mdi:forum-outline' },
+  { path: '/chat', name: '消息', icon: 'mdi:forum-outline' },
   { path: '/friends', name: '好友', icon: 'mdi:account-group-outline' },
   { path: '/characters', name: '角色卡', icon: 'mdi:card-account-details-outline' },
   { path: '/notifications', name: '系统通知', icon: 'mdi:bell-outline' },
@@ -438,17 +440,13 @@ const navItems = [
 ]
 
 const currentPath = computed(() => router.currentRoute.value.path)
-const isChatActive = computed(() => currentPath.value === '/')
+const isChatActive = computed(() => currentPath.value === '/chat')
 function isActive(item) {
-  if (item.path === '/') return currentPath.value === '/'
+  if (item.path === '/chat') return currentPath.value === '/chat'
   return currentPath.value.startsWith(item.path)
 }
 
 function navigate(item) {
-  if (item.path === '/') {
-    router.push('/')
-    return
-  }
   router.push(item.path)
 }
 
@@ -476,14 +474,11 @@ function confirmCreateSubChannel() {
   createSubChannelModule.value = null
 }
 
-// ---------- 子频道：用户设置（不可进入 / 可进不可发言 / 可进可发言） ----------
 const accessDialogOpen = ref(false)
 const accessSubChannel = ref(null)
 const accessModule = ref(null)
-/** 弹窗内编辑的权限：{ [userId]: 'none' | 'readonly' | 'full' } */
 const accessUserLevels = ref({})
 
-/** 其他用户（排除自己），用于列举设置 */
 const otherUsers = computed(() =>
   onlineUsers.value.filter((u) => u.id !== currentUser.value.id)
 )

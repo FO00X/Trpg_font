@@ -1,16 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { APP_TITLE } from '../constants/app'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore, hasStoredAuth } from '../stores/auth'
 
 const routes = [
   {
-    path: '/login',
+    path: '/',
     name: 'login',
     component: () => import('../views/LoginView.vue'),
     meta: { title: '登录', requiresAuth: false },
   },
   {
-    path: '/',
+    path: '/chat',
     name: 'chat',
     component: () => import('../views/ChatView.vue'),
     meta: { title: '聊天', requiresAuth: true },
@@ -65,13 +65,14 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const auth = useAuthStore()
   const requiresAuth = to.meta.requiresAuth !== false
-  if (requiresAuth && !auth.isLoggedIn) {
+  // 用 localStorage 直接判断，避免 logout 后跳转登录页时守卫仍读到旧状态
+  const loggedIn = hasStoredAuth()
+  if (requiresAuth && !loggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.name === 'login' && auth.isLoggedIn) {
-    return { path: '/' }
+  if (to.name === 'login' && loggedIn) {
+    return { path: '/chat' }
   }
 })
 
