@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCharactersStore } from '../stores/characters'
 import { generateName } from '../utils/randomName'
@@ -69,6 +69,7 @@ export function useCharacterForm() {
   const id = computed(() => route.params.id)
   const sheetTab = ref('basic')
   const form = ref({ ...getDefaultSheet() })
+  const isDirty = ref(false)
   const derived = computed(() => getDerived(form.value))
   const syncDerived = computed(() => ({
     hpMax: derived.value.hpMax,
@@ -134,6 +135,8 @@ export function useCharacterForm() {
     { immediate: true }
   )
 
+  watch(form, () => { isDirty.value = true }, { deep: true })
+
   /** 按技能分组顺序分组的技能列表，用于能力体系表按分类展示 */
   const skillsByGroup = computed(() => {
     const skills = form.value.skills || []
@@ -177,9 +180,14 @@ export function useCharacterForm() {
   const rollCacheByCard = ref({})
   const currentRollCacheKey = computed(() => (isNew.value ? 'new' : (id.value || 'new')))
 
+  function onBeforeUnload(e) {
+    if (isDirty.value) e.preventDefault()
+  }
   onMounted(() => {
+    window.addEventListener('beforeunload', onBeforeUnload)
     if (isNew.value) {
       rollCacheByCard.value = { ...rollCacheByCard.value, new: { luck: [], full: [] } }
+      isDirty.value = false
     }
     if (!isNew.value && id.value) {
       const stored = loadRollCacheFromStorage()
@@ -193,23 +201,88 @@ export function useCharacterForm() {
         if (!form.value.skills || form.value.skills.length !== PRESET_SKILLS.length) {
           form.value.skills = getDefaultSheet().skills
         }
+        nextTick(() => { isDirty.value = false })
       } else {
         router.replace('/characters')
       }
     }
   })
+  onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', onBeforeUnload)
+  })
+
+  const validationErrors = ref([])
+
+  /** 保存前校验，返回错误信息数组，空数组表示通过 */
+  function validateForm() {
+    const errs = []
+    const f = form.value
+
+    const age = Number(f.age)
+    if (Number.isNaN(age) || age < 15 || age > 99) {
+      errs.push('年龄需在 15～99 之间')
+    }
+
+    const attrs = ['str', 'dex', 'siz', 'app', 'con', 'int', 'pow', 'edu', 'luc']
+    if (f.attributesSource === 'manual') {
+      let total = 0
+      for (const k of CHAR_ATTRS) {
+        const v = Number(f[k])
+        if (Number.isNaN(v) || v < CHAR_MIN || v > CHAR_MAX) {
+          errs.push(`属性 ${k} 需在 ${CHAR_MIN}～${CHAR_MAX} 之间`)
+        } else {
+          total += v
+        }
+      }
+      if (total > CHAR_POINTS_TOTAL) {
+        errs.push(`8 项核心属性总和不能超过 ${CHAR_POINTS_TOTAL}（当前 ${total}）`)
+      }
+      const luc = Number(f.luc)
+      if (!Number.isNaN(luc) && (luc < 0 || luc > CHAR_MAX)) {
+        errs.push(`幸运需在 0～${CHAR_MAX} 之间`)
+      }
+    } else {
+      for (const k of attrs) {
+        const v = Number(f[k])
+        if (!Number.isNaN(v) && (v < 0 || v > CHAR_MAX)) {
+          errs.push(`属性 ${k} 需在 0～${CHAR_MAX} 之间`)
+        }
+      }
+    }
+
+    if (f.occupation?.trim()) {
+      const points = skillPoints.value
+      if (points.careerPointsRemain < 0) {
+        errs.push('本职技能点数已超出分配总额，请调整技能点')
+      }
+      if (points.interestPointsRemain < 0) {
+        errs.push('兴趣技能点数已超出分配总额，请调整技能点')
+      }
+    }
+
+    return errs
+  }
 
   function save() {
+    const errs = validateForm()
+    if (errs.length > 0) {
+      validationErrors.value = errs
+      return
+    }
+    validationErrors.value = []
     const name = form.value.name?.trim() || '未命名'
     if (isNew.value) {
       create({ ...form.value, name })
     } else {
       update(id.value, { ...form.value, name })
     }
+    isDirty.value = false
     goBack()
   }
 
-  function goBack() {
+  function goBack(force = false) {
+    if (!force && isDirty.value && !window.confirm('当前有未保存的修改，确定要离开吗？')) return
+    isDirty.value = false
     if (window.history.length > 1) {
       router.back()
     } else {
@@ -400,6 +473,7 @@ export function useCharacterForm() {
     syncDerived,
     skillPoints,
     creditDerived,
+    validationErrors,
     save,
     goBack,
     addWeaponDialogOpen,

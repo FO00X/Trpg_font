@@ -53,22 +53,21 @@
         <span class="flex-1 truncate">{{ item.name }}</span>
       </button>
 
-      <!-- 频道（仅在消息页显示） -->
-      <template v-if="isChatActive">
-        <div class="px-2 text-xs font-medium text-accent-muted uppercase tracking-wider mb-1 mt-4">
-          频道
-        </div>
+      <!-- 频道 -->
+      <div class="px-2 text-xs font-medium text-accent-muted uppercase tracking-wider mb-1 mt-4">
+        频道
+      </div>
         <button
           v-for="ch in channels"
           :key="ch.id"
           type="button"
           :class="[
             'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors',
-            currentChannelId === ch.id
+            currentPath === '/chat' && currentChannelId === ch.id
               ? 'bg-sidebar-active text-white'
               : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
           ]"
-          @click="setChannel(ch.id)"
+          @click="selectChannel(ch.id)"
         >
           <Icon :icon="ch.icon" class="text-lg shrink-0" />
           <span class="flex-1 truncate">{{ ch.name }}</span>
@@ -102,6 +101,20 @@
             leave-to-class="opacity-0 -translate-y-1"
           >
             <DisclosurePanel class="pl-2 pr-2 py-1">
+              <!-- 查看所有房间链接 -->
+              <button
+                type="button"
+                :class="[
+                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors mb-1 text-sm',
+                  currentPath === '/game-rooms'
+                    ? 'bg-sidebar-active text-white'
+                    : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
+                ]"
+                @click="router.push('/game-rooms'); close()"
+              >
+                <Icon icon="mdi:view-grid-outline" class="text-base shrink-0" />
+                <span class="flex-1 truncate">查看所有房间</span>
+              </button>
               <!-- 每个模组：可再展开显示子频道 -->
               <Disclosure
                 v-for="mod in modules"
@@ -153,11 +166,11 @@
                         type="button"
                         :class="[
                           'flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-left transition-colors min-w-0 text-sm',
-                          currentChannelId === sub.id
+                          currentPath === '/chat' && currentChannelId === sub.id
                             ? 'bg-sidebar-active text-white'
                             : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
                         ]"
-                        @click="setChannel(sub.id)"
+                        @click="selectChannel(sub.id)"
                       >
                         <Icon icon="mdi:forum-outline" class="text-sm shrink-0" />
                         <span class="flex-1 truncate">{{ sub.name }}</span>
@@ -178,7 +191,6 @@
             </DisclosurePanel>
           </Transition>
         </Disclosure>
-      </template>
     </div>
 
     <!-- 用户信息 + 设置 -->
@@ -237,7 +249,7 @@
         </transition>
       </Menu>
 
-      <!-- 修改昵称弹窗：仅打开时挂载，避免 Portal 在渲染外调用 slot 触发 Vue 警告 -->
+      <!-- 修改昵称弹窗 -->
       <Dialog v-if="nicknameDialogOpen" :open="true" @close="closeNicknameDialog" class="relative z-[10000]">
         <DialogOverlay class="fixed inset-0 bg-black/50" />
         <div class="fixed inset-0 flex items-center justify-center p-4">
@@ -436,22 +448,26 @@ function handleLogout() {
 }
 
 const navItems = [
-  { path: '/chat', name: '消息', icon: 'mdi:forum-outline' },
   { path: '/friends', name: '好友', icon: 'mdi:account-group-outline' },
   { path: '/characters', name: '角色卡', icon: 'mdi:card-account-details-outline' },
-  { path: '/notifications', name: '系统通知', icon: 'mdi:bell-outline' },
+  { path: '/notifications', name: '消息', icon: 'mdi:bell-outline' },
   { path: '/notes', name: '笔记', icon: 'mdi:note-text-outline' },
 ]
 
 const currentPath = computed(() => router.currentRoute.value.path)
-const isChatActive = computed(() => currentPath.value === '/chat')
 function isActive(item) {
-  if (item.path === '/chat') return currentPath.value === '/chat'
   return currentPath.value.startsWith(item.path)
 }
 
 function navigate(item) {
   router.push(item.path)
+}
+
+function selectChannel(channelId) {
+  setChannel(channelId)
+  if (router.currentRoute.value.path !== '/chat') {
+    router.push('/chat')
+  }
 }
 
 function close() {

@@ -65,6 +65,18 @@ const subChannelMemberCharacter = ref({
   'zhivo-1': { me: '2', u1: '1', u2: null, u3: '2', u4: null },
 })
 
+// KP 在当前子频道的发言身份：'kp' 或 'npc-{id}'（NPC 由 KP 在模组设置等处添加，此处仅选择）
+const speakerRoleInChannel = ref('kp')
+
+// 各模组下 KP 添加的 NPC 列表，供发言身份选择。{ [moduleId]: [ { id, name } ] }
+const moduleNPCs = ref({
+  wangdie: [
+    { id: 'npc-1', name: '神秘老人' },
+    { id: 'npc-2', name: '旅馆老板' },
+  ],
+  zhivo: [],
+})
+
 const socket = shallowRef(null)
 
 export function useChatStore() {
@@ -89,6 +101,50 @@ export function useChatStore() {
   function isModuleKP(moduleId) {
     const mod = modules.value.find((m) => m.id === moduleId)
     return mod && mod.ownerId === currentUser.value.id
+  }
+
+  /** 当前子频道所属模组（非子频道返回 null） */
+  function getCurrentModule() {
+    const channelId = currentChannelId.value
+    for (const mod of modules.value) {
+      if (mod.subChannels?.some((s) => s.id === channelId)) return mod
+    }
+    return null
+  }
+
+  /** 当前用户是否为当前子频道的 KP（在跑团频道右上角固定显示为 KP、不切换角色卡） */
+  const isCurrentChannelKP = computed(() => {
+    const mod = getCurrentModule()
+    return mod && mod.ownerId === currentUser.value.id
+  })
+
+  /** 当前模组下的 NPC 列表（KP 在别处添加，此处仅用于发言身份选择） */
+  const currentModuleNPCs = computed(() => {
+    const mod = getCurrentModule()
+    if (!mod) return []
+    return moduleNPCs.value[mod.id] || []
+  })
+
+  /** KP 设置当前子频道发言身份：'kp' 或 'npc-{id}' */
+  function setSpeakerRole(role) {
+    if (role === 'kp' || (typeof role === 'string' && role.startsWith('npc-'))) {
+      speakerRoleInChannel.value = role
+    }
+  }
+
+  /** KP 为模组添加 NPC（上传/添加在别处调用，此处仅提供方法） */
+  function addModuleNPC(moduleId, { id, name }) {
+    const mod = modules.value.find((m) => m.id === moduleId)
+    if (!mod || mod.ownerId !== currentUser.value.id) return
+    const list = moduleNPCs.value[moduleId] || []
+    const next = list.some((n) => n.id === id) ? list.map((n) => (n.id === id ? { id, name: name || n.name } : n)) : [...list, { id: id || `npc-${Date.now()}`, name: name || '未命名' }]
+    moduleNPCs.value = { ...moduleNPCs.value, [moduleId]: next }
+  }
+
+  /** KP 移除模组下某 NPC */
+  function removeModuleNPC(moduleId, npcId) {
+    const list = (moduleNPCs.value[moduleId] || []).filter((n) => n.id !== npcId)
+    moduleNPCs.value = { ...moduleNPCs.value, [moduleId]: list }
   }
 
   /** 当前用户是否可进入该子频道（未配置视为 full） */
@@ -192,6 +248,8 @@ export function useChatStore() {
 
   function sendMessage(content) {
     const channelId = currentChannelId.value
+    const mod = getCurrentModule()
+    const isKP = mod && mod.ownerId === currentUser.value.id
     const msg = {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       channelId,
@@ -200,6 +258,19 @@ export function useChatStore() {
       content: content.trim(),
       time: Date.now(),
       type: 'text',
+    }
+    if (isKP) {
+      const role = speakerRoleInChannel.value
+      if (role === 'kp') {
+        msg.speakerRole = 'kp'
+      } else if (role.startsWith('npc-')) {
+        const mod = getCurrentModule()
+        const npcs = mod ? moduleNPCs.value[mod.id] || [] : []
+        const npc = npcs.find((n) => n.id === role)
+        msg.speakerRole = 'npc'
+        msg.speakerNpcId = npc?.id
+        msg.speakerNpcName = npc?.name || 'NPC'
+      }
     }
     if (!messagesByChannel.value[channelId]) messagesByChannel.value[channelId] = []
     messagesByChannel.value[channelId].push(msg)
@@ -260,13 +331,21 @@ export function useChatStore() {
     currentUser,
     onlineUsers,
     subChannelMemberCharacter,
+    speakerRoleInChannel,
     isSubChannel,
     currentChannelMembers,
+    isCurrentChannelKP,
+    getCurrentModule,
     initSocket,
     sendMessage,
     setChannel,
     updateNickname,
     setMyCharacterInChannel,
+    setSpeakerRole,
+    currentModuleNPCs,
+    moduleNPCs,
+    addModuleNPC,
+    removeModuleNPC,
     logout,
     getSubChannelById,
     isModuleKP,

@@ -4,6 +4,7 @@ import { Icon } from '@iconify/vue'
 import { Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
 import { labelCls, inputCls, sectionCls, sectionTitleCls, genderOptions } from '../../composables/useCharacterForm'
 import { CHAR_LABELS } from '../../data/characterConstants'
+import { getOccupationMeta } from '../../data/occupationMeta'
 import { NAME_COUNTRY_OPTIONS, NAME_GENDER_OPTIONS } from '../../utils/randomName'
 import ListboxSelect from '../ui/ListboxSelect.vue'
 import HpMpSanBar from './HpMpSanBar.vue'
@@ -34,6 +35,7 @@ const {
   occupationGroups,
 } = inject('characterForm')
 
+const occupationMeta = computed(() => getOccupationMeta(form.value?.occupation))
 const occupationCategoryFilter = ref('')
 const filteredOccupationJobs = computed(() => {
   const groups = occupationGroups || []
@@ -49,12 +51,12 @@ function onSelectOccupation(job) {
   closeOccupationPicker()
 }
 
-const isRolled = () => form.attributesSource === 'rolled'
+const isRolled = () => form.value?.attributesSource === 'rolled'
 function clampChar(key) {
-  const v = Number(form[key])
-  if (Number.isNaN(v) || v === '' || v === null || v === undefined) form[key] = CHAR_MIN
-  else if (v > CHAR_MAX) form[key] = CHAR_MAX
-  else if (v < CHAR_MIN) form[key] = CHAR_MIN
+  const v = Number(form.value[key])
+  if (Number.isNaN(v) || v === '' || v === null || v === undefined) form.value[key] = CHAR_MIN
+  else if (v > CHAR_MAX) form.value[key] = CHAR_MAX
+  else if (v < CHAR_MIN) form.value[key] = CHAR_MIN
 }
 </script>
 
@@ -75,13 +77,16 @@ function clampChar(key) {
           </div>
         </div>
         <!-- 职业：仅通过按钮选择 -->
-        <div class="grid grid-cols-[auto,1fr] gap-2 items-center">
-          <label class="text-[#a6adc8] whitespace-nowrap w-16 text-left text-sm">职业</label>
-          <div class="flex rounded-lg border border-chat-border bg-chat-bg overflow-hidden">
-            <span class="flex-1 min-w-0 px-3 py-2 text-white truncate">{{ form.occupation || '未选择' }}</span>
-            <button type="button" class="p-2 text-accent-muted hover:text-accent hover:bg-accent/10 shrink-0" title="选择职业" @click="openOccupationPicker">
-              <Icon icon="mdi:briefcase-outline" class="text-lg" />
-            </button>
+        <div class="grid grid-cols-[auto,1fr] gap-2 items-start">
+          <label class="text-[#a6adc8] whitespace-nowrap w-16 text-left text-sm pt-2">职业</label>
+          <div>
+            <div class="flex rounded-lg border border-chat-border bg-chat-bg overflow-hidden">
+              <span class="flex-1 min-w-0 px-3 py-2 text-white truncate">{{ form.occupation || '未选择' }}</span>
+              <button type="button" class="p-2 text-accent-muted hover:text-accent hover:bg-accent/10 shrink-0" title="选择职业" @click="openOccupationPicker">
+                <Icon icon="mdi:briefcase-outline" class="text-lg" />
+              </button>
+            </div>
+            <p v-if="form.occupation && occupationMeta" class="mt-1 text-xs text-accent-muted">建议信誉范围：{{ occupationMeta.creditMin }}–{{ occupationMeta.creditMax }}</p>
           </div>
         </div>
         <!-- 年龄 + 性别 同一行 -->

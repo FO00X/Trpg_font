@@ -48,10 +48,11 @@
                   </div>
                   <div class="min-w-0 flex-1 flex flex-col">
                     <span class="text-white text-xs font-medium truncate">{{ getMemberDisplayName(m) }}</span>
-                    <span v-if="m.characterId" class="text-accent-muted text-[11px] truncate">{{ m.userName }}</span>
+                    <span v-if="showMemberSubtitle(m)" class="text-accent-muted text-[11px] truncate">{{ m.userName }}</span>
                   </div>
+                  <!-- KP 不显示切换角色卡，固定为 KP 身份 -->
                   <button
-                    v-if="isCurrentUser(m)"
+                    v-if="isCurrentUser(m) && !isCurrentChannelKP"
                     type="button"
                     class="shrink-0 p-1.5 rounded text-accent-muted hover:text-accent hover:bg-white/5"
                     title="切换角色卡"
@@ -60,8 +61,8 @@
                     <Icon icon="mdi:card-account-details-outline" class="text-base" />
                   </button>
                 </div>
-                <!-- 当前用户：展开的角色卡列表 -->
-                <div v-if="isCurrentUser(m) && characterPickerUserId === m.userId" class="pb-2 px-2.5">
+                <!-- 当前用户（且非 KP）：展开的角色卡列表；KP 不切换角色卡 -->
+                <div v-if="isCurrentUser(m) && !isCurrentChannelKP && characterPickerUserId === m.userId" class="pb-2 px-2.5">
                   <div class="pl-9 pr-1 space-y-0.5">
                     <button
                       v-for="c in myCharacters"
@@ -114,7 +115,7 @@ defineProps({
 })
 defineEmits(['toggle-sidebar'])
 
-const { currentChannel, isSubChannel, currentChannelMembers, currentUser, setMyCharacterInChannel } = useChatStore()
+const { currentChannel, isSubChannel, currentChannelMembers, currentUser, setMyCharacterInChannel, isCurrentChannelKP } = useChatStore()
 const { characters: myCharacters, getById: getCharacterById } = useCharactersStore()
 
 const characterPickerUserId = ref(null)
@@ -135,6 +136,7 @@ function selectCharacter(userId, characterId) {
 }
 
 function getMemberDisplayName(m) {
+  if (isCurrentUser(m) && isCurrentChannelKP) return 'KP'
   if (m.characterId) {
     const c = getCharacterById(m.characterId)
     return c?.name || '未命名'
@@ -142,7 +144,13 @@ function getMemberDisplayName(m) {
   return m.userName || '未知'
 }
 
+function showMemberSubtitle(m) {
+  if (isCurrentUser(m) && isCurrentChannelKP) return true
+  return !!m.characterId
+}
+
 function getMemberAvatar(m) {
+  if (isCurrentUser(m) && isCurrentChannelKP) return null
   if (m.characterId) {
     const c = getCharacterById(m.characterId)
     return c?.avatar || c?.portrait || null

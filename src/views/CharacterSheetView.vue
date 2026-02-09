@@ -3,7 +3,7 @@
     <PageHeader
       :title="isNew ? '创建角色' : (form.name || '未命名')"
       icon="mdi:card-account-details"
-      :show-back="false"
+      :show-back="true"
       back-label="返回列表"
       @back="goBack"
     >
@@ -17,10 +17,46 @@
 
     <div class="flex-1 overflow-y-auto scroll-thin p-4 pb-24">
       <div class="max-w-4xl mx-auto space-y-6">
-        <BasicInfoSection v-show="sheetTab === 'basic'" />
-        <AbilitySection v-show="sheetTab === 'ability'" />
-        <AssetsSection v-show="sheetTab === 'assets'" />
-        <SocialSection v-show="sheetTab === 'social'" />
+        <template v-if="sheetTab === 'basic'">
+          <BasicInfoSection />
+          <div class="flex flex-col items-end gap-2">
+            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
+            <div class="flex items-center gap-2">
+              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
+              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
+            </div>
+          </div>
+        </template>
+        <template v-else-if="sheetTab === 'ability'">
+          <AbilitySection />
+          <div class="flex flex-col items-end gap-2">
+            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
+            <div class="flex items-center gap-2">
+              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
+              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
+            </div>
+          </div>
+        </template>
+        <template v-else-if="sheetTab === 'assets'">
+          <AssetsSection />
+          <div class="flex flex-col items-end gap-2">
+            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
+            <div class="flex items-center gap-2">
+              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
+              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
+            </div>
+          </div>
+        </template>
+        <template v-else-if="sheetTab === 'social'">
+          <SocialSection />
+          <div class="flex flex-col items-end gap-2">
+            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
+            <div class="flex items-center gap-2">
+              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
+              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -66,6 +102,6 @@ import DiceRollModal from '../components/DiceRollModal.vue'
 const ctx = useCharacterForm()
 provide('characterForm', ctx)
 
-const { form, isNew, sheetTab, save, goBack, diceRollOpen, diceRollBatch, diceRollMaxRolls, diceRollInitialResults, onDiceRollResults, onDiceRollConfirm, closeDiceRoll } = ctx
+const { form, isNew, sheetTab, save, goBack, validationErrors, diceRollOpen, diceRollBatch, diceRollMaxRolls, diceRollInitialResults, onDiceRollResults, onDiceRollConfirm, closeDiceRoll } = ctx
 </script>
 

@@ -3,6 +3,7 @@
   <div class="space-y-6">
     <section :class="sectionCls">
       <h2 :class="sectionTitleCls">技能（Skill）</h2>
+      <p class="text-xs text-accent-muted mb-3">本职点数由所选职业公式计算，兴趣点数由智力×2 计算。选择职业并填写核心属性后会自动更新；自定义职业可在下方手动填写总额。</p>
       <!-- 技能分类 Tab -->
       <nav class="flex flex-wrap gap-1 border-b border-chat-border pb-2 mb-3">
         <button

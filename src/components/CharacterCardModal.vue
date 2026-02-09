@@ -75,6 +75,21 @@ function hideSkillTooltip() {
   skillTooltip.value = null
 }
 
+const weaponTooltip = ref(null) // { weapon, top, left }
+function showWeaponTooltip(w, event) {
+  const el = event?.currentTarget
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const centerX = rect.left + rect.width / 2
+  const halfW = 140
+  const pad = 12
+  const left = Math.min(Math.max(centerX, halfW + pad), window.innerWidth - halfW - pad)
+  weaponTooltip.value = { weapon: w, top: rect.top, left }
+}
+function hideWeaponTooltip() {
+  weaponTooltip.value = null
+}
+
 const visibleTabs = computed(() => {
   const all = SHEET_TABS.filter(t => t.id !== 'ability' || props.isOwn)
   return all
@@ -258,32 +273,53 @@ function setTab(id) {
                 </Teleport>
               </section>
               <section :class="sectionCls">
+                <div class="flex items-center gap-5 flex-nowrap mb-3">
+                  <span class="text-sm"><span class="text-accent-muted">伤害加值（DB）</span> <span class="text-white tabular-nums ml-0.5">{{ derived.damageBonus >= 0 ? '+' : '' }}{{ derived.damageBonus }}</span></span>
+                  <span class="text-accent-muted/40">·</span>
+                  <span class="text-sm"><span class="text-accent-muted">体格</span> <span class="text-white tabular-nums ml-0.5">{{ derived.build >= 0 ? '+' : '' }}{{ derived.build }}</span></span>
+                  <span class="text-accent-muted/40">·</span>
+                  <span class="text-sm"><span class="text-accent-muted">护甲</span> <span class="text-white tabular-nums ml-0.5">{{ sheet.combat?.armor || '-' }}</span></span>
+                  <span class="text-accent-muted/40">·</span>
+                  <span class="text-sm"><span class="text-accent-muted">移动力</span> <span class="text-white tabular-nums ml-0.5">{{ derived.move }}</span></span>
+                </div>
                 <div class="overflow-x-auto">
-                  <table class="w-full text-sm border-collapse min-w-[600px]">
-                    <thead class="bg-chat-bg/95"><tr class="text-left text-accent-muted border-b border-chat-border"><th class="p-1.5 w-28">武器名称</th><th class="p-1.5 w-24">使用技能</th><th class="p-1.5 w-14">成功率</th><th class="p-1.5 w-20">伤害</th><th class="p-1.5 w-14">射程</th><th class="p-1.5 w-14">贯穿</th><th class="p-1.5 w-14">次数</th><th class="p-1.5 w-14">装弹量</th><th class="p-1.5 w-14">故障</th></tr></thead>
+                  <table class="w-full text-sm border-collapse">
+                    <thead class="bg-chat-bg/95"><tr class="text-left text-accent-muted border-b border-chat-border"><th class="p-1.5">武器名称</th><th class="p-1.5">使用技能</th><th class="p-1.5">成功率</th></tr></thead>
                     <tbody>
-                      <tr v-for="(w, idx) in (sheet?.weapons || [])" :key="idx" class="border-b border-chat-border/50">
+                      <tr
+                        v-for="(w, idx) in (sheet?.weapons || [])"
+                        :key="idx"
+                        class="border-b border-chat-border/50 cursor-pointer hover:bg-chat-bg/50 transition-colors"
+                        @click="showWeaponTooltip(w, $event)"
+                      >
                         <td class="p-1.5">{{ w.name || '-' }}</td>
                         <td class="p-1.5">{{ w.skill || '-' }}</td>
                         <td class="p-1.5">{{ w.success ?? '-' }}</td>
-                        <td class="p-1.5">{{ w.damage || '-' }}</td>
-                        <td class="p-1.5">{{ w.range || '-' }}</td>
-                        <td class="p-1.5">{{ penetrateLabel(w.penetrate) }}</td>
-                        <td class="p-1.5">{{ w.attacks ?? '-' }}</td>
-                        <td class="p-1.5">{{ w.ammo ?? '-' }}</td>
-                        <td class="p-1.5">{{ w.malfunction ?? '-' }}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-              </section>
-              <section :class="sectionCls">
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div><label :class="labelCls">伤害加值（DB）</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white">{{ derived.damageBonus >= 0 ? '+' : '' }}{{ derived.damageBonus }}</div></div>
-                  <div><label :class="labelCls">体格</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white">{{ derived.build >= 0 ? '+' : '' }}{{ derived.build }}</div></div>
-                  <div><label :class="labelCls">护甲</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white">{{ sheet.combat?.armor || '-' }}</div></div>
-                  <div><label :class="labelCls">移动力</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white">{{ derived.move }}</div></div>
-                </div>
+                <!-- 武器详情气泡：点击行后显示 -->
+                <Teleport to="body">
+                  <template v-if="weaponTooltip">
+                    <div class="fixed inset-0 z-[60]" aria-hidden="true" @click="hideWeaponTooltip" />
+                    <div
+                      class="fixed z-[61] min-w-[200px] rounded-lg border border-chat-border bg-chat-panel shadow-xl p-3 text-sm"
+                      :style="{ left: `${weaponTooltip.left}px`, top: `${weaponTooltip.top}px`, transform: 'translate(-50%, -100%) translateY(-8px)' }"
+                      @click.stop
+                    >
+                      <div class="font-medium text-white mb-2 border-b border-chat-border pb-2">{{ weaponTooltip.weapon?.name || '武器' }}</div>
+                      <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-accent-muted">
+                        <span>伤害</span><span class="text-white text-right">{{ weaponTooltip.weapon?.damage || '-' }}</span>
+                        <span>射程</span><span class="text-white text-right">{{ weaponTooltip.weapon?.range || '-' }}</span>
+                        <span>贯穿</span><span class="text-white text-right">{{ penetrateLabel(weaponTooltip.weapon?.penetrate) }}</span>
+                        <span>次数</span><span class="text-white text-right">{{ weaponTooltip.weapon?.attacks ?? '-' }}</span>
+                        <span>装弹量</span><span class="text-white text-right">{{ weaponTooltip.weapon?.ammo ?? '-' }}</span>
+                        <span>故障</span><span class="text-white text-right">{{ weaponTooltip.weapon?.malfunction ?? '-' }}</span>
+                      </div>
+                    </div>
+                  </template>
+                </Teleport>
               </section>
             </div>
 

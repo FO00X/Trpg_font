@@ -52,6 +52,12 @@ const routes = [
     meta: { title: '笔记', requiresAuth: true },
   },
   {
+    path: '/game-rooms',
+    name: 'game-rooms',
+    component: () => import('../views/GameRoomsView.vue'),
+    meta: { title: '跑团房间', requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('../views/NotFoundView.vue'),
