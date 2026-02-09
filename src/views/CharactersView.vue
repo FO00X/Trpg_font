@@ -60,11 +60,10 @@ onUnmounted(() => {
       <template #actions>
         <button
           type="button"
-          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90"
+          class="p-2 rounded-full bg-white/10 text-white/80 hover:text-white hover:bg-white/30 transition-colors"
           @click="createNew"
         >
-          <Icon icon="mdi:plus" class="text-lg" />
-          创建角色
+          <Icon icon="mdi:plus" class="text-xl" />
         </button>
       </template>
     </PageHeader>

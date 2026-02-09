@@ -1,14 +1,16 @@
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col">
     <PageHeader title="跑团房间" icon="mdi:dice-multiple">
-      <button
-        type="button"
-        class="p-2 rounded-lg bg-accent text-chat-bg hover:opacity-90 transition-opacity"
-        title="创建房间"
-        @click="openCreateRoomDialog"
-      >
-        <Icon icon="mdi:plus" class="text-xl" />
-      </button>
+      <template #actions>
+        <button
+          type="button"
+          class="p-2 rounded-full bg-white/10 text-white/80 hover:text-white hover:bg-white/30 transition-colors"
+          title="创建房间"
+          @click="goCreateRoomPage"
+        >
+          <Icon icon="mdi:plus" class="text-xl" />
+        </button>
+      </template>
     </PageHeader>
 
     <!-- 搜索和筛选栏 -->
@@ -107,7 +109,7 @@
       </div>
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        <div
+          <div
           v-for="room in filteredRooms"
           :key="room.id"
           class="flex flex-col p-4 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors"
@@ -115,16 +117,12 @@
           <!-- 房间头部 -->
           <div class="flex items-start gap-3 mb-3">
             <div class="w-12 h-12 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0">
-              <Icon :icon="room.moduleIcon" class="text-2xl text-accent" />
-            </div>
-            <div class="flex-1 min-w-0">
-              <h3 class="font-semibold text-white truncate mb-1">{{ room.name }}</h3>
-              <div class="flex items-center gap-2 text-xs text-accent-muted">
-                <span>{{ room.module }}</span>
-                <span>•</span>
-                <span>{{ room.owner }}</span>
-              </div>
-            </div>
+            <Icon :icon="room.moduleIcon" class="text-2xl text-accent" />
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="font-semibold text-white truncate mb-1">{{ room.module }}</h3>
+              <span class="text-xs text-accent-muted">{{ room.owner }}</span>
+          </div>
             <span
               class="px-2 py-0.5 rounded text-xs font-medium shrink-0"
               :class="getStatusColor(room.status)"
@@ -199,181 +197,18 @@
       </div>
     </div>
 
-    <!-- 创建房间弹窗 -->
-    <Dialog :open="createRoomDialogOpen" @close="closeCreateRoomDialog" class="relative z-50">
-      <div class="fixed inset-0 bg-black/50" aria-hidden="true" />
-      <div class="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel class="w-full max-w-lg rounded-xl bg-sidebar border border-chat-border shadow-xl p-6 max-h-[90vh] overflow-y-auto scroll-thin">
-          <DialogTitle class="text-lg font-semibold text-white mb-4">创建跑团房间</DialogTitle>
-
-          <div class="space-y-4">
-            <!-- 房间名称 -->
-            <div>
-              <label class="block text-sm font-medium text-white mb-1.5">房间名称 *</label>
-              <input
-                v-model="roomForm.name"
-                type="text"
-                placeholder="例如：亡蝶葬仪 - 调查组"
-                class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] placeholder:text-accent-muted focus:border-accent/50 outline-none text-sm"
-              />
-            </div>
-
-            <!-- 模组选择 -->
-            <div>
-              <label class="block text-sm font-medium text-white mb-1.5">选择模组 *</label>
-              <div class="grid grid-cols-3 gap-2">
-                <button
-                  v-for="mod in availableModules"
-                  :key="mod.id"
-                  type="button"
-                  :class="[
-                    'flex flex-col items-center gap-2 p-3 rounded-lg border transition-colors',
-                    roomForm.module === mod.id
-                      ? 'bg-accent/20 border-accent text-accent'
-                      : 'bg-chat-bg border-chat-border text-accent-muted hover:border-accent/30',
-                  ]"
-                  @click="roomForm.module = mod.id; roomForm.moduleIcon = mod.icon"
-                >
-                  <Icon :icon="mod.icon" class="text-xl" />
-                  <span class="text-xs">{{ mod.name }}</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- 房间描述 -->
-            <div>
-              <label class="block text-sm font-medium text-white mb-1.5">房间描述</label>
-              <textarea
-                v-model="roomForm.description"
-                rows="4"
-                placeholder="介绍一下你的跑团房间..."
-                class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] placeholder:text-accent-muted focus:border-accent/50 outline-none text-sm resize-none"
-              />
-            </div>
-
-            <!-- 最大人数 -->
-            <div>
-              <label class="block text-sm font-medium text-white mb-1.5">最大人数</label>
-              <input
-                v-model.number="roomForm.maxPlayers"
-                type="number"
-                min="2"
-                max="10"
-                class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] focus:border-accent/50 outline-none text-sm"
-              />
-            </div>
-
-            <!-- 标签 -->
-            <div>
-              <label class="block text-sm font-medium text-white mb-1.5">标签（可选）</label>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="tag in availableTags"
-                  :key="tag"
-                  type="button"
-                  :class="[
-                    'px-3 py-1.5 rounded-lg text-sm transition-colors',
-                    roomForm.tags.includes(tag)
-                      ? 'bg-accent text-chat-bg'
-                      : 'bg-chat-bg border border-chat-border text-accent-muted hover:border-accent/30',
-                  ]"
-                  @click="toggleTag(tag)"
-                >
-                  {{ tag }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 操作按钮 -->
-          <div class="flex gap-3 mt-6">
-            <button
-              type="button"
-              class="flex-1 px-4 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] hover:bg-white/5 transition-colors"
-              @click="closeCreateRoomDialog"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              class="flex-1 px-4 py-2 rounded-lg bg-accent text-chat-bg hover:opacity-90 transition-opacity font-medium"
-              :disabled="!roomForm.name.trim() || !roomForm.module"
-              @click="confirmCreateRoom"
-            >
-              创建
-            </button>
-          </div>
-        </DialogPanel>
-      </div>
-    </Dialog>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import { Dialog, DialogPanel, DialogTitle, Menu, MenuButton, MenuItems } from '@headlessui/vue'
+import { Menu, MenuButton, MenuItems } from '@headlessui/vue'
 import PageHeader from '../components/PageHeader.vue'
+import { useGameRoomsStore } from '../stores/gameRooms'
 
-// Mock 房间数据
-const rooms = ref([
-  {
-    id: 'room-1',
-    name: '亡蝶葬仪 - 调查组',
-    description: '一个充满神秘色彩的调查故事，欢迎加入我们的冒险。',
-    module: '亡蝶葬仪',
-    moduleIcon: 'mdi:butterfly',
-    owner: 'KP-熊猫',
-    maxPlayers: 6,
-    currentPlayers: 3,
-    status: 'recruiting', // recruiting, full, started
-    tags: ['恐怖', '调查', 'COC'],
-    createdAt: '2026-02-05',
-  },
-  {
-    id: 'room-2',
-    name: '致我不灭的 - 主频道',
-    description: '探索未知的世界，寻找不灭的真相。',
-    module: '致我不灭的',
-    moduleIcon: 'mdi:fire',
-    owner: 'KP-田中',
-    maxPlayers: 4,
-    currentPlayers: 4,
-    status: 'full',
-    tags: ['奇幻', '冒险'],
-    createdAt: '2026-02-03',
-  },
-  {
-    id: 'room-3',
-    name: '新模组测试',
-    description: '测试新模组，欢迎参与。',
-    module: '测试模组',
-    moduleIcon: 'mdi:test-tube',
-    owner: 'KP-方糕',
-    maxPlayers: 5,
-    currentPlayers: 2,
-    status: 'recruiting',
-    tags: ['测试'],
-    createdAt: '2026-02-08',
-  },
-])
-
-const createRoomDialogOpen = ref(false)
-const roomForm = ref({
-  name: '',
-  description: '',
-  module: '',
-  moduleIcon: 'mdi:dice-multiple',
-  maxPlayers: 6,
-  tags: [],
-})
-
-const availableModules = [
-  { id: 'wangdie', name: '亡蝶葬仪', icon: 'mdi:butterfly' },
-  { id: 'zhivo', name: '致我不灭的', icon: 'mdi:fire' },
-  { id: 'custom', name: '自定义模组', icon: 'mdi:file-document-edit' },
-]
-
-const availableTags = ['恐怖', '调查', 'COC', '奇幻', '冒险', '现代', '古代', '科幻', '测试']
+const router = useRouter()
+const { rooms, availableModules } = useGameRoomsStore()
 
 // 搜索和筛选
 const searchQuery = ref('')
@@ -430,49 +265,8 @@ function resetFilters() {
   searchQuery.value = ''
 }
 
-function openCreateRoomDialog() {
-  roomForm.value = {
-    name: '',
-    description: '',
-    module: '',
-    moduleIcon: 'mdi:dice-multiple',
-    maxPlayers: 6,
-    tags: [],
-  }
-  createRoomDialogOpen.value = true
-}
-
-function confirmCreateRoom() {
-  if (!roomForm.value.name.trim()) return
-  const module = availableModules.find((m) => m.id === roomForm.value.module)
-  const newRoom = {
-    id: `room-${Date.now()}`,
-    name: roomForm.value.name.trim(),
-    description: roomForm.value.description.trim(),
-    module: module?.name || '自定义模组',
-    moduleIcon: module?.icon || 'mdi:dice-multiple',
-    owner: '我',
-    maxPlayers: roomForm.value.maxPlayers,
-    currentPlayers: 1,
-    status: 'recruiting',
-    tags: [...roomForm.value.tags],
-    createdAt: new Date().toISOString().split('T')[0],
-  }
-  rooms.value.unshift(newRoom)
-  createRoomDialogOpen.value = false
-}
-
-function closeCreateRoomDialog() {
-  createRoomDialogOpen.value = false
-}
-
-function toggleTag(tag) {
-  const idx = roomForm.value.tags.indexOf(tag)
-  if (idx >= 0) {
-    roomForm.value.tags.splice(idx, 1)
-  } else {
-    roomForm.value.tags.push(tag)
-  }
+function goCreateRoomPage() {
+  router.push({ name: 'game-room-new' })
 }
 
 function applyToRoom(roomId) {

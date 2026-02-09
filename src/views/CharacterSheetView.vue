@@ -3,7 +3,7 @@
     <PageHeader
       :title="isNew ? '创建角色' : (form.name || '未命名')"
       icon="mdi:card-account-details"
-      :show-back="true"
+      :show-back="false"
       back-label="返回列表"
       @back="goBack"
     >
