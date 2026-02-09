@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col">
-    <PageHeader title="跑团房间" icon="mdi:dice-multiple">
+    <PageHeader title="大厅" icon="mdi:dice-multiple">
       <template #actions>
         <button
           type="button"

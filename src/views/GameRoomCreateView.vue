@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col h-full">
-    <PageHeader title="创建跑团房间" icon="mdi:dice-multiple" :show-back="false" back-label="返回房间列表" @back="goBack">
+    <PageHeader title="创建房间" icon="mdi:dice-multiple" :show-back="false" back-label="返回大厅" @back="goBack">
       <template #actions>
         <div class="flex items-center gap-2">
           <button
@@ -63,7 +63,7 @@
           <textarea
             v-model="roomForm.description"
             rows="4"
-            placeholder="介绍一下你的跑团房间..."
+            placeholder="介绍一下你的房间..."
             class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] placeholder:text-accent-muted focus:border-accent/50 outline-none text-sm resize-none"
           />
         </div>

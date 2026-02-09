@@ -36,7 +36,7 @@ export function useAuthStore() {
   const isLoggedIn = computed(() => !!user.value)
 
   /**
-   * 登录：有后端则请求 /api/auth/login；无后端或请求失败时使用前端本地登录（账号密码非空即通过）
+   * 登录：必须由后端返回成功才允许进入系统
    * @returns {Promise<{ ok: boolean, message?: string }>}
    */
   async function login(username, password) {
@@ -57,13 +57,15 @@ export function useAuthStore() {
         saveToStorage(data.user, data.token)
         return { ok: true }
       }
-      if (res.status === 401) return { ok: false, message: data?.message || '账号或密码错误' }
-    } catch (_) {}
-    // 无后端或接口不可用：仅前端校验，非空即通过
-    user.value = { username: u }
-    token.value = 'local'
-    saveToStorage(user.value, token.value)
-    return { ok: true }
+      // 后端返回非 ok 或 401，统一视为登录失败
+      if (res.status === 401) {
+        return { ok: false, message: data?.message || '账号或密码错误' }
+      }
+      return { ok: false, message: data?.message || '登录失败，请稍后重试' }
+    } catch (e) {
+      // 网络错误 / 后端不可用，一律视为登录失败
+      return { ok: false, message: '无法连接服务器，请稍后重试' }
+    }
   }
 
   function logout() {

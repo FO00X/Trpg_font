@@ -1,78 +1,68 @@
-<script setup>
-import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { Icon } from '@iconify/vue'
-import { useAuthStore } from '../stores/auth'
-import { APP_TITLE } from '../constants/app'
-
-const router = useRouter()
-const route = useRoute()
-const { login, user } = useAuthStore()
-
-const username = ref('')
-const password = ref('')
-const error = ref('')
-const loading = ref(false)
-
-async function handleSubmit() {
-  error.value = ''
-  loading.value = true
-  const result = await login(username.value, password.value)
-  loading.value = false
-  if (result.ok) {
-    const { useChatStore } = await import('../stores/chat')
-    useChatStore().updateNickname(user.value?.username ?? username.value.trim())
-    const redirect = route.query.redirect || '/chat'
-    router.replace(redirect)
-  } else {
-    error.value = result.message || '登录失败'
-  }
-}
-</script>
-
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center p-4 bg-chat-bg">
-    <div class="w-full max-w-sm">
-      <div class="flex items-center justify-center gap-2 mb-8">
-        <Icon icon="game-icons:fox-tail" class="text-4xl text-accent" />
-        <span class="text-xl font-semibold text-white">{{ APP_TITLE }}</span>
-      </div>
-      <form
-        class="rounded-2xl bg-chat-panel border border-chat-border p-6 shadow-xl"
-        @submit.prevent="handleSubmit"
-      >
-        <h1 class="text-lg font-semibold text-white mb-6 text-center">登录</h1>
-        <p v-if="error" class="mb-4 text-sm text-red-400 text-center">{{ error }}</p>
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm text-accent-muted mb-1.5">账号</label>
-            <input
-              v-model="username"
-              type="text"
-              autocomplete="username"
-              class="w-full px-3 py-2.5 rounded-lg bg-chat-bg border border-chat-border text-white placeholder-accent-muted focus:border-accent outline-none"
-              placeholder="请输入账号"
-            />
-          </div>
-          <div>
-            <label class="block text-sm text-accent-muted mb-1.5">密码</label>
-            <input
-              v-model="password"
-              type="password"
-              autocomplete="current-password"
-              class="w-full px-3 py-2.5 rounded-lg bg-chat-bg border border-chat-border text-white placeholder-accent-muted focus:border-accent outline-none"
-              placeholder="请输入密码"
-            />
-          </div>
+  <div class="flex items-center justify-center min-h-screen bg-chat-bg text-white">
+    <div class="w-full max-w-sm p-6 rounded-2xl bg-chat-panel border border-chat-border shadow-lg space-y-4">
+      <h1 class="text-xl font-semibold text-center mb-2">登录 TRPG</h1>
+      <form @submit.prevent="onSubmit" class="space-y-3">
+        <div>
+          <label class="block mb-1 text-sm text-accent-muted">账号</label>
+          <input
+            v-model="username"
+            type="text"
+            class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border focus:outline-none focus:ring-2 focus:ring-accent"
+            autocomplete="username"
+          />
         </div>
+        <div>
+          <label class="block mb-1 text-sm text-accent-muted">密码</label>
+          <input
+            v-model="password"
+            type="password"
+            class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border focus:outline-none focus:ring-2 focus:ring-accent"
+            autocomplete="current-password"
+          />
+        </div>
+        <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
         <button
           type="submit"
-          class="mt-6 w-full py-2.5 rounded-xl bg-accent text-chat-bg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+          class="w-full py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90 disabled:opacity-60"
           :disabled="loading"
         >
-          {{ loading ? '登录中…' : '登录' }}
+          {{ loading ? '登录中...' : '登录' }}
         </button>
       </form>
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
+
+const router = useRouter()
+const route = useRoute()
+const { login } = useAuthStore()
+
+const username = ref('')
+const password = ref('')
+const loading = ref(false)
+const error = ref('')
+
+async function onSubmit() {
+  if (loading.value) return
+  error.value = ''
+  loading.value = true
+  const res = await login(username.value, password.value)
+  loading.value = false
+  if (!res.ok) {
+    error.value = res.message || '登录失败，请重试'
+    return
+  }
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/game-rooms'
+  router.push(redirect)
+}
+</script>
+
+<style scoped>
+</style>
+

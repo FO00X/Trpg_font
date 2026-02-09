@@ -63,19 +63,15 @@
           type="button"
           :class="[
             'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors',
-            currentPath === '/chat' && currentChannelId === ch.id
+            currentPath === '/game-rooms' && currentChannelId === ch.id
               ? 'bg-sidebar-active text-white'
               : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
           ]"
-          @click="selectChannel(ch.id)"
+         @click="router.push('/game-rooms'); close()"
         >
           <Icon :icon="ch.icon" class="text-lg shrink-0" />
-          <span class="flex-1 truncate">{{ ch.name }}</span>
-          <span v-if="ch.unread" class="text-xs bg-accent text-chat-bg rounded-full px-1.5 min-w-[1.25rem] text-center">
-            {{ ch.unread }}
-          </span>
+          <span class="flex-1 truncate">大厅</span>
         </button>
-
         <!-- 跑团：可收起展开，展示模组；每个模组可展开显示子频道 -->
         <Disclosure v-slot="{ open: runOpen }" as="div" class="mt-1">
           <DisclosureButton
@@ -101,20 +97,6 @@
             leave-to-class="opacity-0 -translate-y-1"
           >
             <DisclosurePanel class="pl-2 pr-2 py-1">
-              <!-- 查看所有房间链接 -->
-              <button
-                type="button"
-                :class="[
-                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors mb-1 text-sm',
-                  currentPath === '/game-rooms'
-                    ? 'bg-sidebar-active text-white'
-                    : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
-                ]"
-                @click="router.push('/game-rooms'); close()"
-              >
-                <Icon icon="mdi:view-grid-outline" class="text-base shrink-0" />
-                <span class="flex-1 truncate">查看所有房间</span>
-              </button>
               <!-- 每个模组：可再展开显示子频道 -->
               <Disclosure
                 v-for="mod in modules"

@@ -55,13 +55,13 @@ const routes = [
     path: '/game-rooms',
     name: 'game-rooms',
     component: () => import('../views/GameRoomsView.vue'),
-    meta: { title: '跑团房间', requiresAuth: true },
+    meta: { title: '跑团', requiresAuth: true },
   },
   {
     path: '/game-rooms/new',
     name: 'game-room-new',
     component: () => import('../views/GameRoomCreateView.vue'),
-    meta: { title: '创建跑团房间', requiresAuth: true },
+    meta: { title: '创建房间', requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -84,7 +84,7 @@ router.beforeEach((to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.name === 'login' && loggedIn) {
-    return { path: '/chat' }
+    return { path: '/game-rooms' }
   }
 })
 
