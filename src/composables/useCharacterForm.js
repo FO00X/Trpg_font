@@ -47,6 +47,7 @@ export function useCharacterForm() {
   const router = useRouter()
   const {
     getById,
+    fetchCharacter,
     getDefaultSheet,
     getDerived,
     normalizeCharacter,
@@ -195,13 +196,25 @@ export function useCharacterForm() {
       if (cardCache && (cardCache.luck?.length || cardCache.full?.length)) {
         rollCacheByCard.value = { ...rollCacheByCard.value, [id.value]: { luck: cardCache.luck || [], full: cardCache.full || [] } }
       }
-      const c = getById(id.value)
+      let c = getById(id.value)
       if (c) {
         form.value = normalizeCharacter(c)
         if (!form.value.skills || form.value.skills.length !== PRESET_SKILLS.length) {
           form.value.skills = getDefaultSheet().skills
         }
         nextTick(() => { isDirty.value = false })
+      } else if (id.value) {
+        fetchCharacter(id.value).then((char) => {
+          if (char) {
+            form.value = normalizeCharacter(char)
+            if (!form.value.skills || form.value.skills.length !== PRESET_SKILLS.length) {
+              form.value.skills = getDefaultSheet().skills
+            }
+            nextTick(() => { isDirty.value = false })
+          } else {
+            router.replace('/characters')
+          }
+        })
       } else {
         router.replace('/characters')
       }
@@ -263,21 +276,33 @@ export function useCharacterForm() {
     return errs
   }
 
-  function save() {
+  const saveError = ref('')
+  async function save() {
     const errs = validateForm()
     if (errs.length > 0) {
       validationErrors.value = errs
       return
     }
     validationErrors.value = []
+    saveError.value = ''
     const name = form.value.name?.trim() || '未命名'
     if (isNew.value) {
-      create({ ...form.value, name })
+      const newId = await create({ ...form.value, name })
+      if (newId) {
+        isDirty.value = false
+        goBack()
+      } else {
+        saveError.value = '创建失败，请稍后重试'
+      }
     } else {
-      update(id.value, { ...form.value, name })
+      const ok = await update(id.value, { ...form.value, name })
+      if (ok) {
+        isDirty.value = false
+        goBack()
+      } else {
+        saveError.value = '保存失败，请稍后重试'
+      }
     }
-    isDirty.value = false
-    goBack()
   }
 
   function goBack(force = false) {
@@ -474,6 +499,7 @@ export function useCharacterForm() {
     skillPoints,
     creditDerived,
     validationErrors,
+    saveError,
     save,
     goBack,
     addWeaponDialogOpen,

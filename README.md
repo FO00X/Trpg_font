@@ -14,8 +14,13 @@
   - 开发代理：`/api` 会被 Vite 代理到 `http://localhost:3000`（见 `vite.config.js`）
 
 - **后端启动（独立仓库）**
-  - 在 `TRPG_back` 中运行，例如：`uvicorn app.main:app --reload --port 3000`
-  - 确保后端监听 `http://127.0.0.1:3000`，并提供 `/api/...` 接口
+  - 在 `TRPG_back` 目录：`pip install -r requirements.txt` 后执行  
+    `uvicorn app.main:asgi_app --reload --port 3000`  
+    （必须用 **asgi_app**，才能同时提供 HTTP 与 Socket.IO）
+  - 后端监听 `http://127.0.0.1:3000`，提供 `/api/...` 及 Socket
+  - 若需前端连真实 Socket（聊天），在前端项目根目录创建或修改 `.env`，增加：  
+    `VITE_SOCKET_URL=http://localhost:3000`  
+    然后重启 `npm run dev:client`
 
 ## 生产部署
 
@@ -34,9 +39,10 @@
     - 设置环境变量 `VITE_SOCKET_URL` 连接真实 Socket 服务；
     - 未设置时使用前端内置 Mock，实现本地演示。
 
-## 前端依赖的接口说明
+## 前端与后端接口
 
-当前版本真正依赖后端的接口非常少，主要是**登录鉴权**；其他（角色卡、本地聊天室、房间列表等）暂时走浏览器本地存储 / Mock，方便你分步对接。
+后端（TRPG_back）已实现：**认证**、**角色卡 CRUD**、**大厅房间列表/创建/申请加入**、**Socket 实时聊天**（join + message）。  
+前端当前仍部分使用 localStorage / Mock；要完全对接后端，需把 `src/stores/characters.js`、`src/stores/gameRooms.js` 等改为请求上述 API。完整接口约定与实现状态见 **`docs/backend-api.md`**。
 
 - **基础约定**
   - 所有接口前缀：`/api`
@@ -107,18 +113,15 @@
       ```
   - 其他如频道列表、在线用户等逻辑，前端当前主要在本地实现，你可以逐步替换为真实接口。
 
-## 后续可对接的模块（暂为本地数据）
+## 前端尚未对接后端的部分
 
-以下模块目前完全在前端本地完成（`localStorage` 或内存），**不依赖后端**，但你可以在 FastAPI 中按这些状态结构慢慢补充 API：
+后端已提供角色卡、大厅、Socket 等接口（见 `docs/backend-api.md`）。前端目前仍使用：
 
-- `src/stores/characters.js`：角色卡列表与详情
-- `src/stores/gameRooms.js`：大厅房间列表
-- `src/stores/chat.js`：频道、子频道、聊天消息（含 Mock）
+- `src/stores/characters.js`：角色卡为 localStorage，可改为调用 `GET/POST/PUT/DELETE /api/characters`
+- `src/stores/gameRooms.js`：大厅房间为 Mock，可改为调用 `GET /api/game-rooms`、`POST /api/game-rooms` 等
+- `src/stores/chat.js`：频道与消息为本地/Mock，Socket 已支持；若设置 `VITE_SOCKET_URL` 则连后端实时消息
 
-当你准备好对应的后端接口时，可以：
-
-1. 把这些 store 中对 `localStorage` 的读写改成：启动时拉一次列表、操作时调用后端增删改。
-2. 或者新增一个 `services/api.js` 专门封装 HTTP 请求，再在 store 里调用。
+对接时可在 store 内将读写改为 `fetch('/api/...')`，或新增 `src/services/api.js` 统一封装请求。
 
 ## 项目结构（前端部分）
 

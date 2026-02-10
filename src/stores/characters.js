@@ -259,31 +259,30 @@ function getDefaultSheet() {
   }
 }
 
-const STORAGE_KEY = 'foxtrpg-characters'
-
-function loadFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const data = JSON.parse(raw)
-    return Array.isArray(data) ? data : null
-  } catch {
-    return null
-  }
-}
-
-function saveToStorage(list) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
-  } catch (_) {}
-}
+import { apiGet, apiPost, apiPut, apiDelete } from '../services/api'
 
 export function useCharactersStore() {
-  const defaultList = [
-    { id: '1', name: '艾莉娅', campaign: '星海传说', updated: '2024-01-15', ...getDefaultSheet() },
-    { id: '2', name: '索伦', campaign: '黑暗森林', updated: '2024-01-10', ...getDefaultSheet() },
-  ]
-  const characters = ref(loadFromStorage() ?? defaultList)
+  const characters = ref([])
+
+  async function fetchList() {
+    const res = await apiGet('/characters')
+    if (res?.ok && Array.isArray(res.list)) {
+      characters.value = res.list
+    }
+    return res
+  }
+
+  /** 拉取单条并写入列表，供直接打开编辑页时使用 */
+  async function fetchCharacter(characterId) {
+    const res = await apiGet(`/characters/${characterId}`)
+    if (res?.ok && res.character) {
+      const i = characters.value.findIndex((c) => c.id === characterId)
+      if (i >= 0) characters.value[i] = res.character
+      else characters.value.push(res.character)
+      return res.character
+    }
+    return null
+  }
 
   function getDerived(sheet) {
     const con = sheet.con || 0, siz = sheet.siz || 0, pow = sheet.pow || 0, edu = sheet.edu || 0, str = sheet.str || 0
@@ -311,28 +310,41 @@ export function useCharactersStore() {
     return opt ? opt.label : '-'
   }
 
-  function create(draft) {
-    const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    const sheet = { ...getDefaultSheet(), ...draft, id, updated: new Date().toISOString().slice(0, 10) }
-    characters.value.push(sheet)
-    saveToStorage(characters.value)
-    return id
+  async function create(draft) {
+    const payload = { ...getDefaultSheet(), ...draft }
+    delete payload.id
+    delete payload.updated
+    const res = await apiPost('/characters', payload)
+    if (res?.ok && res.character) {
+      characters.value.push(res.character)
+      return res.character.id
+    }
+    return null
   }
 
-  function update(id, draft) {
-    const i = characters.value.findIndex(c => c.id === id)
-    if (i === -1) return
-    characters.value[i] = { ...characters.value[i], ...draft, updated: new Date().toISOString().slice(0, 10) }
-    saveToStorage(characters.value)
+  async function update(id, draft) {
+    const res = await apiPut(`/characters/${id}`, draft)
+    if (res?.ok && res.character) {
+      const i = characters.value.findIndex((c) => c.id === id)
+      if (i >= 0) characters.value[i] = res.character
+      return true
+    }
+    return false
   }
 
-  function remove(id) {
-    characters.value = characters.value.filter(c => c.id !== id)
-    saveToStorage(characters.value)
+  async function remove(id) {
+    const res = await apiDelete(`/characters/${id}`)
+    if (res?.ok) {
+      characters.value = characters.value.filter((c) => c.id !== id)
+      return true
+    }
+    return false
   }
 
   return {
     characters,
+    fetchList,
+    fetchCharacter,
     getDefaultSheet,
     getDerived,
     getById,

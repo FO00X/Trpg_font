@@ -7,7 +7,7 @@ import PageHeader from '../components/PageHeader.vue'
 import { useCharacterCardModal } from '../composables/useCharacterCardModal'
 
 const router = useRouter()
-const { characters, remove } = useCharactersStore()
+const { characters, remove, fetchList } = useCharactersStore()
 const { openCharacterCard } = useCharacterCardModal()
 const openMenuId = ref(null)
 
@@ -32,9 +32,10 @@ function closeMenu() {
   openMenuId.value = null
 }
 
-function deleteCharacter(c) {
+async function deleteCharacter(c) {
   if (!confirm(`确定要删除角色「${c.name || '未命名'}」吗？此操作不可恢复。`)) return
-  remove(c.id)
+  const ok = await remove(c.id)
+  if (!ok) alert('删除失败，请稍后重试')
   closeMenu()
 }
 
@@ -48,6 +49,7 @@ function onCardClick(c) {
 
 onMounted(() => {
   document.addEventListener('click', closeMenu)
+  fetchList()
 })
 onUnmounted(() => {
   document.removeEventListener('click', closeMenu)

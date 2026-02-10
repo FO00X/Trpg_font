@@ -165,7 +165,7 @@
               v-if="room.status === 'recruiting' && room.currentPlayers < room.maxPlayers"
               type="button"
               class="flex-1 px-3 py-2 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-colors text-sm font-medium"
-              @click="applyToRoom(room.id)"
+              @click="onApplyToRoom(room.id)"
             >
               申请加入
             </button>
@@ -200,7 +200,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems } from '@headlessui/vue'
@@ -208,7 +208,13 @@ import PageHeader from '../components/PageHeader.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 
 const router = useRouter()
-const { rooms, availableModules } = useGameRoomsStore()
+const { rooms, availableModules, fetchRooms, fetchModules, fetchTags, applyToRoom } = useGameRoomsStore()
+
+onMounted(() => {
+  fetchRooms()
+  fetchModules()
+  fetchTags()
+})
 
 // 搜索和筛选
 const searchQuery = ref('')
@@ -269,12 +275,16 @@ function goCreateRoomPage() {
   router.push({ name: 'game-room-new' })
 }
 
-function applyToRoom(roomId) {
+async function onApplyToRoom(roomId) {
   const room = rooms.value.find((r) => r.id === roomId)
   if (!room || room.status !== 'recruiting') return
   if (room.currentPlayers >= room.maxPlayers) return
-  // TODO: 发送申请请求
-  alert(`已申请加入「${room.name}」，等待 KP 审核`)
+  const res = await applyToRoom(roomId)
+  if (res) {
+    alert(res.message || `已申请加入「${room.name}」，等待 KP 审核`)
+  } else {
+    alert('申请失败，请稍后重试')
+  }
 }
 
 function getStatusLabel(status) {

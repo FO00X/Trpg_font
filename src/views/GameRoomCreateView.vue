@@ -106,14 +106,19 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 
 const router = useRouter()
-const { availableModules, availableTags, addRoom } = useGameRoomsStore()
+const { availableModules, availableTags, fetchModules, fetchTags, addRoom } = useGameRoomsStore()
+
+onMounted(() => {
+  fetchModules()
+  fetchTags()
+})
 
 const roomForm = ref({
   name: '',
@@ -133,24 +138,20 @@ function toggleTag(tag) {
   }
 }
 
-function confirmCreateRoom() {
+async function confirmCreateRoom() {
   if (!roomForm.value.name.trim()) return
-  const module = availableModules.find((m) => m.id === roomForm.value.module)
-  const newRoom = {
-    id: `room-${Date.now()}`,
+  const mod = (availableModules.value || []).find((m) => m.id === roomForm.value.module)
+  const payload = {
     name: roomForm.value.name.trim(),
     description: roomForm.value.description.trim(),
-    module: module?.name || '自定义模组',
-    moduleIcon: module?.icon || 'mdi:dice-multiple',
-    owner: '我',
+    module: mod?.name || roomForm.value.module || '自定义模组',
+    moduleIcon: mod?.icon || 'mdi:dice-multiple',
     maxPlayers: roomForm.value.maxPlayers,
-    currentPlayers: 1,
-    status: 'recruiting',
     tags: [...roomForm.value.tags],
-    createdAt: new Date().toISOString().split('T')[0],
   }
-  addRoom(newRoom)
-  goBack()
+  const room = await addRoom(payload)
+  if (room) goBack()
+  else alert('创建房间失败，请稍后重试')
 }
 
 function goBack() {

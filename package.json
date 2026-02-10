@@ -4,12 +4,10 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev": "npm run dev:client",
     "dev:client": "vite",
-    "dev:server": "node server/index.js",
     "build": "vite build",
-    "preview": "vite preview",
-    "start": "cross-env NODE_ENV=production node server/index.js"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@headlessui/vue": "^1.7.22",

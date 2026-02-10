@@ -1,46 +1,20 @@
 import { ref, computed, shallowRef } from 'vue'
 import { useSocket, mockReceiveMessage } from '../services/socket'
+import { apiGet } from '../services/api'
+import { useAuthStore } from '../stores/auth'
 
-// 频道列表（大厅等）
-const channels = ref([
-  { id: 'general', name: '大厅', icon: 'mdi:home', unread: 0 },
-])
-
-const modules = ref([
-  {
-    id: 'wangdie',
-    name: '亡蝶葬仪',
-    icon: 'mdi:butterfly',
-    unread: 0,
-    ownerId: 'me',
-    subChannels: [
-      { id: 'wangdie-1', name: '调查组', userAccess: {} },
-      { id: 'wangdie-2', name: '讨论组', userAccess: {} },
-    ],
-  },
-  {
-    id: 'zhivo',
-    name: '致我不灭的',
-    icon: 'mdi:fire',
-    unread: 0,
-    ownerId: 'me',
-    subChannels: [
-      { id: 'zhivo-1', name: '主频道', userAccess: {} },
-    ],
-  },
-])
+// 频道列表（大厅等）与模组/子频道，由 fetchChannels 从后端拉取
+const channels = ref([{ id: 'general', name: '大厅', icon: 'mdi:home', unread: 0 }])
+const modules = ref([])
 
 // 当前选中的频道
 const currentChannelId = ref('general')
 
-// 消息列表 { channelId -> messages[] }（general 或子频道 id）
+// 消息列表 { channelId -> messages[] }，由 fetchMessages 与 Socket 填充
 const messagesByChannel = ref({
   general: [
     { id: '1', userId: 'system', userName: '系统', content: '欢迎使用 FOXTrpg。请在下方输入消息并发送。', time: Date.now() - 3600000, type: 'system' },
   ],
-  'wangdie-1': [],
-  'wangdie-2': [],
-  'zhivo-1': [],
 })
 
 // 当前用户（可后续接登录）
@@ -59,23 +33,13 @@ const onlineUsers = ref([
 ])
 
 // 子频道内玩家选中的角色：{ [channelId]: { [userId]: characterId | null } }
-const subChannelMemberCharacter = ref({
-  'wangdie-1': { me: '1', u1: '1', u2: '2', u3: null, u4: null },
-  'wangdie-2': { me: null, u1: null, u2: '2', u3: null, u4: null },
-  'zhivo-1': { me: '2', u1: '1', u2: null, u3: '2', u4: null },
-})
+const subChannelMemberCharacter = ref({})
 
 // KP 在当前子频道的发言身份：'kp' 或 'npc-{id}'（NPC 由 KP 在模组设置等处添加，此处仅选择）
 const speakerRoleInChannel = ref('kp')
 
 // 各模组下 KP 添加的 NPC 列表，供发言身份选择。{ [moduleId]: [ { id, name } ] }
-const moduleNPCs = ref({
-  wangdie: [
-    { id: 'npc-1', name: '神秘老人' },
-    { id: 'npc-2', name: '旅馆老板' },
-  ],
-  zhivo: [],
-})
+const moduleNPCs = ref({})
 
 const socket = shallowRef(null)
 
@@ -220,10 +184,42 @@ export function useChatStore() {
     return members
   })
 
+  async function fetchChannels() {
+    const res = await apiGet('/channels')
+    if (res?.ok) {
+      if (Array.isArray(res.channels)) channels.value = res.channels
+      if (Array.isArray(res.modules)) modules.value = res.modules
+    }
+    return res
+  }
+
+  async function fetchMessages(channelId, params = {}) {
+    const q = new URLSearchParams()
+    if (params.limit != null) q.set('limit', params.limit)
+    if (params.before != null) q.set('before', params.before)
+    const path = `/channels/${channelId}/messages` + (q.toString() ? `?${q.toString()}` : '')
+    const res = await apiGet(path)
+    if (res?.ok && Array.isArray(res.messages)) {
+      messagesByChannel.value[channelId] = res.messages.map((m) => ({
+        ...m,
+        time: typeof m.time === 'number' ? m.time : (m.time ? new Date(m.time).getTime() : Date.now()),
+      }))
+    }
+    return res
+  }
+
   function initSocket() {
     if (socket.value) return
+    const auth = useAuthStore()
+    if (auth.user?.value?.username) {
+      currentUser.value = { ...currentUser.value, id: auth.user.value.username, name: auth.user.value.username }
+    }
     const s = useSocket()
     socket.value = s
+    // 仅当配置了后端 Socket 地址时才拉取频道列表，避免未启动后端时触发代理报错
+    if (import.meta.env.VITE_SOCKET_URL) {
+      fetchChannels()
+    }
     s.on('message', (msg) => {
       // 自己发出的消息已在 sendMessage 中加入列表，避免 Mock 或服务端回显时重复添加
       if (msg.userId === currentUser.value.id) return
@@ -294,6 +290,10 @@ export function useChatStore() {
 
   function setChannel(id) {
     currentChannelId.value = id
+    fetchMessages(id, { limit: 50 })
+    if (socket.value && typeof socket.value.emit === 'function') {
+      socket.value.emit('join', { channelId: id })
+    }
   }
 
   /** 修改当前用户昵称 */
@@ -336,6 +336,8 @@ export function useChatStore() {
     currentChannelMembers,
     isCurrentChannelKP,
     getCurrentModule,
+    fetchChannels,
+    fetchMessages,
     initSocket,
     sendMessage,
     setChannel,
