@@ -1,7 +1,9 @@
 <script setup>
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useRouter } from 'vue-router'
 import PageHeader from '../components/PageHeader.vue'
+import { useChatStore } from '../stores/chat'
 
 const friends = ref([
   { id: '1', name: '熊猫', status: 'online', lastMsg: '私聊消息' },
@@ -9,6 +11,14 @@ const friends = ref([
   { id: '3', name: '方糕', status: 'offline', lastMsg: '私聊消息3' },
   { id: '4', name: '言安', status: 'offline', lastMsg: '私聊消息4' },
 ])
+
+const router = useRouter()
+const { openDirectMessage } = useChatStore()
+
+function startDirectMessage(friend) {
+  openDirectMessage(friend)
+  router.push('/chat')
+}
 </script>
 
 <template>
@@ -20,6 +30,7 @@ const friends = ref([
           v-for="f in friends"
           :key="f.id"
           class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors cursor-pointer"
+          @click="startDirectMessage(f)"
         >
           <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center">
             <Icon icon="mdi:account" class="text-xl text-accent" />

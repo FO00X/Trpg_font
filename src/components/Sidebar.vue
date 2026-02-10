@@ -53,6 +53,45 @@
         <span class="flex-1 truncate">{{ item.name }}</span>
       </button>
 
+      <!-- 私聊 -->
+      <template v-if="directChannels && directChannels.length">
+        <button
+          type="button"
+          class="w-full flex items-center gap-2 px-3 mt-4 mb-1 text-xs font-medium text-accent-muted uppercase tracking-wider hover:text-white hover:bg-sidebar-hover/40 rounded-lg transition-colors"
+          @click="dmOpen = !dmOpen"
+        >
+          <span class="flex-1 text-left">私聊</span>
+          <span class="text-[10px] text-accent-muted mr-1">{{ directChannels.length }}</span>
+          <Icon :icon="dmOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="text-sm shrink-0" />
+        </button>
+        <Transition
+          enter-active-class="transition duration-100 ease-out"
+          enter-from-class="opacity-0 -translate-y-1"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition duration-75 ease-in"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 -translate-y-1"
+        >
+          <div v-if="dmOpen">
+            <button
+              v-for="dm in directChannels"
+              :key="dm.id"
+              type="button"
+              :class="[
+                'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors',
+                currentPath === '/chat' && currentChannelId === dm.id
+                  ? 'bg-sidebar-active text-white'
+                  : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
+              ]"
+              @click="selectDirectMessage(dm)"
+            >
+              <Icon :icon="dm.icon || 'mdi:account'" class="text-lg shrink-0" />
+              <span class="flex-1 truncate">{{ dm.name }}</span>
+            </button>
+          </div>
+        </Transition>
+      </template>
+
       <!-- 频道 -->
       <div class="px-2 text-xs font-medium text-accent-muted uppercase tracking-wider mb-1 mt-4">
         频道
@@ -389,6 +428,7 @@ const router = useRouter()
 const {
   channels,
   modules,
+  directChannels,
   currentChannelId,
   setChannel,
   currentUser,
@@ -400,6 +440,8 @@ const {
   createSubChannel,
   updateSubChannelAccess,
 } = useChatStore()
+
+const dmOpen = ref(true)
 
 const nicknameDialogOpen = ref(false)
 const nicknameInput = ref('')
@@ -443,6 +485,7 @@ function isActive(item) {
 
 function navigate(item) {
   router.push(item.path)
+  close()
 }
 
 function selectChannel(channelId) {
@@ -450,6 +493,15 @@ function selectChannel(channelId) {
   if (router.currentRoute.value.path !== '/chat') {
     router.push('/chat')
   }
+}
+
+function selectDirectMessage(dm) {
+  if (!dm?.id) return
+  setChannel(dm.id)
+  if (router.currentRoute.value.path !== '/chat') {
+    router.push('/chat')
+  }
+  close()
 }
 
 function close() {

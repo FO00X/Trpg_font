@@ -7,6 +7,10 @@ import { useAuthStore } from '../stores/auth'
 const channels = ref([{ id: 'general', name: '大厅', icon: 'mdi:home', unread: 0 }])
 const modules = ref([])
 
+// 私聊频道（DM）：本地维护，不依赖后端 channels 列表
+// 结构：{ id: `dm:${peerId}`, name: peerName, icon, peerId }
+const directChannels = ref([])
+
 // 当前选中的频道
 const currentChannelId = ref('general')
 
@@ -45,6 +49,8 @@ const socket = shallowRef(null)
 
 export function useChatStore() {
   const currentChannel = computed(() => {
+    const dm = directChannels.value.find((c) => c.id === currentChannelId.value)
+    if (dm) return dm
     const fromChannels = channels.value.find((c) => c.id === currentChannelId.value)
     if (fromChannels) return fromChannels
     const sub = getSubChannelById(currentChannelId.value)
@@ -185,27 +191,35 @@ export function useChatStore() {
   })
 
   async function fetchChannels() {
-    const res = await apiGet('/channels')
-    if (res?.ok) {
-      if (Array.isArray(res.channels)) channels.value = res.channels
-      if (Array.isArray(res.modules)) modules.value = res.modules
+    try {
+      const res = await apiGet('/channels')
+      if (res?.ok) {
+        if (Array.isArray(res.channels)) channels.value = res.channels
+        if (Array.isArray(res.modules)) modules.value = res.modules
+      }
+      return res
+    } catch {
+      return { ok: false, message: '网络错误：无法获取频道列表' }
     }
-    return res
   }
 
   async function fetchMessages(channelId, params = {}) {
-    const q = new URLSearchParams()
-    if (params.limit != null) q.set('limit', params.limit)
-    if (params.before != null) q.set('before', params.before)
-    const path = `/channels/${channelId}/messages` + (q.toString() ? `?${q.toString()}` : '')
-    const res = await apiGet(path)
-    if (res?.ok && Array.isArray(res.messages)) {
-      messagesByChannel.value[channelId] = res.messages.map((m) => ({
-        ...m,
-        time: typeof m.time === 'number' ? m.time : (m.time ? new Date(m.time).getTime() : Date.now()),
-      }))
+    try {
+      const q = new URLSearchParams()
+      if (params.limit != null) q.set('limit', params.limit)
+      if (params.before != null) q.set('before', params.before)
+      const path = `/channels/${channelId}/messages` + (q.toString() ? `?${q.toString()}` : '')
+      const res = await apiGet(path)
+      if (res?.ok && Array.isArray(res.messages)) {
+        messagesByChannel.value[channelId] = res.messages.map((m) => ({
+          ...m,
+          time: typeof m.time === 'number' ? m.time : (m.time ? new Date(m.time).getTime() : Date.now()),
+        }))
+      }
+      return res
+    } catch {
+      return { ok: false, message: '网络错误：无法获取消息列表' }
     }
-    return res
   }
 
   function initSocket() {
@@ -288,12 +302,49 @@ export function useChatStore() {
     }
   }
 
+  function isDirectMessageChannelId(id) {
+    return typeof id === 'string' && id.startsWith('dm:')
+  }
+
   function setChannel(id) {
     currentChannelId.value = id
-    fetchMessages(id, { limit: 50 })
+
+    // 私聊频道不走 HTTP 拉消息（避免后端未启动/未实现 DM 接口时 fetch 报错）
+    if (isDirectMessageChannelId(id)) {
+      if (!messagesByChannel.value[id]) messagesByChannel.value[id] = []
+      if (socket.value && typeof socket.value.emit === 'function') {
+        socket.value.emit('join', { channelId: id })
+      }
+      return
+    }
+
+    fetchMessages(id, { limit: 50 }).catch(() => {})
     if (socket.value && typeof socket.value.emit === 'function') {
       socket.value.emit('join', { channelId: id })
     }
+  }
+
+  /** 打开/创建一个私聊频道（DM）并切换到该频道 */
+  function openDirectMessage(friend) {
+    const peerId = friend?.id || friend?.userId
+    const peerName = friend?.name || friend?.userName || '私聊'
+    if (!peerId) return null
+    const id = `dm:${peerId}`
+
+    if (!directChannels.value.some((c) => c.id === id)) {
+      directChannels.value = [
+        ...directChannels.value,
+        { id, name: peerName, icon: 'mdi:account', peerId },
+      ]
+    }
+    if (!messagesByChannel.value[id]) {
+      messagesByChannel.value[id] = [
+        { id: `sys-${Date.now()}`, userId: 'system', userName: '系统', content: `开始与「${peerName}」的私聊`, time: Date.now(), type: 'system' },
+      ]
+    }
+
+    setChannel(id)
+    return id
   }
 
   /** 修改当前用户昵称 */
@@ -325,6 +376,7 @@ export function useChatStore() {
   return {
     channels,
     modules,
+    directChannels,
     currentChannelId,
     currentChannel,
     currentMessages,
@@ -341,6 +393,7 @@ export function useChatStore() {
     initSocket,
     sendMessage,
     setChannel,
+    openDirectMessage,
     updateNickname,
     setMyCharacterInChannel,
     setSpeakerRole,

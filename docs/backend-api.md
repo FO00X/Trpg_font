@@ -129,12 +129,239 @@
 | 登录 | `src/stores/auth.js` | `fetch('/api/auth/login', ...)` |
 | 角色卡 | `src/stores/characters.js` | 改为 API 时在此处替换为 `fetch` |
 | 大厅 | `src/stores/gameRooms.js`、`GameRoomsView.vue`、`GameRoomCreateView.vue` | 改为 API 时在 store 或页面中请求 |
-| Socket | `src/services/socket.js`、`src/stores/chat.js` | `VITE_SOCKET_URL` 存在则连真实 Socket；`emit('message', msg)` |
+| Socket & 频道 | `src/services/socket.js`、`src/stores/chat.js` | `VITE_SOCKET_URL` 存在则连真实 Socket；`emit('message', msg)` |
+| 好友 & 私聊 | `src/views/FriendsView.vue`、`src/stores/chat.js` | 好友点击后通过 `openDirectMessage(friend)` 跳转 `/chat` |
 
 ---
 
-## 七、实现顺序建议
+## 七、后续扩展接口（好友 / 私聊 / 用户资料等）
 
-1. 认证 → 2. 角色卡 → 3. 大厅 → 4. Socket + 频道/历史消息 REST。
+本节是对**后续需要补充的接口**的设计草案，方便后端在现有基础上逐步扩展。当前前端中已有对应的占位逻辑或本地 Mock。
+
+> 约定：以下接口均默认带前缀 `/api`。
+
+### 7.1 好友与私聊（Direct Message）
+
+#### 7.1.1 获取好友列表
+
+- **URL**：`GET /api/friends`
+- **鉴权**：需要
+- **Query 参数（可选）**：
+  - `keyword: string` — 按昵称搜索
+  - `status: string` — `online` / `offline` / `all`
+- **成功响应**：
+
+  ```json
+  {
+    "ok": true,
+    "friends": [
+      {
+        "id": "u1",
+        "name": "熊猫",
+        "status": "online",
+        "lastMsg": "最近一条私聊内容",
+        "lastMsgTime": "2024-01-01T12:00:00Z",
+        "unreadCount": 2,
+        "avatar": null
+      }
+    ]
+  }
+  ```
+
+前端使用位置：`FriendsView.vue`（当前为本地 mock，后续可替换为该接口）。
+
+#### 7.1.2 私聊频道列表（可选）
+
+- **URL**：`GET /api/direct-channels`
+- **鉴权**：需要
+- **响应**：
+
+  ```json
+  {
+    "ok": true,
+    "channels": [
+      {
+        "id": "dm:u1",
+        "peerId": "u1",
+        "peerName": "熊猫",
+        "peerAvatar": null,
+        "lastMsg": "最近一条消息",
+        "lastMsgTime": "2024-01-01T12:00:00Z",
+        "unreadCount": 1
+      }
+    ]
+  }
+  ```
+
+前端可用该数据初始化 `chat.directChannels`，并在 `Sidebar.vue` 的“私聊”分组中展示。
+
+#### 7.1.3 私聊历史消息
+
+复用现有历史消息接口：
+
+- **URL**：`GET /api/channels/{channelId}/messages?limit=50&before=msgId`
+- **说明**：当 `channelId` 为 `dm:xxx` 时，后端识别为私聊消息，并按双方用户 ID 存储/过滤历史。
+
+前端调用位置：`src/stores/chat.js` 中 `fetchMessages()` 与 `setChannel()`。
+
+> 私聊的实时消息仍通过 Socket `message` 事件，`channelId` 使用 `dm:<peerId>` 或 `dm:<sorted(user1,user2)>`。
+
+---
+
+### 7.2 用户资料与在线状态
+
+#### 7.2.1 获取当前用户资料（扩展）
+
+在已存在的 `GET /api/auth/me` 上，建议丰富字段：
+
+- **成功响应**：
+
+  ```json
+  {
+    "ok": true,
+    "user": {
+      "id": "alice",
+      "username": "alice",
+      "nickname": "小狐狸",
+      "avatar": null
+    }
+  }
+  ```
+
+前端使用位置：
+
+- 登录后初始化：`src/stores/auth.js`
+- 聊天/侧边栏：`src/stores/chat.js` 的 `currentUser`（目前在 `initSocket()` 中用 `auth.user.username` 覆盖）。
+
+#### 7.2.2 修改当前用户资料（昵称）
+
+对应侧边栏底部“修改昵称”弹窗（`Sidebar.vue` → `updateNickname`）。
+
+- **URL**：`PUT /api/users/me/profile`
+- **请求体**：
+
+  ```json
+  {
+    "nickname": "新昵称",
+    "avatar": null
+  }
+  ```
+
+- **成功响应**：
+
+  ```json
+  {
+    "ok": true,
+    "user": {
+      "id": "alice",
+      "username": "alice",
+      "nickname": "新昵称",
+      "avatar": null
+    }
+  }
+  ```
+
+#### 7.2.3 在线用户列表（可选）
+
+- **URL**：`GET /api/users/online`
+- **成功响应**：
+
+  ```json
+  {
+    "ok": true,
+    "users": [
+      { "id": "u1", "name": "熊猫", "status": "online", "avatar": null },
+      { "id": "u2", "name": "田中", "status": "online", "avatar": null }
+    ]
+  }
+  ```
+
+前端使用位置：`src/stores/chat.js` 的 `onlineUsers`（当前为 mock），用于：
+
+- 跑团频道右上角“当前玩家与角色”列表
+- 子频道用户准入设置弹窗。
+
+---
+
+### 7.3 子频道访问控制 & 模组 NPC 管理
+
+这些接口用于持久化前端中对子频道准入权限与 NPC 的配置。
+
+#### 7.3.1 更新子频道用户权限
+
+- **URL**：`PUT /api/channels/{subChannelId}/access`
+- **鉴权**：需要；仅模组 owner/KP 可调用。
+- **请求体**：
+
+  ```json
+  {
+    "userAccess": {
+      "alice": "full",
+      "bob": "readonly",
+      "charlie": "none"
+    }
+  }
+  ```
+
+- **响应**：
+
+  ```json
+  { "ok": true }
+  ```
+
+前端入口：`Sidebar.vue` 中“用户设置”弹窗 → `updateSubChannelAccess()`。
+
+#### 7.3.2 为模组添加 / 更新 NPC
+
+- **URL**：`POST /api/modules/{moduleId}/npcs`
+- **鉴权**：需要；仅模组 owner/KP 可调用。
+- **请求体**：
+
+  ```json
+  {
+    "id": "npc-1",   // 可选，不传则后端生成
+    "name": "店长"
+  }
+  ```
+
+- **响应**：
+
+  ```json
+  {
+    "ok": true,
+    "npc": {
+      "id": "npc-1",
+      "name": "店长"
+    }
+  }
+  ```
+
+前端入口：`src/stores/chat.js` 中的 `addModuleNPC()`；当前仅在内存中维护。
+
+#### 7.3.3 删除模组 NPC
+
+- **URL**：`DELETE /api/modules/{moduleId}/npcs/{npcId}`
+- **响应**：
+
+  ```json
+  { "ok": true }
+  ```
+
+前端入口：`src/stores/chat.js` 中的 `removeModuleNPC()`。
+
+---
+
+## 八、实现顺序建议
+
+结合当前前端状态与接口依赖，推荐整体实现顺序：
+
+1. 认证模块（`/api/auth/login`、`/api/auth/me`）  
+2. 角色卡模块（`/api/characters`）  
+3. 大厅 / 房间模块（`/api/game-rooms` 相关）  
+4. Socket + 频道 / 历史消息 REST（`/api/channels`、`/api/channels/:id/messages`）  
+5. 好友列表与私聊（`/api/friends`、`/api/direct-channels`）  
+6. 用户资料与在线状态（`/api/users/me/profile`、`/api/users/online`）  
+7. 子频道访问控制 & NPC 管理  
+8. 通知 / 笔记等其余扩展功能（视产品需要选择性实现）
 
 文档版本：与当前前端代码状态一致，若前端后续调整字段或接口，请同步更新本文档。
