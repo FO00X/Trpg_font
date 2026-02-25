@@ -7,6 +7,7 @@ defineProps({
   icon: { type: String, default: '' },
   showBack: { type: Boolean, default: false },
   backLabel: { type: String, default: '返回' },
+  hideSidebar: { type: Boolean, default: false },
 })
 const emit = defineEmits(['back'])
 
@@ -17,6 +18,7 @@ const toggleSidebar = inject('toggleSidebar')
 <template>
   <header class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-chat-border bg-chat-panel">
     <button
+      v-if="!hideSidebar"
       type="button"
       class="p-2 -ml-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 transition-colors"
       :title="sidebarOpen ? '收起侧边栏' : '展开侧边栏'"

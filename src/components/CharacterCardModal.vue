@@ -19,6 +19,7 @@ const emit = defineEmits(['close'])
 
 const {
   getById,
+  fetchCharacter,
   getDerived,
   normalizeCharacter,
   getCreditDerived,
@@ -32,6 +33,16 @@ const sheet = computed(() => {
   const c = getById(props.characterId)
   return c ? normalizeCharacter(c) : null
 })
+
+watch(
+  () => [props.open, props.characterId],
+  async ([open, id]) => {
+    if (open && id && !getById(id)) {
+      await fetchCharacter(id)
+    }
+  },
+  { immediate: true }
+)
 
 const derived = computed(() => (sheet.value ? getDerived(sheet.value) : { hpMax: 0, mpMax: 0, sanInitial: 0, move: 9, damageBonus: 0, build: 0 }))
 

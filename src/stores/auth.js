@@ -1,83 +1,105 @@
 import { ref, computed } from 'vue'
+import { supabase } from '../lib/supabase'
 
-const STORAGE_KEY = 'foxtrpg-auth'
-
-function loadFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const data = JSON.parse(raw)
-    return data && data.username ? { username: data.username, token: data.token } : null
-  } catch {
-    return null
-  }
-}
-
-/** 直接读 localStorage 判断是否已登录，供路由守卫使用，避免与 logout 的时序问题 */
-export function hasStoredAuth() {
-  return !!loadFromStorage()
-}
-
-function saveToStorage(user, token) {
-  try {
-    if (user && token) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ username: user.username, token }))
-    } else {
-      localStorage.removeItem(STORAGE_KEY)
-    }
-  } catch (_) {}
-}
-
-const _stored = loadFromStorage()
-const user = ref(_stored ? { username: _stored.username } : null)
-const token = ref(_stored?.token ?? null)
+const user = ref(null)
 
 export function useAuthStore() {
   const isLoggedIn = computed(() => !!user.value)
 
+  /** 由路由守卫或初始化时调用：用 Supabase session 同步本地 user */
+  async function setSession(session) {
+    if (!session?.user) {
+      user.value = null
+      return
+    }
+    const u = session.user
+    user.value = {
+      id: u.id,
+      email: u.email,
+      username: u.email?.split('@')[0] || u.id,
+    }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', u.id)
+      .single()
+    if (profile?.username) user.value.username = profile.username
+  }
+
+  /** 应用启动时调用一次，用于恢复 session 并同步 user */
+  async function init() {
+    const { data: { session } } = await supabase.auth.getSession()
+    await setSession(session)
+  }
+
   /**
-   * 登录：必须由后端返回成功才允许进入系统
+   * 登录：使用 Supabase 邮箱+密码
    * @returns {Promise<{ ok: boolean, message?: string }>}
    */
-  async function login(username, password) {
-    const u = (username || '').trim()
+  async function login(email, password) {
+    const e = (email || '').trim()
     const p = (password || '').trim()
-    if (!u) return { ok: false, message: '请输入账号' }
+    if (!e) return { ok: false, message: '请输入邮箱' }
     if (!p) return { ok: false, message: '请输入密码' }
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: u, password: p }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok && data?.ok && data?.token && data?.user) {
-        user.value = data.user
-        token.value = data.token
-        saveToStorage(data.user, data.token)
-        return { ok: true }
+      const { data, error } = await supabase.auth.signInWithPassword({ email: e, password: p })
+      if (error) {
+        if (error.message?.includes('Invalid login')) return { ok: false, message: '邮箱或密码错误' }
+        return { ok: false, message: error.message || '登录失败，请稍后重试' }
       }
-      // 后端返回非 ok 或 401，统一视为登录失败
-      if (res.status === 401) {
-        return { ok: false, message: data?.message || '账号或密码错误' }
-      }
-      return { ok: false, message: data?.message || '登录失败，请稍后重试' }
-    } catch (e) {
-      // 网络错误 / 后端不可用，一律视为登录失败
+      await setSession(data.session)
+      return { ok: true }
+    } catch (err) {
       return { ok: false, message: '无法连接服务器，请稍后重试' }
     }
   }
 
-  function logout() {
+  /** 注册（可选，用于注册页） */
+  async function signUp(email, password, meta = {}) {
+    const e = (email || '').trim()
+    const p = (password || '').trim()
+    if (!e) return { ok: false, message: '请输入邮箱' }
+    if (!p) return { ok: false, message: '请输入密码' }
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: e,
+        password: p,
+        options: { data: { username: meta.username || e.split('@')[0] } },
+      })
+      if (error) return { ok: false, message: error.message || '注册失败' }
+      if (data.session) await setSession(data.session)
+      return { ok: true, message: data.user && !data.session ? '请到邮箱查收验证邮件' : undefined }
+    } catch (err) {
+      return { ok: false, message: '无法连接服务器，请稍后重试' }
+    }
+  }
+
+  async function logout() {
+    await supabase.auth.signOut()
     user.value = null
-    token.value = null
-    saveToStorage(null)
   }
 
-  /** 获取当前 token，供请求头使用 */
-  function getToken() {
-    return token.value
+  /** 更新个人资料中的用户名（昵称），会写入 Supabase profiles，好友搜索时使用此名 */
+  async function updateProfileUsername(username) {
+    const trimmed = (username || '').trim()
+    if (!trimmed || !user.value?.id) return { ok: false, message: '请输入昵称' }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ username: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', user.value.id)
+    if (error) return { ok: false, message: error.message || '保存失败' }
+    user.value.username = trimmed
+    return { ok: true }
   }
 
-  return { user, isLoggedIn, login, logout, getToken }
+  return {
+    user,
+    isLoggedIn,
+    init,
+    setSession,
+    login,
+    signUp,
+    logout,
+    updateProfileUsername,
+  }
 }

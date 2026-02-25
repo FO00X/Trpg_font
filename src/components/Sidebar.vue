@@ -51,6 +51,12 @@
       >
         <Icon :icon="item.icon" class="text-lg shrink-0" />
         <span class="flex-1 truncate">{{ item.name }}</span>
+        <span
+          v-if="item.path === '/notifications' && notificationUnreadCount > 0"
+          class="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-accent text-chat-bg text-xs font-medium flex items-center justify-center"
+        >
+          {{ notificationUnreadCount > 99 ? '99+' : notificationUnreadCount }}
+        </span>
       </button>
 
       <!-- 私聊 -->
@@ -136,6 +142,25 @@
             leave-to-class="opacity-0 -translate-y-1"
           >
             <DisclosurePanel class="pl-2 pr-2 py-1">
+              <!-- 我创建或已加入的房间 -->
+              <div v-if="myGameRooms.length" class="mb-2">
+                <div class="px-3 py-1.5 text-[11px] font-medium text-accent-muted uppercase tracking-wider">
+                  我的房间
+                </div>
+                <button
+                  v-for="room in myGameRooms"
+                  :key="room.id"
+                  type="button"
+                  :class="[
+                    'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors text-sm',
+                    currentPath === '/game-rooms' ? 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white' : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
+                  ]"
+                  @click="router.push({ name: 'game-room', params: { id: room.id } }); close()"
+                >
+                  <Icon icon="mdi:door-open" class="text-base shrink-0" />
+                  <span class="flex-1 truncate">{{ room.title }}</span>
+                </button>
+              </div>
               <!-- 每个模组：可再展开显示子频道 -->
               <Disclosure
                 v-for="mod in modules"
@@ -250,7 +275,7 @@
                 @click="openNicknameDialog"
               >
                 <Icon icon="mdi:account-edit-outline" class="text-lg shrink-0" />
-                修改昵称
+                设置用户名
               </button>
             </MenuItem>
             <MenuItem v-slot="{ active }">
@@ -276,14 +301,15 @@
         <div class="fixed inset-0 flex items-center justify-center p-4">
           <DialogPanel class="w-full max-w-sm rounded-xl bg-sidebar border border-chat-border shadow-xl p-4 focus:outline-none">
             <DialogTitle class="text-sm font-medium text-accent-muted uppercase tracking-wider mb-3">
-              修改昵称
+              用户名 / 昵称
             </DialogTitle>
-            <div class="flex gap-2">
+            <p class="text-xs text-accent-muted mb-2">好友通过此用户名搜索并添加你，聊天中也会显示此名。</p>
+            <div class="flex gap-2 mb-2">
               <input
                 v-model="nicknameInput"
                 type="text"
                 class="flex-1 min-w-0 px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white placeholder-accent-muted focus:border-accent outline-none"
-                placeholder="昵称"
+                placeholder="输入用户名"
                 @keydown.enter="confirmNickname"
               >
               <button
@@ -294,6 +320,9 @@
                 确认
               </button>
             </div>
+            <p v-if="nicknameMessage" :class="nicknameMessage.startsWith('✓') ? 'text-sm text-green-400' : 'text-sm text-red-400'">
+              {{ nicknameMessage }}
+            </p>
             <div class="mt-3 flex justify-end">
               <button
                 type="button"
@@ -400,6 +429,8 @@ import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems, MenuItem, Dialog, DialogOverlay, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 import { useChatStore } from '../stores/chat'
 import { useAuthStore } from '../stores/auth'
+import { useGameRoomsStore } from '../stores/gameRooms'
+import { useNotificationsStore } from '../stores/notifications'
 
 const props = defineProps({
   open: { type: Boolean, default: true },
@@ -410,19 +441,6 @@ const emit = defineEmits(['update:open'])
 function onEscape(e) {
   if (e.key === 'Escape') emit('update:open', false)
 }
-watch(() => props.open, (isOpen) => {
-  if (isOpen) {
-    document.body.style.overflow = 'hidden'
-    document.addEventListener('keydown', onEscape)
-  } else {
-    document.body.style.overflow = ''
-    document.removeEventListener('keydown', onEscape)
-  }
-}, { immediate: true })
-onUnmounted(() => {
-  document.body.style.overflow = ''
-  document.removeEventListener('keydown', onEscape)
-})
 
 const router = useRouter()
 const {
@@ -440,23 +458,61 @@ const {
   createSubChannel,
   updateSubChannelAccess,
 } = useChatStore()
+const { rooms: gameRooms, fetchRooms } = useGameRoomsStore()
+const authStore = useAuthStore()
+const { unreadCount: notificationUnreadCount, fetchUnreadCount: fetchNotificationUnread } = useNotificationsStore()
+
+watch(() => props.open, (isOpen) => {
+  if (isOpen) {
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', onEscape)
+    fetchRooms()
+    fetchNotificationUnread()
+  } else {
+    document.body.style.overflow = ''
+    document.removeEventListener('keydown', onEscape)
+  }
+}, { immediate: true })
+onUnmounted(() => {
+  document.body.style.overflow = ''
+  document.removeEventListener('keydown', onEscape)
+})
+
+const myGameRooms = computed(() => {
+  const uid = authStore.user?.value?.id
+  if (!uid) return []
+  return gameRooms.value.filter(
+    (r) => r.ownerId === uid || r.myApplicationStatus === 'accepted'
+  )
+})
 
 const dmOpen = ref(true)
 
 const nicknameDialogOpen = ref(false)
 const nicknameInput = ref('')
+const nicknameMessage = ref('')
 watch(() => currentUser.value?.name, (name) => {
   nicknameInput.value = name ?? ''
 }, { immediate: true })
 
 function openNicknameDialog() {
   nicknameInput.value = currentUser.value?.name ?? ''
+  nicknameMessage.value = ''
   nicknameDialogOpen.value = true
 }
 
-function confirmNickname() {
-  updateNickname(nicknameInput.value)
-  nicknameDialogOpen.value = false
+async function confirmNickname() {
+  nicknameMessage.value = ''
+  const res = await updateNickname(nicknameInput.value)
+  if (res?.ok) {
+    nicknameMessage.value = '✓ 用户名已更新'
+    setTimeout(() => {
+      nicknameDialogOpen.value = false
+      nicknameMessage.value = ''
+    }, 1000)
+  } else if (res?.message) {
+    nicknameMessage.value = res.message
+  }
 }
 
 function closeNicknameDialog() {

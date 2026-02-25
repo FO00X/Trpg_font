@@ -4,12 +4,12 @@
       <h1 class="text-xl font-semibold text-center mb-2">登录 TRPG</h1>
       <form @submit.prevent="onSubmit" class="space-y-3">
         <div>
-          <label class="block mb-1 text-sm text-accent-muted">账号</label>
+          <label class="block mb-1 text-sm text-accent-muted">邮箱</label>
           <input
-            v-model="username"
-            type="text"
+            v-model="email"
+            type="email"
             class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border focus:outline-none focus:ring-2 focus:ring-accent"
-            autocomplete="username"
+            autocomplete="email"
           />
         </div>
         <div>
@@ -43,7 +43,7 @@ const router = useRouter()
 const route = useRoute()
 const { login } = useAuthStore()
 
-const username = ref('')
+const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -52,7 +52,7 @@ async function onSubmit() {
   if (loading.value) return
   error.value = ''
   loading.value = true
-  const res = await login(username.value, password.value)
+  const res = await login(email.value, password.value)
   loading.value = false
   if (!res.ok) {
     error.value = res.message || '登录失败，请重试'
@@ -65,4 +65,3 @@ async function onSubmit() {
 
 <style scoped>
 </style>
-

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { APP_TITLE } from '../constants/app'
-import { useAuthStore, hasStoredAuth } from '../stores/auth'
+import { useAuthStore } from '../stores/auth'
+import { supabase } from '../lib/supabase'
 
 const routes = [
   {
@@ -52,6 +53,18 @@ const routes = [
     meta: { title: '笔记', requiresAuth: true },
   },
   {
+    path: '/notes/new',
+    name: 'note-new',
+    component: () => import('../views/NoteEditView.vue'),
+    meta: { title: '新建笔记', requiresAuth: true },
+  },
+  {
+    path: '/notes/:id',
+    name: 'note-edit',
+    component: () => import('../views/NoteEditView.vue'),
+    meta: { title: '编辑笔记', requiresAuth: true },
+  },
+  {
     path: '/game-rooms',
     name: 'game-rooms',
     component: () => import('../views/GameRoomsView.vue'),
@@ -62,6 +75,30 @@ const routes = [
     name: 'game-room-new',
     component: () => import('../views/GameRoomCreateView.vue'),
     meta: { title: '创建房间', requiresAuth: true },
+  },
+  {
+    path: '/game-rooms/:id',
+    name: 'game-room',
+    component: () => import('../views/GameRoomView.vue'),
+    meta: { title: '房间', requiresAuth: true },
+  },
+  {
+    path: '/game-rooms/:roomId/clues',
+    name: 'clues',
+    component: () => import('../views/CluesView.vue'),
+    meta: { title: '线索', requiresAuth: true },
+  },
+  {
+    path: '/game-rooms/:roomId/clues/new',
+    name: 'clue-new',
+    component: () => import('../views/ClueEditView.vue'),
+    meta: { title: '新建线索', requiresAuth: true },
+  },
+  {
+    path: '/game-rooms/:roomId/clues/:clueId',
+    name: 'clue-edit',
+    component: () => import('../views/ClueEditView.vue'),
+    meta: { title: '编辑线索', requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -76,10 +113,14 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const requiresAuth = to.meta.requiresAuth !== false
-  // 用 localStorage 直接判断，避免 logout 后跳转登录页时守卫仍读到旧状态
-  const loggedIn = hasStoredAuth()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session) {
+    const authStore = useAuthStore()
+    if (!authStore.user) await authStore.setSession(session)
+  }
+  const loggedIn = !!session
   if (requiresAuth && !loggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }

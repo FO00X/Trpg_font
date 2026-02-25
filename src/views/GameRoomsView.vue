@@ -117,12 +117,12 @@
           <!-- 房间头部 -->
           <div class="flex items-start gap-3 mb-3">
             <div class="w-12 h-12 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0">
-            <Icon :icon="room.moduleIcon" class="text-2xl text-accent" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-white truncate mb-1">{{ room.module }}</h3>
-              <span class="text-xs text-accent-muted">{{ room.owner }}</span>
-          </div>
+              <Icon :icon="getModuleIcon(room.module)" class="text-2xl text-accent" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="font-semibold text-white truncate mb-1">{{ room.title }}</h3>
+              <span class="text-xs text-accent-muted">{{ room.module }} · {{ ownerDisplay(room) }}</span>
+            </div>
             <span
               class="px-2 py-0.5 rounded text-xs font-medium shrink-0"
               :class="getStatusColor(room.status)"
@@ -147,28 +147,44 @@
 
           <!-- 房间信息 -->
           <div class="flex items-center justify-between text-xs text-accent-muted mb-3">
-            <div class="flex items-center gap-4">
-              <span class="flex items-center gap-1">
-                <Icon icon="mdi:account-group" class="text-sm" />
-                {{ room.currentPlayers }} / {{ room.maxPlayers }}
-              </span>
-              <span class="flex items-center gap-1">
-                <Icon icon="mdi:calendar" class="text-sm" />
-                {{ room.createdAt }}
-              </span>
-            </div>
+            <span class="flex items-center gap-1">
+              <Icon icon="mdi:account-group" class="text-sm" />
+              最多 {{ room.maxPlayers || 6 }} 人
+            </span>
+            <span class="flex items-center gap-1">
+              <Icon icon="mdi:calendar" class="text-sm" />
+              {{ formatDate(room.created_at) }}
+            </span>
           </div>
 
           <!-- 操作按钮 -->
           <div class="flex gap-2 mt-auto">
-            <button
-              v-if="room.status === 'recruiting' && room.currentPlayers < room.maxPlayers"
-              type="button"
-              class="flex-1 px-3 py-2 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-colors text-sm font-medium"
-              @click="onApplyToRoom(room.id)"
-            >
-              申请加入
-            </button>
+            <template v-if="room.status === 'recruiting'">
+              <button
+                v-if="canEnterRoom(room)"
+                type="button"
+                class="flex-1 px-3 py-2 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-colors text-sm font-medium"
+                @click="onEnterRoom(room)"
+              >
+                进入房间
+              </button>
+              <button
+                v-else-if="room.myApplicationStatus === 'pending'"
+                type="button"
+                class="flex-1 px-3 py-2 rounded-lg bg-accent-muted/20 text-accent-muted cursor-not-allowed text-sm font-medium"
+                disabled
+              >
+                等待审核
+              </button>
+              <button
+                v-else
+                type="button"
+                class="flex-1 px-3 py-2 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition-colors text-sm font-medium"
+                @click="onApplyToRoom(room.id)"
+              >
+                申请加入
+              </button>
+            </template>
             <button
               v-else-if="room.status === 'full'"
               type="button"
@@ -206,9 +222,23 @@ import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems } from '@headlessui/vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const { rooms, availableModules, fetchRooms, fetchModules, fetchTags, applyToRoom } = useGameRoomsStore()
+const authStore = useAuthStore()
+const myId = computed(() => authStore.user?.value?.id)
+
+/** 招募中时：房主或已通过申请的用户显示「进入房间」 */
+function canEnterRoom(room) {
+  if (room.status !== 'recruiting') return false
+  if (room.ownerId === myId.value) return true
+  return room.myApplicationStatus === 'accepted'
+}
+
+function onEnterRoom(room) {
+  router.push({ name: 'game-room', params: { id: room.id } })
+}
 
 onMounted(() => {
   fetchRooms()
@@ -235,12 +265,11 @@ const filteredRooms = computed(() => {
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase().trim()
     result = result.filter((room) => {
-      return (
-        room.name.toLowerCase().includes(query) ||
-        room.module.toLowerCase().includes(query) ||
-        room.owner.toLowerCase().includes(query) ||
-        room.description.toLowerCase().includes(query)
-      )
+      const title = (room.title || '').toLowerCase()
+      const module = (room.module || '').toLowerCase()
+      const desc = (room.description || '').toLowerCase()
+      const tagsStr = (room.tags || []).join(' ').toLowerCase()
+      return title.includes(query) || module.includes(query) || desc.includes(query) || tagsStr.includes(query)
     })
   }
 
@@ -252,14 +281,11 @@ const filteredRooms = computed(() => {
   // 模组筛选
   if (selectedModules.value.length > 0) {
     const moduleNames = selectedModules.value
-      .map((id) => {
-        const mod = availableModules.find((m) => m.id === id)
-        return mod?.name
-      })
+      .map((id) => availableModules.value.find((m) => m.id === id)?.name)
       .filter(Boolean)
-    if (moduleNames.length > 0) {
-      result = result.filter((room) => moduleNames.includes(room.module))
-    }
+    result = result.filter((room) => {
+      return moduleNames.includes(room.module) || selectedModules.value.includes(room.module)
+    })
   }
 
   return result
@@ -278,12 +304,11 @@ function goCreateRoomPage() {
 async function onApplyToRoom(roomId) {
   const room = rooms.value.find((r) => r.id === roomId)
   if (!room || room.status !== 'recruiting') return
-  if (room.currentPlayers >= room.maxPlayers) return
   const res = await applyToRoom(roomId)
-  if (res) {
-    alert(res.message || `已申请加入「${room.name}」，等待 KP 审核`)
+  if (res?.ok) {
+    alert(res.message || `已申请加入「${room.title}」，等待 KP 审核`)
   } else {
-    alert('申请失败，请稍后重试')
+    alert(res?.message || '申请失败，请稍后重试')
   }
 }
 
@@ -303,5 +328,26 @@ function getStatusColor(status) {
     started: 'bg-blue-500/20 text-blue-400',
   }
   return map[status] || ''
+}
+
+function getModuleIcon(moduleNameOrId) {
+  const mod = availableModules.value.find((m) => m.name === moduleNameOrId || m.id === moduleNameOrId)
+  return mod?.icon || 'mdi:dots-horizontal'
+}
+
+function ownerDisplay(room) {
+  if (!room.ownerId) return '房主'
+  return room.ownerId.slice(0, 8) + '…'
+}
+
+function formatDate(isoString) {
+  if (!isoString) return '—'
+  const d = new Date(isoString)
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) {
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  }
+  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 </script>

@@ -1,6 +1,5 @@
 import { ref, computed, shallowRef } from 'vue'
-import { useSocket, mockReceiveMessage } from '../services/socket'
-import { apiGet } from '../services/api'
+import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
 
 // 频道列表（大厅等）与模组/子频道，由 fetchChannels 从后端拉取
@@ -45,7 +44,7 @@ const speakerRoleInChannel = ref('kp')
 // 各模组下 KP 添加的 NPC 列表，供发言身份选择。{ [moduleId]: [ { id, name } ] }
 const moduleNPCs = ref({})
 
-const socket = shallowRef(null)
+const realtimeChannel = shallowRef(null)
 
 export function useChatStore() {
   const currentChannel = computed(() => {
@@ -192,12 +191,23 @@ export function useChatStore() {
 
   async function fetchChannels() {
     try {
-      const res = await apiGet('/channels')
-      if (res?.ok) {
-        if (Array.isArray(res.channels)) channels.value = res.channels
-        if (Array.isArray(res.modules)) modules.value = res.modules
+      const [chRes, modRes] = await Promise.all([
+        supabase.from('channels').select('id, name, icon'),
+        supabase.from('modules').select('id, name, icon, owner_id, sub_channels'),
+      ])
+      if (chRes.data) {
+        channels.value = (chRes.data || []).map((c) => ({ ...c, unread: 0 }))
       }
-      return res
+      if (modRes.data) {
+        modules.value = (modRes.data || []).map((m) => ({
+          id: m.id,
+          name: m.name,
+          icon: m.icon,
+          ownerId: m.owner_id,
+          subChannels: m.sub_channels || [],
+        }))
+      }
+      return { ok: true }
     } catch {
       return { ok: false, message: '网络错误：无法获取频道列表' }
     }
@@ -205,123 +215,140 @@ export function useChatStore() {
 
   async function fetchMessages(channelId, params = {}) {
     try {
-      const q = new URLSearchParams()
-      if (params.limit != null) q.set('limit', params.limit)
-      if (params.before != null) q.set('before', params.before)
-      const path = `/channels/${channelId}/messages` + (q.toString() ? `?${q.toString()}` : '')
-      const res = await apiGet(path)
-      if (res?.ok && Array.isArray(res.messages)) {
-        messagesByChannel.value[channelId] = res.messages.map((m) => ({
-          ...m,
-          time: typeof m.time === 'number' ? m.time : (m.time ? new Date(m.time).getTime() : Date.now()),
-        }))
+      const limit = params.limit ?? 50
+      let q = supabase
+        .from('messages')
+        .select('id, channel_id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
+        .eq('channel_id', channelId)
+        .order('created_at', { ascending: true })
+        .limit(limit)
+      if (params.before) {
+        const { data: beforeRow } = await supabase.from('messages').select('created_at').eq('id', params.before).single()
+        if (beforeRow) q = q.lt('created_at', beforeRow.created_at)
       }
-      return res
+      const { data, error } = await q
+      if (error) return { ok: false, message: error.message }
+      messagesByChannel.value[channelId] = (data || []).map((m) => ({
+        id: m.id,
+        userId: m.user_id || 'system',
+        userName: m.user_name || '未知',
+        content: m.content,
+        time: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+        type: m.type || 'text',
+        speakerRole: m.speaker_role,
+        speakerNpcId: m.speaker_npc_id,
+        speakerNpcName: m.speaker_npc_name,
+      }))
+      return { ok: true, messages: messagesByChannel.value[channelId] }
     } catch {
       return { ok: false, message: '网络错误：无法获取消息列表' }
     }
   }
 
   function initSocket() {
-    if (socket.value) return
+    if (realtimeChannel.value) return
     const auth = useAuthStore()
-    if (auth.user?.value?.username) {
-      currentUser.value = { ...currentUser.value, id: auth.user.value.username, name: auth.user.value.username }
+    const u = auth.user?.value
+    if (u?.id) {
+      currentUser.value = { id: u.id, name: u.username || u.email?.split('@')[0] || '我', avatar: null }
     }
-    const s = useSocket()
-    socket.value = s
-    // 仅当配置了后端 Socket 地址时才拉取频道列表，避免未启动后端时触发代理报错
-    if (import.meta.env.VITE_SOCKET_URL) {
-      fetchChannels()
-    }
-    s.on('message', (msg) => {
-      // 自己发出的消息已在 sendMessage 中加入列表，避免 Mock 或服务端回显时重复添加
-      if (msg.userId === currentUser.value.id) return
-      const channelId = msg.channelId || currentChannelId.value
-      if (!messagesByChannel.value[channelId]) messagesByChannel.value[channelId] = []
-      messagesByChannel.value[channelId].push({
-        id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        userId: msg.userId,
-        userName: msg.userName || '未知',
-        content: msg.content,
-        time: msg.time || Date.now(),
-        type: msg.type || 'text',
-      })
-    })
-    s.on('connect', () => {
-      if (import.meta.env.DEV) console.log('[Socket] 已连接')
-    })
-    s.on('disconnect', () => {
-      if (import.meta.env.DEV) console.log('[Socket] 已断开')
-    })
+    fetchChannels()
+    const channel = supabase
+      .channel('messages-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const row = payload.new
+          const channelId = row.channel_id
+          if (!channelId) return
+          const myId = currentUser.value?.id
+          if (row.user_id === myId) return
+          if (channelId.startsWith('dm:')) {
+            const parts = channelId.split(':')
+            if (parts.length >= 3 && parts[1] && parts[2]) {
+              if (myId !== parts[1] && myId !== parts[2]) return
+            }
+          }
+          if (!messagesByChannel.value[channelId]) messagesByChannel.value[channelId] = []
+          messagesByChannel.value[channelId].push({
+            id: row.id,
+            userId: row.user_id || 'system',
+            userName: row.user_name || '未知',
+            content: row.content,
+            time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            type: row.type || 'text',
+            speakerRole: row.speaker_role,
+            speakerNpcId: row.speaker_npc_id,
+            speakerNpcName: row.speaker_npc_name,
+          })
+        }
+      )
+      .subscribe()
+    realtimeChannel.value = channel
   }
 
-  function sendMessage(content) {
+  async function sendMessage(content) {
     const channelId = currentChannelId.value
     const mod = getCurrentModule()
     const isKP = mod && mod.ownerId === currentUser.value.id
-    const msg = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      channelId,
-      userId: currentUser.value.id,
-      userName: currentUser.value.name,
+    const payload = {
+      channel_id: channelId,
+      user_id: currentUser.value.id,
+      user_name: currentUser.value.name,
       content: content.trim(),
-      time: Date.now(),
       type: 'text',
     }
     if (isKP) {
       const role = speakerRoleInChannel.value
       if (role === 'kp') {
-        msg.speakerRole = 'kp'
+        payload.speaker_role = 'kp'
       } else if (role.startsWith('npc-')) {
-        const mod = getCurrentModule()
         const npcs = mod ? moduleNPCs.value[mod.id] || [] : []
         const npc = npcs.find((n) => n.id === role)
-        msg.speakerRole = 'npc'
-        msg.speakerNpcId = npc?.id
-        msg.speakerNpcName = npc?.name || 'NPC'
+        payload.speaker_role = 'npc'
+        payload.speaker_npc_id = npc?.id
+        payload.speaker_npc_name = npc?.name || 'NPC'
       }
+    }
+    const { data, error } = await supabase.from('messages').insert(payload).select('id, created_at').single()
+    if (error) return
+    const msg = {
+      id: data.id,
+      userId: currentUser.value.id,
+      userName: currentUser.value.name,
+      content: payload.content,
+      time: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
+      type: 'text',
+      speakerRole: payload.speaker_role,
+      speakerNpcId: payload.speaker_npc_id,
+      speakerNpcName: payload.speaker_npc_name,
     }
     if (!messagesByChannel.value[channelId]) messagesByChannel.value[channelId] = []
     messagesByChannel.value[channelId].push(msg)
-
-    if (socket.value && socket.value.connected) {
-      socket.value.emit('message', msg)
-    } else {
-      // Mock: 模拟对方回复
-      setTimeout(() => {
-        mockReceiveMessage({
-          ...msg,
-          id: `msg-${Date.now()}-bot`,
-          userId: 'bot',
-          userName: '小助手',
-          content: `收到：「${msg.content}」`,
-          time: Date.now(),
-        })
-      }, 500)
-    }
   }
 
   function isDirectMessageChannelId(id) {
     return typeof id === 'string' && id.startsWith('dm:')
   }
 
+  /** 私聊频道 id：两人共用同一 channel，便于拉取历史与 Realtime */
+  function getDmChannelId(uid1, uid2) {
+    if (!uid1 || !uid2) return null
+    const parts = [uid1, uid2].sort()
+    return `dm:${parts[0]}:${parts[1]}`
+  }
+
   function setChannel(id) {
     currentChannelId.value = id
 
-    // 私聊频道不走 HTTP 拉消息（避免后端未启动/未实现 DM 接口时 fetch 报错）
     if (isDirectMessageChannelId(id)) {
       if (!messagesByChannel.value[id]) messagesByChannel.value[id] = []
-      if (socket.value && typeof socket.value.emit === 'function') {
-        socket.value.emit('join', { channelId: id })
-      }
+      fetchMessages(id, { limit: 50 }).catch(() => {})
       return
     }
 
     fetchMessages(id, { limit: 50 }).catch(() => {})
-    if (socket.value && typeof socket.value.emit === 'function') {
-      socket.value.emit('join', { channelId: id })
-    }
   }
 
   /** 打开/创建一个私聊频道（DM）并切换到该频道 */
@@ -329,7 +356,9 @@ export function useChatStore() {
     const peerId = friend?.id || friend?.userId
     const peerName = friend?.name || friend?.userName || '私聊'
     if (!peerId) return null
-    const id = `dm:${peerId}`
+    const myId = currentUser.value?.id
+    if (!myId) return null
+    const id = getDmChannelId(myId, peerId) || `dm:${peerId}`
 
     if (!directChannels.value.some((c) => c.id === id)) {
       directChannels.value = [
@@ -338,19 +367,21 @@ export function useChatStore() {
       ]
     }
     if (!messagesByChannel.value[id]) {
-      messagesByChannel.value[id] = [
-        { id: `sys-${Date.now()}`, userId: 'system', userName: '系统', content: `开始与「${peerName}」的私聊`, time: Date.now(), type: 'system' },
-      ]
+      messagesByChannel.value[id] = []
     }
 
     setChannel(id)
     return id
   }
 
-  /** 修改当前用户昵称 */
-  function updateNickname(name) {
+  /** 修改当前用户昵称（会写入 Supabase profiles，好友通过此用户名搜索到你） */
+  async function updateNickname(name) {
     const trimmed = (name || '').trim()
-    if (trimmed) currentUser.value.name = trimmed
+    if (!trimmed) return { ok: false, message: '请输入昵称' }
+    const auth = useAuthStore()
+    const res = await auth.updateProfileUsername(trimmed)
+    if (res.ok) currentUser.value.name = trimmed
+    return res
   }
 
   /** 退出登录：重置为默认用户（后续可接真实登出逻辑） */

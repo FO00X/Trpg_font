@@ -259,29 +259,34 @@ function getDefaultSheet() {
   }
 }
 
-import { apiGet, apiPost, apiPut, apiDelete } from '../services/api'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from './auth'
+
+function rowToCharacter(r) {
+  if (!r) return null
+  const data = r.data == null ? {} : (typeof r.data === 'string' ? JSON.parse(r.data) : r.data)
+  return { ...data, id: r.id, updated_at: r.updated_at }
+}
 
 export function useCharactersStore() {
   const characters = ref([])
 
   async function fetchList() {
-    const res = await apiGet('/characters')
-    if (res?.ok && Array.isArray(res.list)) {
-      characters.value = res.list
-    }
-    return res
+    const { data, error } = await supabase.from('characters').select('id, data, updated_at').order('updated_at', { ascending: false })
+    if (error) return { ok: false, message: error.message }
+    characters.value = (data || []).map(rowToCharacter)
+    return { ok: true, list: characters.value }
   }
 
   /** 拉取单条并写入列表，供直接打开编辑页时使用 */
   async function fetchCharacter(characterId) {
-    const res = await apiGet(`/characters/${characterId}`)
-    if (res?.ok && res.character) {
-      const i = characters.value.findIndex((c) => c.id === characterId)
-      if (i >= 0) characters.value[i] = res.character
-      else characters.value.push(res.character)
-      return res.character
-    }
-    return null
+    const { data, error } = await supabase.from('characters').select('id, data, updated_at').eq('id', characterId).single()
+    if (error || !data) return null
+    const character = rowToCharacter(data)
+    const i = characters.value.findIndex((c) => c.id === characterId)
+    if (i >= 0) characters.value[i] = character
+    else characters.value.push(character)
+    return character
   }
 
   function getDerived(sheet) {
@@ -311,34 +316,33 @@ export function useCharactersStore() {
   }
 
   async function create(draft) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return null
     const payload = { ...getDefaultSheet(), ...draft }
     delete payload.id
-    delete payload.updated
-    const res = await apiPost('/characters', payload)
-    if (res?.ok && res.character) {
-      characters.value.push(res.character)
-      return res.character.id
-    }
-    return null
+    delete payload.updated_at
+    const { data, error } = await supabase.from('characters').insert({ user_id: uid, data: payload }).select('id, data, updated_at').single()
+    if (error) return null
+    const character = rowToCharacter(data)
+    characters.value.push(character)
+    return character.id
   }
 
   async function update(id, draft) {
-    const res = await apiPut(`/characters/${id}`, draft)
-    if (res?.ok && res.character) {
-      const i = characters.value.findIndex((c) => c.id === id)
-      if (i >= 0) characters.value[i] = res.character
-      return true
-    }
-    return false
+    const { data, error } = await supabase.from('characters').update({ data: draft, updated_at: new Date().toISOString() }).eq('id', id).select('id, data, updated_at').single()
+    if (error) return false
+    const character = rowToCharacter(data)
+    const i = characters.value.findIndex((c) => c.id === id)
+    if (i >= 0) characters.value[i] = character
+    return true
   }
 
   async function remove(id) {
-    const res = await apiDelete(`/characters/${id}`)
-    if (res?.ok) {
-      characters.value = characters.value.filter((c) => c.id !== id)
-      return true
-    }
-    return false
+    const { error } = await supabase.from('characters').delete().eq('id', id)
+    if (error) return false
+    characters.value = characters.value.filter((c) => c.id !== id)
+    return true
   }
 
   return {

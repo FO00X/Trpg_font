@@ -102,7 +102,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems } from '@headlessui/vue'
 import { useChatStore } from '../stores/chat'
@@ -115,7 +115,19 @@ defineProps({
 })
 defineEmits(['toggle-sidebar'])
 
-const { currentChannel, isSubChannel, currentChannelMembers, currentUser, setMyCharacterInChannel, isCurrentChannelKP } = useChatStore()
+const { currentChannel, currentChannelId, fetchMessages, isSubChannel, currentChannelMembers, currentUser, setMyCharacterInChannel, isCurrentChannelKP } = useChatStore()
+
+// 轮询拉取新消息（Realtime 未生效时仍能收到他人消息，如大厅）
+let pollTimer = null
+onMounted(() => {
+  pollTimer = setInterval(() => {
+    const id = currentChannelId.value
+    if (id) fetchMessages(id, { limit: 50 })
+  }, 8000)
+})
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
 const { characters: myCharacters, getById: getCharacterById } = useCharactersStore()
 
 const characterPickerUserId = ref(null)

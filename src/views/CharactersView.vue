@@ -11,6 +11,12 @@ const { characters, remove, fetchList } = useCharactersStore()
 const { openCharacterCard } = useCharacterCardModal()
 const openMenuId = ref(null)
 
+function formatUpdated(isoString) {
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 function createNew() {
   router.push('/characters/new')
 }
@@ -83,7 +89,7 @@ onUnmounted(() => {
           <div class="flex-1 min-w-0 min-h-0">
             <div class="font-medium text-white truncate">{{ c.name || '未命名' }}</div>
             <div class="text-sm text-accent-muted truncate">
-              {{ c.campaign ? `${c.campaign} · ` : '' }}{{ c.updated }}
+              {{ c.campaign ? `${c.campaign} · ` : '' }}{{ formatUpdated(c.updated_at) }}
             </div>
           </div>
           <div class="relative shrink-0">

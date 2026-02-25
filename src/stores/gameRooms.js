@@ -1,5 +1,6 @@
 import { ref } from 'vue'
-import { apiGet, apiPost } from '../services/api'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from './auth'
 
 const rooms = ref([])
 const availableModules = ref([])
@@ -7,46 +8,167 @@ const availableTags = ref([])
 
 export function useGameRoomsStore() {
   async function fetchRooms(params = {}) {
-    const q = new URLSearchParams()
-    if (params.keyword != null && params.keyword !== '') q.set('keyword', params.keyword)
-    if (params.status != null && params.status !== '') q.set('status', params.status)
-    if (params.module != null && params.module !== '') q.set('module', params.module)
-    const path = '/game-rooms' + (q.toString() ? `?${q.toString()}` : '')
-    const res = await apiGet(path)
-    if (res?.ok && Array.isArray(res.list)) {
-      rooms.value = res.list
+    const auth = useAuthStore()
+    const myId = auth.user?.value?.id
+
+    let q = supabase.from('game_rooms').select('id, owner_id, title, module, tags, status, description, module_files, max_players, created_at, updated_at').order('created_at', { ascending: false })
+    if (params.keyword != null && params.keyword !== '') {
+      q = q.ilike('title', `%${params.keyword}%`)
     }
-    return res
+    if (params.status != null && params.status !== '') {
+      q = q.eq('status', params.status)
+    }
+    if (params.module != null && params.module !== '') {
+      q = q.eq('module', params.module)
+    }
+    const { data, error } = await q
+    if (error) return { ok: false, message: error.message }
+
+    let applicationByRoom = {}
+    if (myId) {
+      const { data: apps } = await supabase
+        .from('game_room_applications')
+        .select('room_id, status')
+        .eq('user_id', myId)
+      applicationByRoom = Object.fromEntries((apps || []).map((a) => [a.room_id, a.status]))
+    }
+
+    rooms.value = (data || []).map((r) => ({
+      id: r.id,
+      ownerId: r.owner_id,
+      title: r.title,
+      module: r.module,
+      tags: r.tags || [],
+      status: r.status,
+      description: r.description,
+      moduleFiles: r.module_files || [],
+      maxPlayers: r.max_players ?? 6,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      myApplicationStatus: applicationByRoom[r.id] || null,
+    }))
+    return { ok: true, list: rooms.value }
   }
 
   async function fetchModules() {
-    const res = await apiGet('/game-rooms/modules')
-    if (res?.ok && Array.isArray(res.modules)) {
-      availableModules.value = res.modules
-    }
-    return res
+    const { data, error } = await supabase.from('game_room_module_options').select('id, name, icon').order('id')
+    if (error) return { ok: false, message: error.message }
+    availableModules.value = (data || []).map((m) => ({ id: m.id, name: m.name, icon: m.icon || 'mdi:dots-horizontal' }))
+    return { ok: true, modules: availableModules.value }
   }
 
   async function fetchTags() {
-    const res = await apiGet('/game-rooms/tags')
-    if (res?.ok && Array.isArray(res.tags)) {
-      availableTags.value = res.tags
-    }
-    return res
+    const { data, error } = await supabase.from('game_room_tag_options').select('tag').order('tag')
+    if (error) return { ok: false, message: error.message }
+    availableTags.value = (data || []).map((r) => r.tag)
+    return { ok: true, tags: availableTags.value }
   }
 
   async function addRoom(payload) {
-    const res = await apiPost('/game-rooms', payload)
-    if (res?.ok && res.room) {
-      rooms.value.unshift(res.room)
-      return res.room
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return null
+    const row = {
+      owner_id: uid,
+      title: payload.name || payload.title || '',
+      module: payload.module || null,
+      tags: Array.isArray(payload.tags) ? payload.tags : [],
+      status: 'recruiting',
+      description: payload.description || null,
+      max_players: payload.maxPlayers ?? 6,
     }
-    return null
+    const { data, error } = await supabase.from('game_rooms').insert(row).select('id, owner_id, title, module, tags, status, description, max_players, created_at, updated_at').single()
+    if (error) return null
+    const room = {
+      id: data.id,
+      ownerId: data.owner_id,
+      title: data.title,
+      module: data.module,
+      tags: data.tags || [],
+      status: data.status,
+      description: data.description,
+      maxPlayers: data.max_players ?? 6,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    }
+    rooms.value.unshift(room)
+    return room
+  }
+
+  function getRoomById(id) {
+    return rooms.value.find((r) => r.id === id) || null
+  }
+
+  async function fetchRoom(roomId) {
+    const { data, error } = await supabase
+      .from('game_rooms')
+      .select('id, owner_id, title, module, tags, status, description, module_files, max_players, created_at, updated_at')
+      .eq('id', roomId)
+      .single()
+    if (error || !data) return null
+    const auth = useAuthStore()
+    const myId = auth.user?.value?.id
+    let myApplicationStatus = null
+    if (myId) {
+      const { data: app } = await supabase
+        .from('game_room_applications')
+        .select('status')
+        .eq('room_id', roomId)
+        .eq('user_id', myId)
+        .maybeSingle()
+      myApplicationStatus = app?.status ?? null
+    }
+    const room = {
+      id: data.id,
+      ownerId: data.owner_id,
+      title: data.title,
+      module: data.module,
+      tags: data.tags || [],
+      status: data.status,
+      description: data.description,
+      moduleFiles: data.module_files || [],
+      maxPlayers: data.max_players ?? 6,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      myApplicationStatus,
+    }
+    const i = rooms.value.findIndex((r) => r.id === roomId)
+    if (i >= 0) rooms.value[i] = room
+    else rooms.value.push(room)
+    return room
+  }
+
+  async function updateModuleFiles(roomId, moduleFiles) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+    const { data: roomRow } = await supabase.from('game_rooms').select('owner_id').eq('id', roomId).single()
+    if (!roomRow || roomRow.owner_id !== uid) return { ok: false, message: '仅房主可修改模组信息' }
+    const { error } = await supabase.from('game_rooms').update({ module_files: moduleFiles, updated_at: new Date().toISOString() }).eq('id', roomId)
+    if (error) return { ok: false, message: error.message }
+    const r = rooms.value.find((x) => x.id === roomId)
+    if (r) r.moduleFiles = moduleFiles
+    return { ok: true }
   }
 
   async function applyToRoom(roomId) {
-    const res = await apiPost(`/game-rooms/${roomId}/apply`, {})
-    return res?.ok ? res : null
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+    const { error } = await supabase.from('game_room_applications').insert({ room_id: roomId, user_id: uid, status: 'pending' })
+    if (error) return { ok: false, message: error.message }
+    await fetchRooms()
+    return { ok: true }
+  }
+
+  const roomCharacterSelection = ref({})
+
+  function setRoomCharacter(roomId, characterId) {
+    roomCharacterSelection.value = { ...roomCharacterSelection.value, [roomId]: characterId || null }
+  }
+
+  function getRoomCharacter(roomId) {
+    return roomCharacterSelection.value[roomId] ?? null
   }
 
   return {
@@ -56,7 +178,13 @@ export function useGameRoomsStore() {
     fetchRooms,
     fetchModules,
     fetchTags,
+    getRoomById,
+    fetchRoom,
     addRoom,
     applyToRoom,
+    updateModuleFiles,
+    roomCharacterSelection,
+    setRoomCharacter,
+    getRoomCharacter,
   }
 }
