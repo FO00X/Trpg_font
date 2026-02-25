@@ -7,8 +7,24 @@ const list = ref([])
 export function useNotesStore() {
   const auth = useAuthStore()
 
+  async function ensureUid() {
+    let uid = auth.user?.value?.id
+    if (uid) return uid
+    const { data } = await supabase.auth.getUser()
+    uid = data?.user?.id
+    if (uid && !auth.user?.value) {
+      // 简单同步一下基础 user 信息，避免后续再次未登录
+      auth.user.value = {
+        id: uid,
+        email: data.user.email,
+        username: data.user.email?.split('@')[0] || uid,
+      }
+    }
+    return uid
+  }
+
   async function fetchList() {
-    const uid = auth.user?.value?.id
+    const uid = await ensureUid()
     if (!uid) return { ok: false, message: '未登录' }
     const { data, error } = await supabase
       .from('notes')

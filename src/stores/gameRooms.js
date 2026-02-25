@@ -162,6 +162,188 @@ export function useGameRoomsStore() {
     return { ok: true }
   }
 
+  async function updateApplicationStatus(roomId, userId, status) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+    if (!['accepted', 'rejected'].includes(status)) return { ok: false, message: '非法状态' }
+
+    const { error } = await supabase
+      .from('game_room_applications')
+      .update({ status })
+      .eq('room_id', roomId)
+      .eq('user_id', userId)
+
+    if (error) return { ok: false, message: error.message }
+    return { ok: true }
+  }
+
+  async function fetchMyApprovedCharacters(roomId) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return []
+    const { data, error } = await supabase
+      .from('room_characters')
+      .select('character_id, status')
+      .eq('room_id', roomId)
+      .eq('user_id', uid)
+      .eq('status', 'accepted')
+    if (error) return []
+    return (data || []).map((r) => r.character_id)
+  }
+
+  // 房间内角色卡审核列表（房主可审核，玩家可查看）
+  async function fetchRoomCharacterApplications(roomId) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录', list: [] }
+
+    const { data, error } = await supabase
+      .from('room_characters')
+      .select('id, room_id, user_id, character_id, status, created_at')
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: true })
+
+    if (error) return { ok: false, message: error.message, list: [] }
+
+    return {
+      ok: true,
+      list: (data || []).map((r) => ({
+        id: r.id,
+        roomId: r.room_id,
+        userId: r.user_id,
+        characterId: r.character_id,
+        status: r.status,
+        createdAt: r.created_at,
+      })),
+    }
+  }
+
+  // 房主更新某条角色卡审核状态（同意 / 拒绝）
+  async function updateRoomCharacterStatus(id, status) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+    if (!['accepted', 'rejected'].includes(status)) {
+      return { ok: false, message: '非法状态' }
+    }
+
+    const { error } = await supabase
+      .from('room_characters')
+      .update({ status })
+      .eq('id', id)
+
+    if (error) return { ok: false, message: error.message }
+    return { ok: true }
+  }
+
+  // 玩家端：获取当前账号下各角色卡的房间审核汇总状态
+  // 返回形如 { [characterId]: 'pending' | 'accepted' | 'rejected' }
+  async function fetchMyCharacterReviewStatuses() {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录', statusMap: {} }
+
+    const { data, error } = await supabase
+      .from('room_characters')
+      .select('character_id, status')
+      .eq('user_id', uid)
+
+    if (error) return { ok: false, message: error.message, statusMap: {} }
+
+    const statusOrder = { accepted: 3, pending: 2, rejected: 1 }
+    const map = {}
+    for (const row of data || []) {
+      const cid = row.character_id
+      const s = row.status
+      if (!cid || !statusOrder[s]) continue
+      const prev = map[cid]
+      if (!prev || statusOrder[s] > statusOrder[prev]) {
+        map[cid] = s
+      }
+    }
+
+    return { ok: true, statusMap: map }
+  }
+
+  // 玩家端：获取“我已加入”的房间列表（用于角色卡提交审核选择）
+  async function fetchMyJoinedRooms() {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录', rooms: [] }
+
+    const { data: apps, error: err1 } = await supabase
+      .from('game_room_applications')
+      .select('room_id, status')
+      .eq('user_id', uid)
+      .eq('status', 'accepted')
+
+    if (err1) return { ok: false, message: err1.message, rooms: [] }
+
+    const roomIds = (apps || []).map((a) => a.room_id)
+    if (!roomIds.length) return { ok: true, rooms: [] }
+
+    const { data: roomRows, error: err2 } = await supabase
+      .from('game_rooms')
+      .select('id, title, module, status')
+      .in('id', roomIds)
+
+    if (err2) return { ok: false, message: err2.message, rooms: [] }
+
+    const list = (roomRows || []).map((r) => ({
+      id: r.id,
+      title: r.title,
+      module: r.module,
+      status: r.status,
+    }))
+
+    return { ok: true, rooms: list }
+  }
+
+  // 玩家端：将某张角色卡提交给指定房间，供 KP 审核
+  async function submitCharacterForReview(roomId, characterId) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+
+    // 避免重复提交：若已存在该房间的记录，则直接提示
+    const { data: existing } = await supabase
+      .from('room_characters')
+      .select('id, status')
+      .eq('room_id', roomId)
+      .eq('user_id', uid)
+      .eq('character_id', characterId)
+      .maybeSingle()
+
+    if (existing) {
+      if (existing.status === 'pending') {
+        return { ok: false, message: '该角色卡已提交该房间，正在等待 KP 审核' }
+      }
+      if (existing.status === 'accepted') {
+        return { ok: false, message: '该角色卡已被该房间通过审核' }
+      }
+      // 被拒绝时允许重新提交：更新为 pending
+      const { error: updateError } = await supabase
+        .from('room_characters')
+        .update({ status: 'pending' })
+        .eq('id', existing.id)
+      if (updateError) return { ok: false, message: updateError.message }
+      return { ok: true }
+    }
+
+    const { error } = await supabase
+      .from('room_characters')
+      .insert({
+        room_id: roomId,
+        user_id: uid,
+        character_id: characterId,
+        status: 'pending',
+      })
+
+    if (error) return { ok: false, message: error.message }
+    return { ok: true }
+  }
+
   async function updateRoom(roomId, payload) {
     const auth = useAuthStore()
     const uid = auth.user?.value?.id
@@ -223,6 +405,13 @@ export function useGameRoomsStore() {
     fetchRoom,
     addRoom,
     applyToRoom,
+    updateApplicationStatus,
+    fetchMyApprovedCharacters,
+    fetchRoomCharacterApplications,
+    updateRoomCharacterStatus,
+    fetchMyCharacterReviewStatuses,
+    fetchMyJoinedRooms,
+    submitCharacterForReview,
     updateRoom,
     deleteRoom,
     updateModuleFiles,

@@ -134,41 +134,48 @@ watch(() => props.roomId, () => {
 
           <!-- 该日期的消息列表 -->
           <div class="space-y-2">
-            <div
-              v-for="msg in group.messages"
-              :key="msg.id"
-              class="flex gap-3 group"
-            >
-              <!-- 时间轴 -->
-              <div class="flex flex-col items-center shrink-0 pt-1">
-                <div class="w-2 h-2 rounded-full bg-accent/40 group-hover:bg-accent transition-colors"></div>
-                <div class="w-px flex-1 bg-chat-border mt-1"></div>
+            <template v-for="msg in group.messages" :key="msg.id">
+              <!-- 普通消息：沿用时间轴样式 -->
+              <div
+                v-if="msg.type !== 'system'"
+                class="flex gap-3 group"
+              >
+                <!-- 时间轴 -->
+                <div class="flex flex-col items-center shrink-0 pt-1">
+                  <div class="w-2 h-2 rounded-full bg-accent/40 group-hover:bg-accent transition-colors"></div>
+                  <div class="w-px flex-1 bg-chat-border mt-1"></div>
+                </div>
+
+                <!-- 消息内容 -->
+                <div class="flex-1 min-w-0 pb-2">
+                  <div class="flex items-baseline gap-2 mb-1">
+                    <span
+                      class="px-2 py-0.5 rounded text-xs font-medium"
+                      :class="getSpeakerBadge(msg).class"
+                    >
+                      {{ getSpeakerBadge(msg).text }}
+                    </span>
+                    <span class="font-medium text-white">{{ getSpeakerName(msg) }}</span>
+                    <span class="text-xs text-accent-muted">{{ formatTime(msg.time) }}</span>
+                  </div>
+                  <div class="px-3 py-2 rounded-lg text-sm break-words whitespace-pre-wrap bg-chat-panel border border-chat-border text-[#a6adc8]">
+                    {{ msg.content }}
+                  </div>
+                </div>
               </div>
 
-              <!-- 消息内容 -->
-              <div class="flex-1 min-w-0 pb-2">
-                <div class="flex items-baseline gap-2 mb-1">
-                  <span
-                    class="px-2 py-0.5 rounded text-xs font-medium"
-                    :class="getSpeakerBadge(msg).class"
-                  >
-                    {{ getSpeakerBadge(msg).text }}
-                  </span>
-                  <span class="font-medium text-white">{{ getSpeakerName(msg) }}</span>
-                  <span class="text-xs text-accent-muted">{{ formatTime(msg.time) }}</span>
-                </div>
-                <div
-                  :class="[
-                    'px-3 py-2 rounded-lg text-sm break-words whitespace-pre-wrap',
-                    msg.type === 'system'
-                      ? 'bg-chat-panel/50 text-accent-muted italic'
-                      : 'bg-chat-panel border border-chat-border text-[#a6adc8]',
-                  ]"
-                >
-                  {{ msg.content }}
+              <!-- 骰娘系统消息：独立的居中样式，不走时间轴 -->
+              <div
+                v-else
+                class="flex justify-center py-1"
+              >
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-chat-panel/60 border border-dashed border-accent-muted/40 text-xs text-accent-muted">
+                  <Icon icon="mdi:dice-multiple" class="text-sm" />
+                  <span>{{ msg.content }}</span>
+                  <span class="text-[10px] opacity-70">{{ formatTime(msg.time) }}</span>
                 </div>
               </div>
-            </div>
+            </template>
           </div>
         </div>
       </div>

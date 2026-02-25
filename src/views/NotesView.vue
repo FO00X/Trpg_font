@@ -48,12 +48,12 @@ function openNew() {
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <div v-if="loading" class="text-accent-muted">加载中…</div>
       <div v-else-if="error" class="text-red-400">{{ error }}</div>
-      <div v-else-if="!notesStore.list.length" class="text-accent-muted text-center py-8">
+      <div v-else-if="!notesStore.list.value.length" class="text-accent-muted text-center py-8">
         暂无笔记，点击右上角 + 新建
       </div>
       <div v-else class="space-y-2">
         <button
-          v-for="n in notesStore.list"
+          v-for="n in notesStore.list.value"
           :key="n.id"
           type="button"
           class="w-full flex items-start gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors text-left"

@@ -2,36 +2,55 @@
   <div class="flex flex-col h-full">
     <!-- 消息列表 -->
     <div ref="listEl" class="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-2">
-      <div
-        v-for="m in messages"
-        :key="m.id"
-        :class="[
-          'flex gap-2 text-sm',
-          m.isSelf ? 'flex-row-reverse' : 'flex-row',
-        ]"
-      >
+      <template v-for="m in messages" :key="m.id">
+        <!-- 骰娘 / 系统消息：居中提示样式 -->
         <div
-          class="w-8 h-8 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 text-accent text-xs font-medium"
+          v-if="m.type === 'system'"
+          class="flex justify-center my-1 text-[11px] text-accent-muted"
         >
-          {{ m.userName.slice(0, 1).toUpperCase() }}
-        </div>
-        <div :class="['max-w-[75%] flex flex-col', m.isSelf ? 'items-end' : 'items-start']">
-          <div class="flex items-baseline gap-2 mb-0.5">
-            <span class="text-xs font-medium text-accent">{{ m.userName }}</span>
-            <span class="text-[11px] text-accent-muted">{{ formatTime(m.time) }}</span>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-chat-panel/60 border border-dashed border-accent-muted/40">
+            <Icon icon="mdi:dice-multiple" class="text-sm" />
+            <span>{{ m.content }}</span>
           </div>
+        </div>
+
+        <!-- 普通聊天消息 -->
+        <div
+          v-else
+          :class="[
+            'flex gap-2 text-sm',
+            m.isSelf ? 'flex-row-reverse' : 'flex-row',
+          ]"
+        >
           <div
-            :class="[
-              'px-3 py-2 rounded-2xl text-sm break-words whitespace-pre-wrap',
-              m.isSelf
-                ? 'bg-accent text-chat-bg rounded-br-md'
-                : 'bg-chat-panel border border-chat-border rounded-bl-md',
-            ]"
+            class="w-8 h-8 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 text-accent text-xs font-medium"
           >
-            {{ m.content }}
+            {{ m.userName.slice(0, 1).toUpperCase() }}
+          </div>
+          <div :class="['max-w-[75%] flex flex-col', m.isSelf ? 'items-end' : 'items-start']">
+            <div class="flex items-baseline gap-2 mb-0.5">
+              <span
+                class="px-2 py-0.5 rounded text-[11px] font-medium"
+                :class="getSpeakerBadge(m).class"
+              >
+                {{ getSpeakerBadge(m).text }}
+              </span>
+              <span class="text-xs font-medium text-white">{{ getSpeakerName(m) }}</span>
+              <span class="text-[11px] text-accent-muted">{{ formatTime(m.time) }}</span>
+            </div>
+            <div
+              :class="[
+                'px-3 py-2 rounded-2xl text-sm break-words whitespace-pre-wrap',
+                m.isSelf
+                  ? 'bg-accent text-chat-bg rounded-br-md'
+                  : 'bg-chat-panel border border-chat-border rounded-bl-md',
+              ]"
+            >
+              {{ m.content }}
+            </div>
           </div>
         </div>
-      </div>
+      </template>
       <div v-if="!messages.length && !loading" class="text-center text-xs text-accent-muted py-6">
         暂无消息，开始在房间里说点什么吧～
       </div>
@@ -59,41 +78,6 @@
           <Icon icon="mdi:account-search-outline" class="text-base" />
           <span>技能检定</span>
         </button>
-        <!-- 房主专用：发言身份选择（PL / KP / NPC） -->
-        <div v-if="isOwner" class="ml-auto flex items-center gap-1">
-          <span class="text-[10px] text-accent-muted">发言身份</span>
-          <button
-            type="button"
-            class="px-2 py-0.5 rounded text-[10px]"
-            :class="speakAs === 'pl' ? 'bg-accent text-chat-bg' : 'bg-transparent text-accent-muted hover:text-accent'"
-            @click="speakAs = 'pl'"
-          >
-            PL
-          </button>
-          <button
-            type="button"
-            class="px-2 py-0.5 rounded text-[10px]"
-            :class="speakAs === 'kp' ? 'bg-accent text-chat-bg' : 'bg-transparent text-accent-muted hover:text-accent'"
-            @click="speakAs = 'kp'"
-          >
-            KP
-          </button>
-          <button
-            type="button"
-            class="px-2 py-0.5 rounded text-[10px]"
-            :class="speakAs === 'npc' ? 'bg-accent text-chat-bg' : 'bg-transparent text-accent-muted hover:text-accent'"
-            @click="speakAs = 'npc'"
-          >
-            NPC
-          </button>
-          <input
-            v-if="speakAs === 'npc'"
-            v-model="npcName"
-            type="text"
-            class="ml-1 px-2 py-0.5 rounded bg-chat-bg border border-chat-border text-[11px] text-[#cdd6f4] placeholder:text-accent-muted w-24"
-            placeholder="NPC 名称"
-          />
-        </div>
       </div>
       <div class="flex items-end gap-2">
         <textarea
@@ -141,10 +125,8 @@ const sending = ref(false)
 const input = ref('')
 let realtimeChannel = null
 
-// 房主与发言身份（仅房主可选 KP/NPC）
+// 是否为房主（用于显示掷骰/检定中的 KP 名称）
 const isOwner = ref(false)
-const speakAs = ref('pl') // 'pl' | 'kp' | 'npc'
-const npcName = ref('')
 
 const channelId = computed(() => `room:${props.roomId}`)
 
@@ -159,8 +141,25 @@ function normalizeRow(row) {
     content: row.content,
     time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     type: row.type || 'text',
+    speakerRole: row.speaker_role || null,
+    speakerNpcId: row.speaker_npc_id || null,
+    speakerNpcName: row.speaker_npc_name || null,
     isSelf: me && me.id === userId,
   }
+}
+
+function getSpeakerName(msg) {
+  if (msg.type === 'system') return '骰娘'
+  if (msg.speakerRole === 'kp') return 'KP'
+  if (msg.speakerRole === 'npc' && msg.speakerNpcName) return msg.speakerNpcName
+  return msg.userName || '未知'
+}
+
+function getSpeakerBadge(msg) {
+  if (msg.type === 'system') return { text: '骰娘', class: 'bg-accent-muted/20 text-accent-muted' }
+  if (msg.speakerRole === 'kp') return { text: 'KP', class: 'bg-blue-500/20 text-blue-400' }
+  if (msg.speakerRole === 'npc') return { text: 'NPC', class: 'bg-purple-500/20 text-purple-400' }
+  return { text: 'PL', class: 'bg-green-500/20 text-green-400' }
 }
 
 function scrollToBottom() {
@@ -180,7 +179,7 @@ async function loadMessages() {
   try {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, user_id, user_name, content, type, created_at')
+      .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
       .eq('channel_id', channelId.value)
       .order('created_at', { ascending: true })
       .limit(200)
@@ -232,15 +231,32 @@ async function send() {
   }
   sending.value = true
   try {
-    // 仅房主可指定 KP / NPC 身份
     let speakerRole = null
     let speakerNpcName = null
+
+    // 发言身份从房间右上角的角色选择推导：
+    // - 房主 + 未选择角色卡：KP
+    // - 房主 + 选择了角色卡：NPC（名称为该角色名）
+    // - 非房主：普通玩家，不写 speaker_role
     if (isOwner.value) {
-      if (speakAs.value === 'kp') {
+      const { getRoomCharacter } = gameRoomsStore
+      const { getById, fetchCharacter, normalizeCharacter } = charactersStore
+      const charId = getRoomCharacter(props.roomId)
+      if (!charId) {
         speakerRole = 'kp'
-      } else if (speakAs.value === 'npc') {
-        speakerRole = 'npc'
-        speakerNpcName = npcName.value.trim() || null
+      } else {
+        let raw = getById(charId)
+        if (!raw) {
+          await fetchCharacter(charId)
+          raw = getById(charId)
+        }
+        if (raw) {
+          const sheet = normalizeCharacter(raw)
+          speakerRole = 'npc'
+          speakerNpcName = sheet.name?.trim() || null
+        } else {
+          speakerRole = 'kp'
+        }
       }
     }
 
@@ -257,7 +273,7 @@ async function send() {
     const { data, error } = await supabase
       .from('messages')
       .insert(payload)
-      .select('id, user_id, user_name, content, type, created_at')
+      .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
       .single()
     if (!error && data) {
       messages.value.push(normalizeRow(data))
@@ -290,15 +306,8 @@ async function sendSystemMessage(text) {
       content: text,
       type: 'system',
     }
-    const { data, error } = await supabase
-      .from('messages')
-      .insert(payload)
-      .select('id, user_id, user_name, content, type, created_at')
-      .single()
-    if (!error && data) {
-      messages.value.push(normalizeRow(data))
-      scrollToBottom()
-    }
+    // 不在本地立即 push，交给 Realtime INSERT 事件统一处理，避免重复
+    await supabase.from('messages').insert(payload)
   } finally {
     sending.value = false
   }
@@ -307,7 +316,33 @@ async function sendSystemMessage(text) {
 async function rollDice() {
   const value = randomD100()
   const me = auth.user?.value
-  const name = me?.username || me?.email?.split?.('@')[0] || '我'
+
+  let name = ''
+  if (isOwner.value) {
+    // 房主：统一显示为 KP
+    name = 'KP'
+  } else {
+    // 其他玩家：优先使用当前绑定角色卡名称
+    const { getRoomCharacter } = gameRoomsStore
+    const { getById, fetchCharacter, normalizeCharacter } = charactersStore
+    const charId = getRoomCharacter(props.roomId)
+    if (charId) {
+      let raw = getById(charId)
+      if (!raw) {
+        await fetchCharacter(charId)
+        raw = getById(charId)
+      }
+      if (raw) {
+        const sheet = normalizeCharacter(raw)
+        name = sheet.name?.trim() || '未命名角色'
+      }
+    }
+    // 若未绑定角色或加载失败，退回到用户名
+    if (!name) {
+      name = me?.username || me?.email?.split?.('@')[0] || '我'
+    }
+  }
+
   const text = `【掷骰】${name} 掷出 1d100 = ${value}`
   await sendSystemMessage(text)
 }

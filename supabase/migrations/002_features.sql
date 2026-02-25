@@ -95,7 +95,7 @@ begin
     'room_apply',
     '房间申请',
     (select username from public.profiles where id = new.user_id) || ' 申请加入你的房间',
-    '/game-rooms'
+    '/game-rooms/' || new.room_id || '?applicant=' || new.user_id
   from public.game_rooms g where g.id = new.room_id;
   return new;
 end;

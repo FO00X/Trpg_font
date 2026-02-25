@@ -5,79 +5,113 @@
       icon="mdi:dice-multiple"
     >
       <template #actions>
-        <!-- 切换角色卡 -->
-        <Menu v-if="room" as="div" class="relative">
-          <MenuButton
+        <div class="flex items-center gap-2">
+          <!-- 查看房间用户 / 角色列表 -->
+          <button
+            v-if="room"
             type="button"
-            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-active text-white hover:bg-sidebar-hover transition-colors text-sm"
+            class="p-2 rounded-lg bg-sidebar-active text-white hover:bg-sidebar-hover transition-colors"
+            title="查看房间用户与角色"
+            @click="membersOpen = true"
+          >
+            <Icon icon="mdi:account-group-outline" class="text-lg" />
+          </button>
+
+          <!-- 玩家：没有角色卡时，显示“暂无角色卡，去创建” -->
+          <button
+            v-if="room && !isOwner && !characters.length"
+            type="button"
+            class="flex items-center gap-1 px-3 py-2 rounded-lg bg-sidebar-active text-sm text-accent-muted hover:text-white hover:bg-sidebar-hover transition-colors"
+            @click="router.push('/characters')"
           >
             <Icon icon="mdi:card-account-details-outline" class="text-lg shrink-0" />
-            <span class="max-w-[120px] truncate">{{ currentCharacterName }}</span>
-            <Icon icon="mdi:chevron-down" class="text-lg shrink-0 opacity-70" />
-          </MenuButton>
-          <transition
-            enter-active-class="transition duration-100 ease-out"
-            enter-from-class="opacity-0 scale-95"
-            enter-to-class="opacity-100 scale-100"
-            leave-active-class="transition duration-75 ease-in"
-            leave-from-class="opacity-100 scale-100"
-            leave-to-class="opacity-0 scale-95"
-          >
-            <MenuItems
-              class="absolute right-0 top-full mt-2 w-56 rounded-lg bg-sidebar border border-chat-border shadow-xl py-1 z-50 focus:outline-none max-h-64 overflow-y-auto"
+            <span>暂无角色卡，去创建</span>
+          </button>
+
+          <!-- 切换角色卡（房主 + 有角色卡的玩家） -->
+          <Menu v-else-if="room" as="div" class="relative">
+            <MenuButton
+              type="button"
+              class="flex items-center gap-1 p-2 rounded-lg bg-sidebar-active text-white hover:bg-sidebar-hover transition-colors text-sm"
             >
-              <MenuItem v-slot="{ active }">
-                <button
-                  type="button"
-                  :class="[
-                    'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
-                    active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
-                  ]"
-                  @click="selectCharacter(null)"
-                >
-                  <Icon icon="mdi:account-off-outline" class="text-lg shrink-0" />
-                  不使用角色卡
-                </button>
-              </MenuItem>
-              <MenuItem
-                v-for="c in characters"
-                :key="c.id"
-                v-slot="{ active }"
+              <Icon icon="mdi:card-account-details-outline" class="text-lg shrink-0" />
+              <span class="max-w-[160px] truncate">{{ characterMenuLabel }}</span>
+              <Icon icon="mdi:chevron-down" class="text-lg shrink-0 opacity-70" />
+            </MenuButton>
+            <transition
+              enter-active-class="transition duration-100 ease-out"
+              enter-from-class="opacity-0 scale-95"
+              enter-to-class="opacity-100 scale-100"
+              leave-active-class="transition duration-75 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
+            >
+              <MenuItems
+                class="absolute right-0 top-full mt-2 w-56 rounded-lg bg-sidebar border border-chat-border shadow-xl py-1 z-50 focus:outline-none max-h-64 overflow-y-auto"
               >
-                <button
-                  type="button"
-                  :class="[
-                    'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
-                    active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
-                    selectedCharacterId === c.id ? 'bg-accent/20 text-accent' : '',
-                  ]"
-                  @click="selectCharacter(c.id)"
-                >
-                  <Icon icon="mdi:card-account-details" class="text-lg shrink-0" />
-                  <span class="truncate">{{ c.name || '未命名' }}</span>
-                </button>
-              </MenuItem>
-              <div v-if="!characters.length" class="px-3 py-2 text-sm text-accent-muted">
-                暂无角色卡，请先创建
-              </div>
-              <div class="border-t border-chat-border/50 mt-1 pt-1">
                 <MenuItem v-slot="{ active }">
                   <button
                     type="button"
                     :class="[
                       'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
-                      active ? 'bg-sidebar-hover text-white' : 'text-accent-muted hover:text-white',
+                      active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
                     ]"
-                    @click="router.push('/characters')"
+                    @click="selectCharacter(null)"
                   >
-                    <Icon icon="mdi:plus" class="text-lg shrink-0" />
-                    去创建角色卡
+                    <Icon icon="mdi:account-off-outline" class="text-lg shrink-0" />
+                    不使用角色卡
                   </button>
                 </MenuItem>
-              </div>
-            </MenuItems>
-          </transition>
-        </Menu>
+
+                <!-- 可选择的角色卡（房主：全部；玩家：仅已审核通过） -->
+                <MenuItem
+                  v-for="c in selectableCharacters"
+                  :key="c.id"
+                  v-slot="{ active }"
+                >
+                  <button
+                    type="button"
+                    :class="[
+                      'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                      active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
+                      selectedCharacterId === c.id ? 'bg-accent/20 text-accent' : '',
+                    ]"
+                    @click="selectCharacter(c.id)"
+                  >
+                    <Icon icon="mdi:card-account-details" class="text-lg shrink-0" />
+                    <span class="truncate">{{ c.name || '未命名' }}</span>
+                  </button>
+                </MenuItem>
+
+                <!-- 玩家已有角色卡但尚未通过 KP 审核时的提示 -->
+                <div
+                  v-if="!isOwner && characters.length && !selectableCharacters.length"
+                  class="px-3 py-2 text-xs text-accent-muted border-t border-chat-border/40"
+                >
+                  你已有角色卡，请在角色卡详情中交给 KP 审核。
+                  审核通过后，可以在此处选择角色卡使用（审核通过后该角色卡将锁定，不能再修改）。
+                </div>
+
+                <!-- 去角色卡列表页 -->
+                <div class="border-t border-chat-border/50 mt-1 pt-1">
+                  <MenuItem v-slot="{ active }">
+                    <button
+                      type="button"
+                      :class="[
+                        'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                        active ? 'bg-sidebar-hover text-white' : 'text-accent-muted hover:text-white',
+                      ]"
+                      @click="router.push('/characters')"
+                    >
+                      <Icon icon="mdi:plus" class="text-lg shrink-0" />
+                      去管理角色卡
+                    </button>
+                  </MenuItem>
+                </div>
+              </MenuItems>
+            </transition>
+          </Menu>
+        </div>
       </template>
     </PageHeader>
 
@@ -172,6 +206,15 @@
                 <Icon icon="mdi:lightbulb-on-outline" class="text-lg shrink-0" />
                 <span>查看线索</span>
               </button>
+              <!-- 角色卡审核：所有人可见，只有房主可操作 -->
+              <button
+                type="button"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
+                @click="characterReviewOpen = true; loadRoomCharacterApplications()"
+              >
+                <Icon icon="mdi:clipboard-list-outline" class="text-lg shrink-0" />
+                <span>角色卡审核</span>
+              </button>
               <!-- 仅房主可见：修改 / 删除房间 -->
               <button
                 v-if="isOwner"
@@ -234,6 +277,158 @@
         </button>
       </div>
     </div>
+
+    <!-- 房间用户 / 角色列表弹窗 -->
+    <Teleport to="body">
+      <Dialog :open="membersOpen" class="relative z-50" @close="membersOpen = false">
+        <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
+        <div class="fixed inset-0 flex items-center justify-center p-4" @click.self="membersOpen = false">
+          <DialogPanel class="mx-auto w-full max-w-md rounded-xl bg-sidebar border border-chat-border shadow-xl">
+            <DialogTitle class="sr-only">房间用户与角色</DialogTitle>
+            <div class="p-4">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                  <Icon icon="mdi:account-group-outline" class="text-xl text-accent" />
+                  房间用户与角色
+                </h2>
+                <button
+                  type="button"
+                  class="p-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5"
+                  @click="membersOpen = false"
+                >
+                  <Icon icon="mdi:close" class="text-xl" />
+                </button>
+              </div>
+
+              <div v-if="!displayMembers.length" class="py-6 text-center text-sm text-accent-muted">
+                暂无角色信息
+              </div>
+              <ul v-else class="space-y-2 max-h-64 overflow-y-auto scroll-thin">
+                <li
+                  v-for="m in displayMembers"
+                  :key="`${m.kind}-${m.display}-${m.user}`"
+                >
+                  <button
+                    v-if="m.kind !== 'kp' && m.characterId"
+                    type="button"
+                    class="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-chat-panel border border-chat-border hover:border-accent/60 hover:bg-accent/10 text-left"
+                    @click="openCharacterCardModal(m.characterId, true)"
+                  >
+                    <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-green-500/20 text-green-400">
+                      {{ m.label }}
+                    </span>
+                    <span class="flex-1 min-w-0 text-sm text-white truncate">
+                      {{ m.display }}
+                    </span>
+                    <span class="text-xs text-accent-muted shrink-0">
+                      {{ m.user }}
+                    </span>
+                    <Icon icon="mdi:chevron-right" class="text-base text-accent-muted" />
+                  </button>
+                  <div
+                    v-else
+                    class="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-chat-panel border border-chat-border"
+                  >
+                    <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/20 text-blue-400">
+                      KP
+                    </span>
+                    <span class="flex-1 min-w-0 text-sm text-white truncate">
+                      {{ m.user || '房主' }}
+                    </span>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
+    </Teleport>
+
+    <!-- 角色卡审核弹窗：KP 可同意/拒绝，其他人仅查看 -->
+    <Teleport to="body">
+      <Dialog :open="characterReviewOpen" class="relative z-50" @close="characterReviewOpen = false">
+        <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
+        <div class="fixed inset-0 flex items-center justify-center p-4" @click.self="characterReviewOpen = false">
+          <DialogPanel class="mx-auto w-full max-w-md rounded-xl bg-sidebar border border-chat-border shadow-xl">
+            <DialogTitle class="sr-only">角色卡审核</DialogTitle>
+            <div class="p-4">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                  <Icon icon="mdi:clipboard-list-outline" class="text-xl text-accent" />
+                  角色卡审核
+                </h2>
+                <button
+                  type="button"
+                  class="p-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5"
+                  @click="characterReviewOpen = false"
+                >
+                  <Icon icon="mdi:close" class="text-xl" />
+                </button>
+              </div>
+
+              <div v-if="characterReviewLoading" class="py-6 text-center text-sm text-accent-muted">
+                加载角色卡审核列表中…
+              </div>
+              <div v-else-if="characterReviewError" class="py-6 text-center text-sm text-red-400">
+                {{ characterReviewError }}
+              </div>
+              <div v-else-if="!roomCharacterApplications.length" class="py-6 text-center text-sm text-accent-muted">
+                暂无角色卡审核记录。
+              </div>
+              <ul v-else class="space-y-2 max-h-72 overflow-y-auto scroll-thin">
+                <li
+                  v-for="item in roomCharacterApplications"
+                  :key="item.id"
+                  class="px-3 py-2 rounded-lg bg-chat-panel border border-chat-border flex items-center gap-3"
+                >
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="px-2 py-0.5 rounded text-[11px] font-medium"
+                        :class="roomCharacterStatusClass(item.status)"
+                      >
+                        {{ roomCharacterStatusLabel(item.status) }}
+                      </span>
+                      <span class="text-sm text-white truncate">
+                        角色卡 ID：{{ item.characterId }}
+                      </span>
+                    </div>
+                    <div class="text-[11px] text-accent-muted mt-0.5">
+                      提交时间：{{ formatDateTime(item.createdAt) }}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="px-2 py-1 rounded-lg text-xs text-accent hover:bg-accent/20"
+                    @click="openCharacterCardModal(item.characterId, true)"
+                  >
+                    查看
+                  </button>
+                  <div class="flex flex-col gap-1 ml-1">
+                    <button
+                      type="button"
+                      class="px-2 py-0.5 rounded text-[11px] text-green-300 border border-green-500/40 hover:bg-green-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      :disabled="!isOwner || item.status === 'accepted'"
+                      @click="onApproveRoomCharacter(item)"
+                    >
+                      同意
+                    </button>
+                    <button
+                      type="button"
+                      class="px-2 py-0.5 rounded text-[11px] text-red-300 border border-red-500/40 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      :disabled="!isOwner || item.status === 'rejected'"
+                      @click="onRejectRoomCharacter(item)"
+                    >
+                      拒绝
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
+    </Teleport>
 
     <!-- 模组信息弹窗（仅房主会打开） -->
     <Teleport to="body">
@@ -340,6 +535,7 @@ import PageHeader from '../components/PageHeader.vue'
 import RoomLogView from '../components/RoomLogView.vue'
 import RoomChat from '../components/RoomChat.vue'
 import { APP_TITLE } from '../constants/app'
+import { supabase } from '../lib/supabase'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useCharactersStore } from '../stores/characters'
 import { useAuthStore } from '../stores/auth'
@@ -350,7 +546,16 @@ const router = useRouter()
 const roomId = computed(() => route.params.id)
 const auth = useAuthStore()
 
-const { fetchRoom, setRoomCharacter, getRoomCharacter, updateModuleFiles, deleteRoom } = useGameRoomsStore()
+const {
+  fetchRoom,
+  setRoomCharacter,
+  getRoomCharacter,
+  updateModuleFiles,
+  deleteRoom,
+  fetchMyApprovedCharacters,
+  fetchRoomCharacterApplications,
+  updateRoomCharacterStatus,
+} = useGameRoomsStore()
 const { characters, fetchList, getById } = useCharactersStore()
 const { openCharacterCard: openCharacterCardModal } = useCharacterCardModal()
 
@@ -362,11 +567,16 @@ const newFile = ref({ name: '', url: '', type: 'docx' })
 const moduleFileMessage = ref('')
 const moduleFileError = ref(false)
 
+const membersOpen = ref(false)
+const ownerName = ref('')
+
 const isOwner = computed(() => {
   const u = auth.user?.value
   const r = room.value
   return u?.id && r?.ownerId && u.id === r.ownerId
 })
+
+const approvedCharacterIds = ref([])
 
 const selectedCharacterId = computed(() => getRoomCharacter(roomId.value))
 
@@ -377,8 +587,80 @@ const currentCharacter = computed(() => {
 
 const currentCharacterName = computed(() => {
   const c = currentCharacter.value
-  return c?.name || '切换角色卡'
+  return c?.name || ''
 })
+
+// 顶部“角色卡”按钮上的文案（区分房主 / 玩家、是否有卡、是否审核）
+const characterMenuLabel = computed(() => {
+  const name = currentCharacterName.value
+  if (name) return name
+  if (isOwner.value) return 'KP'
+  if (!characters.value.length) return '暂无角色卡'
+  if (!selectableCharacters.value.length) return '等待审核'
+  return '角色卡'
+})
+
+const selectableCharacters = computed(() => {
+  // 房主：可以自由选择任意角色卡作为 NPC
+  if (isOwner.value) return characters.value
+  // 其他玩家：只能选择被房主审核通过的角色卡
+  if (!approvedCharacterIds.value.length) return []
+  return characters.value.filter((c) => approvedCharacterIds.value.includes(c.id))
+})
+
+// 房间内角色卡审核列表
+const characterReviewOpen = ref(false)
+const roomCharacterApplications = ref([])
+const characterReviewLoading = ref(false)
+const characterReviewError = ref('')
+
+async function loadRoomCharacterApplications() {
+  if (!roomId.value) return
+  characterReviewLoading.value = true
+  characterReviewError.value = ''
+  const res = await fetchRoomCharacterApplications(roomId.value)
+  characterReviewLoading.value = false
+  if (!res.ok) {
+    characterReviewError.value = res.message || '加载角色卡审核列表失败'
+    roomCharacterApplications.value = []
+    return
+  }
+  roomCharacterApplications.value = res.list || []
+}
+
+function roomCharacterStatusLabel(status) {
+  if (status === 'pending') return '审核中'
+  if (status === 'accepted') return '已通过'
+  if (status === 'rejected') return '被拒绝'
+  return status || ''
+}
+
+function roomCharacterStatusClass(status) {
+  if (status === 'pending') return 'bg-amber-500/20 text-amber-300'
+  if (status === 'accepted') return 'bg-green-500/20 text-green-300'
+  if (status === 'rejected') return 'bg-red-500/20 text-red-300'
+  return 'bg-accent-muted/20 text-accent-muted'
+}
+
+async function onApproveRoomCharacter(item) {
+  if (!isOwner.value) return
+  const res = await updateRoomCharacterStatus(item.id, 'accepted')
+  if (!res.ok) {
+    alert(res.message || '操作失败')
+    return
+  }
+  item.status = 'accepted'
+}
+
+async function onRejectRoomCharacter(item) {
+  if (!isOwner.value) return
+  const res = await updateRoomCharacterStatus(item.id, 'rejected')
+  if (!res.ok) {
+    alert(res.message || '操作失败')
+    return
+  }
+  item.status = 'rejected'
+}
 
 function selectCharacter(characterId) {
   setRoomCharacter(roomId.value, characterId)
@@ -402,6 +684,49 @@ function getStatusColor(status) {
   }
   return map[status] || ''
 }
+
+function formatDateTime(timestamp) {
+  if (!timestamp) return ''
+  const d = new Date(timestamp)
+  return d.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+const displayMembers = computed(() => {
+  const list = []
+  const r = room.value
+  const me = auth.user?.value
+
+  if (r) {
+    list.push({
+      kind: 'kp',
+      label: 'KP',
+      display: ownerName.value || '房主',
+      user: ownerName.value || '房主',
+      characterId: null,
+    })
+  }
+
+  const c = currentCharacter.value
+  if (c && me) {
+    const userDisplay = me.username || me.email?.split?.('@')[0] || '我'
+    list.push({
+      kind: 'pc',
+      label: c.name || '未命名',
+      display: c.name || '未命名',
+      user: userDisplay,
+      characterId: c.id,
+    })
+  }
+
+  return list
+})
 
 function goBack() {
   router.push({ name: 'game-rooms' })
@@ -459,13 +784,35 @@ async function load() {
   loading.value = true
   room.value = await fetchRoom(roomId.value)
   loading.value = false
-  if (room.value) document.title = `${room.value.title} - 跑团 - ${APP_TITLE}`
+  if (room.value) {
+    document.title = `${room.value.title} - 跑团 - ${APP_TITLE}`
+    // 加载房主名称（KP 名）
+    if (room.value.ownerId) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .eq('id', room.value.ownerId)
+        .maybeSingle()
+      ownerName.value = data?.username || ''
+    }
+  }
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchList()
-  load()
+  await load()
+  // 非房主加载自己在本房间已被审核通过的角色卡
+  if (!isOwner.value && roomId.value) {
+    approvedCharacterIds.value = await fetchMyApprovedCharacters(roomId.value)
+  }
 })
 
-watch(roomId, () => load())
+watch(roomId, async () => {
+  await load()
+  if (!isOwner.value && roomId.value) {
+    approvedCharacterIds.value = await fetchMyApprovedCharacters(roomId.value)
+  } else {
+    approvedCharacterIds.value = []
+  }
+})
 </script>

@@ -29,7 +29,7 @@ const toggleSidebar = inject('toggleSidebar')
     <button
       v-if="showBack"
       type="button"
-      class="p-1 rounded text-accent-muted hover:text-white"
+      class="p-1 -ml-2 rounded text-accent-muted hover:text-white"
       :title="backLabel"
       @click="emit('back')"
     >
