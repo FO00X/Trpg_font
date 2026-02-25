@@ -5,18 +5,8 @@
       icon="mdi:dice-multiple"
     >
       <template #actions>
-        <!-- 日志视图返回按钮 -->
-        <button
-          v-if="room && activeTab === 'log'"
-          type="button"
-          class="flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-active text-white hover:bg-sidebar-hover transition-colors text-sm"
-          @click="activeTab = 'info'"
-        >
-          <Icon icon="mdi:arrow-left" class="text-lg shrink-0" />
-          <span>返回</span>
-        </button>
         <!-- 切换角色卡 -->
-        <Menu v-if="activeTab === 'info'" as="div" class="relative">
+        <Menu v-if="room" as="div" class="relative">
           <MenuButton
             type="button"
             class="flex items-center gap-2 px-3 py-2 rounded-lg bg-sidebar-active text-white hover:bg-sidebar-hover transition-colors text-sm"
@@ -107,91 +97,141 @@
       </div>
     </div>
     <div v-else class="flex-1 flex flex-col overflow-hidden">
-      <!-- 日志视图 -->
-      <RoomLogView v-if="activeTab === 'log'" :room-id="roomId" class="flex-1" />
-      
-      <!-- 房间信息视图 -->
-      <div v-else class="flex-1 overflow-y-auto scroll-thin p-4">
-        <div class="max-w-2xl mx-auto space-y-4">
-        <div class="rounded-xl bg-chat-panel border border-chat-border p-4">
-          <div class="flex items-center gap-2 mb-2">
-            <span
-              class="px-2 py-0.5 rounded text-xs font-medium"
-              :class="getStatusColor(room.status)"
-            >
-              {{ getStatusLabel(room.status) }}
-            </span>
-            <span class="text-sm text-accent-muted">{{ room.module }}</span>
-          </div>
-          <p v-if="room.description" class="text-sm text-[#a6adc8] whitespace-pre-wrap">{{ room.description }}</p>
-          <div v-if="room.tags?.length" class="flex flex-wrap gap-1.5 mt-2">
-            <span
-              v-for="tag in room.tags"
-              :key="tag"
-              class="px-2 py-0.5 rounded text-xs bg-sidebar-active text-accent-muted"
-            >
-              {{ tag }}
-            </span>
-          </div>
-        </div>
+      <div class="flex-1 min-h-0">
+        <!-- 日志视图 -->
+        <RoomLogView
+          v-if="activeTab === 'log'"
+          :room-id="roomId"
+          class="h-full"
+        />
 
-        <!-- 当前使用的角色卡 -->
-        <div v-if="selectedCharacterId" class="rounded-xl bg-chat-panel border border-chat-border p-4">
-          <h3 class="text-sm font-medium text-accent-muted uppercase tracking-wider mb-2">当前角色</h3>
-          <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0">
-              <Icon icon="mdi:card-account-details" class="text-xl text-accent" />
+        <!-- 房间信息视图 -->
+        <div
+          v-else-if="activeTab === 'info'"
+          class="h-full overflow-y-auto scroll-thin p-4"
+        >
+          <div class="max-w-2xl mx-auto space-y-4">
+            <div class="rounded-xl bg-chat-panel border border-chat-border p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span
+                  class="px-2 py-0.5 rounded text-xs font-medium"
+                  :class="getStatusColor(room.status)"
+                >
+                  {{ getStatusLabel(room.status) }}
+                </span>
+                <span class="text-sm text-accent-muted">{{ room.module }}</span>
+              </div>
+              <p v-if="room.description" class="text-sm text-[#a6adc8] whitespace-pre-wrap">
+                {{ room.description }}
+              </p>
+              <div v-if="room.tags?.length" class="flex flex-wrap gap-1.5 mt-2">
+                <span
+                  v-for="tag in room.tags"
+                  :key="tag"
+                  class="px-2 py-0.5 rounded text-xs bg-sidebar-active text-accent-muted"
+                >
+                  {{ tag }}
+                </span>
+              </div>
             </div>
-            <div>
-              <p class="font-medium text-white">{{ currentCharacter?.name || '未命名' }}</p>
-              <p class="text-xs text-accent-muted">{{ currentCharacter?.occupation || '—' }}</p>
+
+            <!-- 当前使用的角色卡 -->
+            <div v-if="selectedCharacterId" class="rounded-xl bg-chat-panel border border-chat-border p-4">
+              <h3 class="text-sm font-medium text-accent-muted uppercase tracking-wider mb-2">
+                当前角色
+              </h3>
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0">
+                  <Icon icon="mdi:card-account-details" class="text-xl text-accent" />
+                </div>
+                <div>
+                  <p class="font-medium text-white">
+                    {{ currentCharacter?.name || '未命名' }}
+                  </p>
+                  <p class="text-xs text-accent-muted">
+                    {{ currentCharacter?.occupation || '—' }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="ml-auto px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-accent/20"
+                  @click="showCharacterCard"
+                >
+                  查看角色卡
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              class="ml-auto px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-accent/20"
-              @click="showCharacterCard"
-            >
-              查看角色卡
-            </button>
+
+            <!-- 功能按钮区域（线索 / 管理） -->
+            <div class="flex flex-wrap gap-3">
+              <button
+                type="button"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
+                @click="router.push({ name: 'clues', params: { roomId: roomId } })"
+              >
+                <Icon icon="mdi:lightbulb-on-outline" class="text-lg shrink-0" />
+                <span>查看线索</span>
+              </button>
+              <!-- 仅房主可见：修改 / 删除房间 -->
+              <button
+                v-if="isOwner"
+                type="button"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
+                @click="onEditRoom"
+              >
+                <Icon icon="mdi:pencil-outline" class="text-lg shrink-0" />
+                <span>修改信息</span>
+              </button>
+              <button
+                v-if="isOwner"
+                type="button"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-400 transition-colors"
+                @click="onDeleteRoom"
+              >
+                <Icon icon="mdi:delete-outline" class="text-lg shrink-0" />
+                <span>删除房间</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- 房间内容区（预留：聊天、掷骰等） -->
-        <div class="rounded-xl bg-chat-panel border border-chat-border p-4">
-          <h3 class="text-sm font-medium text-accent-muted uppercase tracking-wider mb-2">房间动态</h3>
-          <p class="text-sm text-accent-muted">房间内讨论、掷骰等功能将在此展示。</p>
-        </div>
+        <!-- 房间聊天视图 -->
+        <RoomChat
+          v-else-if="activeTab === 'chat'"
+          :room-id="roomId"
+          class="h-full min-h-0"
+        />
+      </div>
 
-        <!-- 功能按钮区域 -->
-        <div class="flex flex-wrap gap-3">
-          <button
-            type="button"
-            class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
-            @click="activeTab = 'log'"
-          >
-            <Icon icon="mdi:note-text-outline" class="text-lg shrink-0" />
-            <span>查看日志</span>
-          </button>
-          <button
-            type="button"
-            class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
-            @click="router.push({ name: 'clues', params: { roomId: roomId } })"
-          >
-            <Icon icon="mdi:lightbulb-on-outline" class="text-lg shrink-0" />
-            <span>查看线索</span>
-          </button>
-          <!-- 仅房主可见：模组信息 -->
-          <button
-            v-if="isOwner"
-            type="button"
-            class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
-            @click="moduleInfoOpen = true"
-          >
-            <Icon icon="mdi:file-document-multiple-outline" class="text-lg shrink-0" />
-            <span>模组信息</span>
-          </button>
-        </div>
-        </div>
+      <!-- 底部 Tab 栏 -->
+      <div class="border-t border-chat-border bg-sidebar flex">
+        <button
+          type="button"
+          class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors"
+          :class="activeTab === 'info' ? 'text-accent bg-chat-panel/60' : 'text-accent-muted hover:text-accent'"
+          @click="activeTab = 'info'"
+        >
+          <Icon icon="mdi:information-outline" class="text-lg" />
+          <span>房间信息</span>
+        </button>
+        <button
+          type="button"
+          class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors"
+          :class="activeTab === 'chat' ? 'text-accent bg-chat-panel/60' : 'text-accent-muted hover:text-accent'"
+          @click="activeTab = 'chat'"
+        >
+          <Icon icon="mdi:forum-outline" class="text-lg" />
+          <span>房间聊天</span>
+        </button>
+        <button
+          type="button"
+          class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors"
+          :class="activeTab === 'log' ? 'text-accent bg-chat-panel/60' : 'text-accent-muted hover:text-accent'"
+          @click="activeTab = 'log'"
+        >
+          <Icon icon="mdi:note-text-outline" class="text-lg" />
+          <span>房间日志</span>
+        </button>
       </div>
     </div>
 
@@ -298,6 +338,7 @@ import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems, MenuItem, Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
 import PageHeader from '../components/PageHeader.vue'
 import RoomLogView from '../components/RoomLogView.vue'
+import RoomChat from '../components/RoomChat.vue'
 import { APP_TITLE } from '../constants/app'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useCharactersStore } from '../stores/characters'
@@ -309,13 +350,13 @@ const router = useRouter()
 const roomId = computed(() => route.params.id)
 const auth = useAuthStore()
 
-const { fetchRoom, setRoomCharacter, getRoomCharacter, updateModuleFiles } = useGameRoomsStore()
+const { fetchRoom, setRoomCharacter, getRoomCharacter, updateModuleFiles, deleteRoom } = useGameRoomsStore()
 const { characters, fetchList, getById } = useCharactersStore()
 const { openCharacterCard: openCharacterCardModal } = useCharacterCardModal()
 
 const room = ref(null)
 const loading = ref(true)
-const activeTab = ref('info') // 'info' | 'log'
+const activeTab = ref('info') // 'info' | 'chat' | 'log'
 const moduleInfoOpen = ref(false)
 const newFile = ref({ name: '', url: '', type: 'docx' })
 const moduleFileMessage = ref('')
@@ -364,6 +405,17 @@ function getStatusColor(status) {
 
 function goBack() {
   router.push({ name: 'game-rooms' })
+}
+
+function onEditRoom() {
+  router.push({ name: 'game-room-edit', params: { id: roomId.value } })
+}
+
+async function onDeleteRoom() {
+  if (!room.value || !window.confirm(`确定要删除房间「${room.value.title}」吗？此操作不可恢复。`)) return
+  const res = await deleteRoom(roomId.value)
+  if (res?.ok) router.push({ name: 'game-rooms' })
+  else alert(res?.message || '删除失败')
 }
 
 function iconForFileType(type) {

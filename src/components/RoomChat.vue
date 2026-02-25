@@ -1,0 +1,413 @@
+<template>
+  <div class="flex flex-col h-full">
+    <!-- 消息列表 -->
+    <div ref="listEl" class="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-2">
+      <div
+        v-for="m in messages"
+        :key="m.id"
+        :class="[
+          'flex gap-2 text-sm',
+          m.isSelf ? 'flex-row-reverse' : 'flex-row',
+        ]"
+      >
+        <div
+          class="w-8 h-8 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 text-accent text-xs font-medium"
+        >
+          {{ m.userName.slice(0, 1).toUpperCase() }}
+        </div>
+        <div :class="['max-w-[75%] flex flex-col', m.isSelf ? 'items-end' : 'items-start']">
+          <div class="flex items-baseline gap-2 mb-0.5">
+            <span class="text-xs font-medium text-accent">{{ m.userName }}</span>
+            <span class="text-[11px] text-accent-muted">{{ formatTime(m.time) }}</span>
+          </div>
+          <div
+            :class="[
+              'px-3 py-2 rounded-2xl text-sm break-words whitespace-pre-wrap',
+              m.isSelf
+                ? 'bg-accent text-chat-bg rounded-br-md'
+                : 'bg-chat-panel border border-chat-border rounded-bl-md',
+            ]"
+          >
+            {{ m.content }}
+          </div>
+        </div>
+      </div>
+      <div v-if="!messages.length && !loading" class="text-center text-xs text-accent-muted py-6">
+        暂无消息，开始在房间里说点什么吧～
+      </div>
+      <div v-if="loading" class="text-center text-xs text-accent-muted py-4">
+        加载中…
+      </div>
+    </div>
+
+    <!-- 输入区 + 掷骰 / 技能检定 -->
+    <div class="border-t border-chat-border px-3 py-2 flex flex-col gap-1">
+      <div class="flex items-center gap-2 text-[11px] text-accent-muted">
+        <button
+          type="button"
+          class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5"
+          @click="rollDice"
+        >
+          <Icon icon="mdi:dice-multiple" class="text-base" />
+          <span>掷骰</span>
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5"
+          @click="skillCheck"
+        >
+          <Icon icon="mdi:account-search-outline" class="text-base" />
+          <span>技能检定</span>
+        </button>
+        <!-- 房主专用：发言身份选择（PL / KP / NPC） -->
+        <div v-if="isOwner" class="ml-auto flex items-center gap-1">
+          <span class="text-[10px] text-accent-muted">发言身份</span>
+          <button
+            type="button"
+            class="px-2 py-0.5 rounded text-[10px]"
+            :class="speakAs === 'pl' ? 'bg-accent text-chat-bg' : 'bg-transparent text-accent-muted hover:text-accent'"
+            @click="speakAs = 'pl'"
+          >
+            PL
+          </button>
+          <button
+            type="button"
+            class="px-2 py-0.5 rounded text-[10px]"
+            :class="speakAs === 'kp' ? 'bg-accent text-chat-bg' : 'bg-transparent text-accent-muted hover:text-accent'"
+            @click="speakAs = 'kp'"
+          >
+            KP
+          </button>
+          <button
+            type="button"
+            class="px-2 py-0.5 rounded text-[10px]"
+            :class="speakAs === 'npc' ? 'bg-accent text-chat-bg' : 'bg-transparent text-accent-muted hover:text-accent'"
+            @click="speakAs = 'npc'"
+          >
+            NPC
+          </button>
+          <input
+            v-if="speakAs === 'npc'"
+            v-model="npcName"
+            type="text"
+            class="ml-1 px-2 py-0.5 rounded bg-chat-bg border border-chat-border text-[11px] text-[#cdd6f4] placeholder:text-accent-muted w-24"
+            placeholder="NPC 名称"
+          />
+        </div>
+      </div>
+      <div class="flex items-end gap-2">
+        <textarea
+          v-model="input"
+          rows="1"
+          placeholder="请输入内容..."
+          class="flex-1 min-h-[40px] max-h-32 px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-sm text-[#cdd6f4] placeholder:text-accent-muted resize-none outline-none"
+          @keydown="onKeydown"
+        />
+        <button
+          type="button"
+          class="px-3 py-2 rounded-xl bg-accent text-chat-bg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="sending || !input.trim()"
+          @click="send"
+        >
+          <Icon icon="mdi:send" class="text-lg" />
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
+import { Icon } from '@iconify/vue'
+import { supabase } from '../lib/supabase'
+import { useAuthStore } from '../stores/auth'
+import { useGameRoomsStore } from '../stores/gameRooms'
+import { useCharactersStore } from '../stores/characters'
+
+const props = defineProps({
+  roomId: {
+    type: [String, Number],
+    required: true,
+  },
+})
+
+const auth = useAuthStore()
+const gameRoomsStore = useGameRoomsStore()
+const charactersStore = useCharactersStore()
+const listEl = ref(null)
+const messages = ref([])
+const loading = ref(true)
+const sending = ref(false)
+const input = ref('')
+let realtimeChannel = null
+
+// 房主与发言身份（仅房主可选 KP/NPC）
+const isOwner = ref(false)
+const speakAs = ref('pl') // 'pl' | 'kp' | 'npc'
+const npcName = ref('')
+
+const channelId = computed(() => `room:${props.roomId}`)
+
+function normalizeRow(row) {
+  const userId = row.user_id || 'system'
+  const userName = row.user_name || (userId === 'system' ? '系统' : '未知')
+  const me = auth.user?.value
+  return {
+    id: row.id,
+    userId,
+    userName,
+    content: row.content,
+    time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    type: row.type || 'text',
+    isSelf: me && me.id === userId,
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (!listEl.value) return
+    listEl.value.scrollTop = listEl.value.scrollHeight
+  })
+}
+
+function formatTime(ts) {
+  const d = new Date(ts)
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+async function loadMessages() {
+  loading.value = true
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, user_id, user_name, content, type, created_at')
+      .eq('channel_id', channelId.value)
+      .order('created_at', { ascending: true })
+      .limit(200)
+    if (error) return
+    messages.value = (data || []).map(normalizeRow)
+    scrollToBottom()
+  } finally {
+    loading.value = false
+  }
+}
+
+function setupRealtime() {
+  if (realtimeChannel) return
+  realtimeChannel = supabase
+    .channel(`room-chat-${props.roomId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `channel_id=eq.${channelId.value}`,
+      },
+      (payload) => {
+        const row = payload.new
+        // 避免重复：自己发送时 insert 返回已加入列表，realtime 会再发一次，去重
+        if (messages.value.some((m) => m.id === row.id)) return
+        messages.value.push(normalizeRow(row))
+        scrollToBottom()
+      }
+    )
+    .subscribe()
+}
+
+function cleanupRealtime() {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel)
+    realtimeChannel = null
+  }
+}
+
+async function send() {
+  const text = input.value.trim()
+  if (!text || sending.value) return
+  const me = auth.user?.value
+  if (!me?.id) {
+    alert('请先登录')
+    return
+  }
+  sending.value = true
+  try {
+    // 仅房主可指定 KP / NPC 身份
+    let speakerRole = null
+    let speakerNpcName = null
+    if (isOwner.value) {
+      if (speakAs.value === 'kp') {
+        speakerRole = 'kp'
+      } else if (speakAs.value === 'npc') {
+        speakerRole = 'npc'
+        speakerNpcName = npcName.value.trim() || null
+      }
+    }
+
+    const payload = {
+      channel_id: channelId.value,
+      user_id: me.id,
+      user_name: me.username || me.email?.split?.('@')[0] || '我',
+      content: text,
+      type: 'text',
+      speaker_role: speakerRole,
+      speaker_npc_id: null,
+      speaker_npc_name: speakerNpcName,
+    }
+    const { data, error } = await supabase
+      .from('messages')
+      .insert(payload)
+      .select('id, user_id, user_name, content, type, created_at')
+      .single()
+    if (!error && data) {
+      messages.value.push(normalizeRow(data))
+      scrollToBottom()
+      input.value = ''
+    }
+  } finally {
+    sending.value = false
+  }
+}
+
+function onKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    send()
+  }
+}
+
+function randomD100() {
+  return Math.floor(Math.random() * 100) + 1
+}
+
+async function sendSystemMessage(text) {
+  sending.value = true
+  try {
+    const payload = {
+      channel_id: channelId.value,
+      user_id: null,
+      user_name: '骰娘',
+      content: text,
+      type: 'system',
+    }
+    const { data, error } = await supabase
+      .from('messages')
+      .insert(payload)
+      .select('id, user_id, user_name, content, type, created_at')
+      .single()
+    if (!error && data) {
+      messages.value.push(normalizeRow(data))
+      scrollToBottom()
+    }
+  } finally {
+    sending.value = false
+  }
+}
+
+async function rollDice() {
+  const value = randomD100()
+  const me = auth.user?.value
+  const name = me?.username || me?.email?.split?.('@')[0] || '我'
+  const text = `【掷骰】${name} 掷出 1d100 = ${value}`
+  await sendSystemMessage(text)
+}
+
+async function skillCheck() {
+  // 使用当前房间绑定的角色卡进行技能检定
+  const { getRoomCharacter } = gameRoomsStore
+  const { getById, fetchCharacter, normalizeCharacter, skillSuccess, skillDisplayName } = charactersStore
+
+  const charId = getRoomCharacter(props.roomId)
+  if (!charId) {
+    alert('请先在房间右上角选择角色卡，再进行技能检定。')
+    return
+  }
+
+  let raw = getById(charId)
+  if (!raw) {
+    await fetchCharacter(charId)
+    raw = getById(charId)
+  }
+  if (!raw) {
+    alert('未找到该角色卡信息，请稍后重试。')
+    return
+  }
+
+  const sheet = normalizeCharacter(raw)
+  const skills = Array.isArray(sheet.skills) ? sheet.skills : []
+  if (!skills.length) {
+    alert('该角色没有技能数据，请先在角色卡中填写技能。')
+    return
+  }
+
+  const allNames = skills.map((s) => skillDisplayName(s)).filter(Boolean)
+  const preview = allNames.slice(0, 20).join('、') + (allNames.length > 20 ? '…' : '')
+  const inputName = window.prompt(
+    `请输入要检定的技能名称（例如：侦查）\n当前角色技能：${preview || '（无）'}`,
+    '侦查'
+  )
+  if (inputName == null) return
+  const keyword = inputName.trim()
+  if (!keyword) return
+
+  let chosen = skills.find((s) => {
+    const d = skillDisplayName(s)
+    const baseName = (s.name || '').replace(/\d$/, '')
+    return d === keyword || baseName === keyword || d.replace(/（.*?）/, '') === keyword
+  })
+  if (!chosen) {
+    chosen = skills.find((s) => skillDisplayName(s).includes(keyword))
+  }
+  if (!chosen) {
+    alert('未在当前角色技能中找到对应技能，请检查名称。')
+    return
+  }
+
+  const target = skillSuccess(chosen)
+  const value = randomD100()
+  let result = '失败'
+  if (value <= Math.floor(target / 5)) result = '极难成功'
+  else if (value <= Math.floor(target / 2)) result = '困难成功'
+  else if (value <= target) result = '成功'
+
+  const me = auth.user?.value
+  const playerName = me?.username || me?.email?.split?.('@')[0] || '我'
+  const charName = sheet.name?.trim() || '未命名角色'
+  const displaySkillName = skillDisplayName(chosen)
+  const text = `【技能检定】「${charName}」使用「${displaySkillName}」(${target})：1d100 = ${value}，${result}`
+  await sendSystemMessage(text)
+}
+
+onMounted(async () => {
+  loadMessages()
+  setupRealtime()
+
+  // 计算当前用户是否为房主，用于开启 KP / NPC 发言身份选择
+  const { getRoomById, fetchRoom } = gameRoomsStore
+  const me = auth.user?.value
+  if (me?.id) {
+    let room = getRoomById?.(props.roomId)
+    if (!room && fetchRoom) {
+      room = await fetchRoom(props.roomId)
+    }
+    if (room && room.ownerId) {
+      isOwner.value = room.ownerId === me.id
+    }
+  }
+})
+
+onUnmounted(() => {
+  cleanupRealtime()
+})
+
+watch(
+  () => props.roomId,
+  () => {
+    cleanupRealtime()
+    messages.value = []
+    loadMessages()
+    setupRealtime()
+  }
+)
+</script>
+

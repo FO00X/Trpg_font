@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col h-full">
-    <PageHeader title="创建房间" icon="mdi:dice-multiple" :show-back="false" back-label="返回大厅" @back="goBack">
+    <PageHeader title="修改房间" icon="mdi:pencil" back-label="返回房间" @back="goBack">
       <template #actions>
         <div class="flex items-center gap-2">
           <button
@@ -13,16 +13,22 @@
           <button
             type="button"
             class="px-4 py-2 rounded-lg bg-accent text-chat-bg hover:opacity-90 font-medium disabled:opacity-50"
-            :disabled="!roomForm.name.trim() || !roomForm.module"
-            @click="confirmCreateRoom"
+            :disabled="!roomForm.name.trim() || !roomForm.module || saving"
+            @click="confirmSave"
           >
-            创建
+            {{ saving ? '保存中…' : '保存' }}
           </button>
         </div>
       </template>
     </PageHeader>
 
-    <div class="flex-1 overflow-y-auto scroll-thin p-4">
+    <div v-if="loading" class="flex-1 flex items-center justify-center text-accent-muted">
+      <span>加载中…</span>
+    </div>
+    <div v-else-if="!room || !isOwner" class="flex-1 flex items-center justify-center text-accent-muted">
+      <p>无权修改此房间</p>
+    </div>
+    <div v-else class="flex-1 overflow-y-auto scroll-thin p-4">
       <div class="max-w-lg mx-auto space-y-4">
         <!-- 房间名称 -->
         <div>
@@ -35,7 +41,7 @@
           />
         </div>
 
-        <!-- 模组名称（用户自行填写） -->
+        <!-- 模组名称 -->
         <div>
           <label class="block text-sm font-medium text-white mb-1.5">模组名称 *</label>
           <input
@@ -95,25 +101,33 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { Icon } from '@iconify/vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../components/PageHeader.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
+import { useAuthStore } from '../stores/auth'
 
+const route = useRoute()
 const router = useRouter()
-const { availableTags, fetchTags, addRoom } = useGameRoomsStore()
+const roomId = computed(() => route.params.id)
+const auth = useAuthStore()
+const { fetchRoom, updateRoom, availableTags, fetchTags } = useGameRoomsStore()
 
-onMounted(() => {
-  fetchTags()
-})
-
+const room = ref(null)
+const loading = ref(true)
+const saving = ref(false)
 const roomForm = ref({
   name: '',
   description: '',
   module: '',
   maxPlayers: 6,
   tags: [],
+})
+
+const isOwner = computed(() => {
+  const u = auth.user?.value
+  const r = room.value
+  return u?.id && r?.ownerId && u.id === r.ownerId
 })
 
 function toggleTag(tag) {
@@ -125,23 +139,45 @@ function toggleTag(tag) {
   }
 }
 
-async function confirmCreateRoom() {
+async function load() {
+  if (!roomId.value) return
+  loading.value = true
+  room.value = await fetchRoom(roomId.value)
+  loading.value = false
+  if (room.value) {
+    roomForm.value = {
+      name: room.value.title || '',
+      description: room.value.description || '',
+      module: room.value.module || '',
+      maxPlayers: room.value.maxPlayers ?? 6,
+      tags: [...(room.value.tags || [])],
+    }
+  }
+}
+
+async function confirmSave() {
   if (!roomForm.value.name.trim()) return
-  const moduleName = roomForm.value.module.trim()
   const payload = {
-    name: roomForm.value.name.trim(),
-    description: roomForm.value.description.trim(),
-    module: moduleName || '自定义模组',
+    title: roomForm.value.name.trim(),
+    description: roomForm.value.description?.trim() ?? '',
+    module: roomForm.value.module?.trim() || '自定义模组',
     maxPlayers: roomForm.value.maxPlayers,
     tags: [...roomForm.value.tags],
   }
-  const room = await addRoom(payload)
-  if (room) goBack()
-  else alert('创建房间失败，请稍后重试')
+  saving.value = true
+  const res = await updateRoom(roomId.value, payload)
+  saving.value = false
+  if (res?.ok) router.push({ name: 'game-room', params: { id: roomId.value } })
+  else alert(res?.message || '保存失败')
 }
 
 function goBack() {
-  router.push({ name: 'game-rooms' })
+  router.push({ name: 'game-room', params: { id: roomId.value } })
 }
-</script>
 
+onMounted(() => {
+  fetchTags()
+  load()
+})
+watch(roomId, () => load())
+</script>

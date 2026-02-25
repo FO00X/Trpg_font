@@ -5,6 +5,7 @@ import { useAuthStore } from './auth'
 const rooms = ref([])
 const availableModules = ref([])
 const availableTags = ref([])
+const roomCharacterSelection = ref({})
 
 export function useGameRoomsStore() {
   async function fetchRooms(params = {}) {
@@ -161,7 +162,47 @@ export function useGameRoomsStore() {
     return { ok: true }
   }
 
-  const roomCharacterSelection = ref({})
+  async function updateRoom(roomId, payload) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+    const { data: roomRow } = await supabase.from('game_rooms').select('owner_id').eq('id', roomId).single()
+    if (!roomRow || roomRow.owner_id !== uid) return { ok: false, message: '仅房主可修改' }
+    const updates = {
+      updated_at: new Date().toISOString(),
+    }
+    if (payload.title != null) updates.title = payload.title
+    if (payload.module != null) updates.module = payload.module
+    if (payload.description != null) updates.description = payload.description
+    if (payload.maxPlayers != null) updates.max_players = payload.maxPlayers
+    if (Array.isArray(payload.tags)) updates.tags = payload.tags
+    const { data, error } = await supabase.from('game_rooms').update(updates).eq('id', roomId).eq('owner_id', uid).select('id, owner_id, title, module, tags, status, description, max_players, created_at, updated_at').single()
+    if (error) return { ok: false, message: error.message }
+    const r = rooms.value.find((x) => x.id === roomId)
+    if (r) {
+      r.title = data.title
+      r.module = data.module
+      r.description = data.description
+      r.maxPlayers = data.max_players ?? r.maxPlayers
+      r.tags = data.tags || []
+      r.updated_at = data.updated_at
+    }
+    return { ok: true, data: r || data }
+  }
+
+  async function deleteRoom(roomId) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+    const { error } = await supabase
+      .from('game_rooms')
+      .delete()
+      .eq('id', roomId)
+      .eq('owner_id', uid)
+    if (error) return { ok: false, message: error.message }
+    rooms.value = rooms.value.filter((r) => r.id !== roomId)
+    return { ok: true }
+  }
 
   function setRoomCharacter(roomId, characterId) {
     roomCharacterSelection.value = { ...roomCharacterSelection.value, [roomId]: characterId || null }
@@ -182,6 +223,8 @@ export function useGameRoomsStore() {
     fetchRoom,
     addRoom,
     applyToRoom,
+    updateRoom,
+    deleteRoom,
     updateModuleFiles,
     roomCharacterSelection,
     setRoomCharacter,

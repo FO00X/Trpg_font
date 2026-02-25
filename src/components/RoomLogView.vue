@@ -83,17 +83,17 @@ const groupedMessages = computed(() => {
 })
 
 function getSpeakerName(msg) {
-  if (msg.type === 'system') return '系统'
+  if (msg.type === 'system') return '骰娘'
   if (msg.speakerRole === 'kp') return 'KP'
   if (msg.speakerRole === 'npc' && msg.speakerNpcName) return msg.speakerNpcName
   return msg.userName || '未知'
 }
 
 function getSpeakerBadge(msg) {
-  if (msg.type === 'system') return { text: '系统', class: 'bg-accent-muted/20 text-accent-muted' }
+  if (msg.type === 'system') return { text: '骰娘', class: 'bg-accent-muted/20 text-accent-muted' }
   if (msg.speakerRole === 'kp') return { text: 'KP', class: 'bg-blue-500/20 text-blue-400' }
   if (msg.speakerRole === 'npc') return { text: 'NPC', class: 'bg-purple-500/20 text-purple-400' }
-  return { text: '玩家', class: 'bg-green-500/20 text-green-400' }
+  return { text: 'PL', class: 'bg-green-500/20 text-green-400' }
 }
 
 onMounted(() => {
