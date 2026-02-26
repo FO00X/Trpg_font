@@ -205,7 +205,7 @@
                 <Icon icon="mdi:lightbulb-on-outline" class="text-lg shrink-0" />
                 <span>查看线索</span>
               </button>
-              <!-- 角色卡审核：所有人可见，只有房主可操作 -->
+          <!-- 角色卡审核：所有人可见，只有房主可操作 -->
               <button
                 type="button"
                 class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
@@ -219,7 +219,7 @@
                 v-if="isOwner"
                 type="button"
                 class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-chat-panel border border-chat-border text-white hover:border-accent/50 hover:bg-accent/10 transition-colors"
-                @click="onEditRoom"
+                @click="openEditModal"
               >
                 <Icon icon="mdi:pencil-outline" class="text-lg shrink-0" />
                 <span>修改信息</span>
@@ -522,6 +522,63 @@
         </div>
       </Dialog>
     </Teleport>
+    <!-- 修改房间信息弹窗（仅房主） -->
+    <Teleport to="body">
+      <Dialog :open="editRoomOpen" class="relative z-50" @close="closeEditModal">
+        <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
+        <div class="fixed inset-0 flex items-center justify-center p-4" @click.self="closeEditModal">
+          <DialogPanel class="mx-auto w-full max-w-lg rounded-xl bg-sidebar border border-chat-border shadow-xl">
+            <DialogTitle class="sr-only">修改房间</DialogTitle>
+            <div class="p-4">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                  <Icon icon="mdi:pencil-outline" class="text-xl text-accent" />
+                  修改房间信息
+                </h2>
+                <button
+                  type="button"
+                  class="p-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5"
+                  @click="closeEditModal"
+                >
+                  <Icon icon="mdi:close" class="text-xl" />
+                </button>
+              </div>
+
+              <div v-if="editRoomLoading" class="py-6 text-center text-sm text-accent-muted">
+                加载中…
+              </div>
+              <div v-else>
+                <GameRoomForm
+                  v-model="editRoomForm"
+                  :available-tags="availableTags"
+                  :tag-groups="availableTagGroups"
+                  :show-module="false"
+                  :show-max-players="false"
+                />
+
+                <div class="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border"
+                    @click="closeEditModal"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    class="px-4 py-2 rounded-lg bg-accent text-chat-bg hover:opacity-90 font-medium disabled:opacity-50"
+                    :disabled="!canSubmitEdit || editRoomSaving"
+                    @click="submitEditRoom"
+                  >
+                    {{ editRoomSaving ? '保存中…' : '保存' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
+    </Teleport>
   </div>
 </template>
 
@@ -529,7 +586,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
-import { Menu, MenuButton, MenuItems, MenuItem, Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
+import { Menu, MenuButton, MenuItems, MenuItem, Dialog, DialogPanel, DialogTitle } from '@headlessui/vue'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import RoomLogView from '../components/RoomLogView.vue'
@@ -540,6 +597,7 @@ import { useProfileCache } from '../stores/profileCache'
 import { useCharactersStore } from '../stores/characters'
 import { useAuthStore } from '../stores/auth'
 import { useCharacterCardModal } from '../composables/useCharacterCardModal'
+import GameRoomForm from '../components/GameRoomForm.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -555,6 +613,9 @@ const {
   fetchMyApprovedCharacters,
   fetchRoomCharacterApplications,
   updateRoomCharacterStatus,
+  updateRoom,
+  availableTags,
+  fetchTags,
 } = useGameRoomsStore()
 const { characters, fetchList, getById } = useCharactersStore()
 const { openCharacterCard: openCharacterCardModal } = useCharacterCardModal()
@@ -575,6 +636,25 @@ const isOwner = computed(() => {
   const u = auth.user?.value
   const r = room.value
   return u?.id && r?.ownerId && u.id === r.ownerId
+})
+
+// 编辑房间弹窗状态
+const editRoomOpen = ref(false)
+const editRoomLoading = ref(false)
+const editRoomSaving = ref(false)
+const editRoomForm = ref({
+  name: '',
+  description: '',
+  module: '',
+  icon: '',
+  maxPlayers: 6,
+  tags: [],
+})
+
+const canSubmitEdit = computed(() => {
+  const v = editRoomForm.value || {}
+  const nameOk = typeof v.name === 'string' && v.name.trim().length > 0
+  return nameOk
 })
 
 const approvedCharacterIds = ref([])
@@ -733,8 +813,51 @@ function goBack() {
   router.push({ name: 'game-rooms' })
 }
 
-function onEditRoom() {
-  router.push({ name: 'game-room-edit', params: { id: roomId.value } })
+function openEditModal() {
+  if (!room.value || !isOwner.value) return
+  editRoomOpen.value = true
+  editRoomLoading.value = true
+  editRoomForm.value = {
+    name: room.value.title || '',
+    description: room.value.description || '',
+    module: room.value.module || '',
+    icon: '',
+    maxPlayers: room.value.maxPlayers ?? 6,
+    tags: [...(room.value.tags || [])],
+  }
+  editRoomLoading.value = false
+}
+
+function closeEditModal() {
+  if (editRoomSaving.value) return
+  editRoomOpen.value = false
+}
+
+async function submitEditRoom() {
+  if (!room.value || !isOwner.value) return
+  const v = editRoomForm.value || {}
+  const name = (v.name || '').trim()
+  if (!name) return
+  const payload = {
+    title: name,
+    description: (v.description || '').trim(),
+    tags: Array.isArray(v.tags) ? [...v.tags] : [],
+  }
+
+  editRoomSaving.value = true
+  const res = await updateRoom(roomId.value, payload)
+  editRoomSaving.value = false
+  if (res?.ok) {
+    // 更新当前 room 展示
+    if (res.data) {
+      room.value = { ...room.value, ...res.data }
+    } else {
+      await load()
+    }
+    editRoomOpen.value = false
+  } else {
+    alert(res?.message || '保存失败')
+  }
 }
 
 async function onDeleteRoom() {

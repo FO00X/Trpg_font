@@ -12,7 +12,7 @@
     </div>
 
     <!-- 模组名称（插槽可自定义） -->
-    <div>
+    <div v-if="showModule">
       <label class="block text-sm font-medium text-white mb-1.5">模组名称 *</label>
       <slot name="module" :form="localForm">
         <input
@@ -36,7 +36,7 @@
     </div>
 
     <!-- 最大人数 -->
-    <div>
+    <div v-if="showMaxPlayers">
       <label class="block text-sm font-medium text-white mb-1.5">最大人数</label>
       <input
         v-model.number="localForm.maxPlayers"
@@ -50,7 +50,34 @@
     <!-- 标签 -->
     <div>
       <label class="block text-sm font-medium text-white mb-1.5">标签（可选）</label>
-      <div class="flex flex-wrap gap-2">
+
+      <!-- 新版：按分组的下拉选择 -->
+      <div v-if="tagGroups && tagGroups.length" class="space-y-3">
+        <div
+          v-for="group in tagGroups"
+          :key="group.category"
+          class="space-y-1.5"
+        >
+          <div class="text-xs text-accent-muted">{{ group.category }}</div>
+          <select
+            class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] text-sm outline-none focus:border-accent/50"
+            :value="currentTagForGroup(group)"
+            @change="onSelectTagForGroup(group, $event.target.value)"
+          >
+            <option value="">不选择</option>
+            <option
+              v-for="tag in group.tags"
+              :key="tag"
+              :value="tag"
+            >
+              {{ tag }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 旧版：平铺按钮（用于兼容无分组场景） -->
+      <div v-else class="flex flex-wrap gap-2">
         <button
           v-for="tag in availableTags"
           :key="tag"
@@ -82,6 +109,18 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  tagGroups: {
+    type: Array,
+    default: () => [],
+  },
+  showModule: {
+    type: Boolean,
+    default: true,
+  },
+  showMaxPlayers: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -98,15 +137,18 @@ function createDefaultForm() {
 }
 
 const localForm = ref(createDefaultForm())
+let updatingFromProps = false
 
 watch(
   () => props.modelValue,
   (val) => {
+    updatingFromProps = true
     localForm.value = {
       ...createDefaultForm(),
       ...(val || {}),
       tags: Array.isArray(val?.tags) ? [...val.tags] : [],
     }
+    updatingFromProps = false
   },
   { immediate: true, deep: true }
 )
@@ -114,6 +156,7 @@ watch(
 watch(
   localForm,
   (val) => {
+    if (updatingFromProps) return
     emit('update:modelValue', {
       ...val,
       tags: Array.isArray(val.tags) ? [...val.tags] : [],
@@ -128,6 +171,26 @@ function toggleTag(tag) {
     current.delete(tag)
   } else {
     current.add(tag)
+  }
+  localForm.value = {
+    ...localForm.value,
+    tags: [...current],
+  }
+}
+
+function currentTagForGroup(group) {
+  const tags = localForm.value.tags || []
+  const found = (group.tags || []).find((t) => tags.includes(t))
+  return found || ''
+}
+
+function onSelectTagForGroup(group, value) {
+  const current = new Set(localForm.value.tags || [])
+  for (const t of group.tags || []) {
+    current.delete(t)
+  }
+  if (value) {
+    current.add(value)
   }
   localForm.value = {
     ...localForm.value,

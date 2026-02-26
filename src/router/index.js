@@ -81,12 +81,6 @@ const routes = [
     meta: { title: '房间', requiresAuth: true },
   },
   {
-    path: '/game-rooms/:id/edit',
-    name: 'game-room-edit',
-    component: () => import('../views/GameRoomEditView.vue'),
-    meta: { title: '修改房间', requiresAuth: true },
-  },
-  {
     path: '/game-rooms/:roomId/clues',
     name: 'clues',
     component: () => import('../views/CluesView.vue'),

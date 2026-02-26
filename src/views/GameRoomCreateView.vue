@@ -12,8 +12,7 @@
           </button>
           <button
             type="button"
-            class="px-4 py-2 rounded-lg bg-accent text-chat-bg hover:opacity-90 font-medium disabled:opacity-50"
-            :disabled="!roomForm.name.trim() || !roomForm.module"
+            class="px-4 py-2 rounded-lg bg-accent text-chat-bg hover:opacity-90 font-medium"
             @click="confirmCreateRoom"
           >
             创建
@@ -23,7 +22,11 @@
     </PageHeader>
 
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
-      <GameRoomForm v-model="roomForm" :available-tags="availableTags">
+      <GameRoomForm
+        v-model="roomForm"
+        :available-tags="availableTags"
+        :tag-groups="availableTagGroups"
+      >
         <template #module="{ form }">
           <ModuleSelect
             v-model="form.module"
@@ -45,7 +48,7 @@ import GameRoomForm from '../components/GameRoomForm.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 
 const router = useRouter()
-const { availableTags, fetchTags, addRoom } = useGameRoomsStore()
+const { availableTags, availableTagGroups, fetchTags, addRoom } = useGameRoomsStore()
 
 onMounted(() => {
   fetchTags()
@@ -61,23 +64,37 @@ const roomForm = ref({
 })
 
 async function confirmCreateRoom() {
-  if (!roomForm.value.name.trim()) return
-  const moduleName = roomForm.value.module.trim()
-  const payload = {
-    name: roomForm.value.name.trim(),
-    description: roomForm.value.description.trim(),
-    module: moduleName || '自定义模组',
-    icon: roomForm.value.icon || '',
-    maxPlayers: roomForm.value.maxPlayers,
-    tags: [...roomForm.value.tags],
+  const v = roomForm.value || {}
+  const name = (v.name || '').trim()
+  if (!name) {
+    alert('请填写房间名称')
+    return
   }
-  const room = await addRoom(payload)
-  if (room) goBack()
-  else alert('创建房间失败，请稍后重试')
+
+  const moduleName = (v.module || '').trim()
+  const payload = {
+    name,
+    description: (v.description || '').trim(),
+    module: moduleName || '自定义模组',
+    icon: v.icon || '',
+    maxPlayers: v.maxPlayers ?? 6,
+    tags: Array.isArray(v.tags) ? [...v.tags] : [],
+  }
+  
+  try {
+    const room = await addRoom(payload)
+    if (room) {
+      goBack()
+    } else {
+      alert('创建房间失败，请稍后重试')
+    }
+  } catch (e) {
+    console.error('创建房间出错:', e)
+    alert('创建房间出错，请稍后重试')
+  }
 }
 
 function goBack() {
   router.push({ name: 'game-rooms' })
 }
 </script>
-

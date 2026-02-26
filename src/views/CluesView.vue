@@ -41,16 +41,8 @@ function back() {
 
 <template>
   <div class="flex flex-col h-full">
-    <PageHeader title="线索" icon="mdi:lightbulb-on-outline">
+    <PageHeader title="线索" icon="mdi:lightbulb-on-outline" :show-back="true" back-label="返回房间" @back="back">
       <template #actions>
-        <button
-          type="button"
-          class="p-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/10"
-          title="返回"
-          @click="back"
-        >
-          <Icon icon="mdi:arrow-left" class="text-xl" />
-        </button>
         <button
           type="button"
           class="p-2 rounded-lg text-accent hover:bg-white/10"

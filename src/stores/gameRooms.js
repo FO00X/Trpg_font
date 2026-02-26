@@ -5,6 +5,7 @@ import { useAuthStore } from './auth'
 const rooms = ref([])
 const availableModules = ref([])
 const availableTags = ref([])
+const availableTagGroups = ref([])
 const roomCharacterSelection = ref({})
 
 export function useGameRoomsStore() {
@@ -63,10 +64,31 @@ export function useGameRoomsStore() {
   }
 
   async function fetchTags() {
-    const { data, error } = await supabase.from('game_room_tag_options').select('tag').order('tag')
+    // 优先按新结构读取（带分组信息），若列不存在则回退为仅 tag
+    let data
+    let error
+    ;({ data, error } = await supabase.from('game_room_tag_options').select('tag, category').order('category', { ascending: true }).order('tag', { ascending: true }))
+    if (error && error.message && error.message.includes('column') && error.message.includes('category')) {
+      const res = await supabase.from('game_room_tag_options').select('tag').order('tag', { ascending: true })
+      data = res.data
+      error = res.error
+    }
     if (error) return { ok: false, message: error.message }
+
     availableTags.value = (data || []).map((r) => r.tag)
-    return { ok: true, tags: availableTags.value }
+
+    const groupsMap = {}
+    for (const row of data || []) {
+      const cat = row.category || '其他'
+      if (!groupsMap[cat]) groupsMap[cat] = []
+      groupsMap[cat].push(row.tag)
+    }
+    availableTagGroups.value = Object.entries(groupsMap).map(([category, tags]) => ({
+      category,
+      tags,
+    }))
+
+    return { ok: true, tags: availableTags.value, groups: availableTagGroups.value }
   }
 
   /** 将自定义模组名称加入模组选项表，便于后续创建房间时出现在列表中（已存在则跳过） */
@@ -425,6 +447,7 @@ export function useGameRoomsStore() {
     rooms,
     availableModules,
     availableTags,
+    availableTagGroups,
     fetchRooms,
     fetchModules,
     fetchTags,
