@@ -52,7 +52,7 @@ export function useCharacterForm() {
     getDerived,
     normalizeCharacter,
     getCreditDerived,
-    skillSuccess,
+    skillSuccess: storeSkillSuccess,
     skillDisplayName,
     getCareerSkillNames,
     penetrateLabel,
@@ -65,6 +65,8 @@ export function useCharacterForm() {
     WEAPON_PENETRATE_OPTIONS,
     normalizeWeapons,
   } = useCharactersStore()
+
+  const skillSuccess = (s) => storeSkillSuccess(s, form.value)
 
   const isNew = computed(() => route.name === 'character-new')
   const id = computed(() => route.params.id)

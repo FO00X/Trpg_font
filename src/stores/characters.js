@@ -43,7 +43,7 @@ const PRESET_SKILLS = [
   { id: 'firearm_pistol', name: '射击(手枪)', base: 20 },
   { id: 'firearm_rifle', name: '射击(步/霰)', base: 25 },
   { id: 'firearm_1', name: '射击', base: 0, typeOption: 'firearm' },
-  { id: 'dodge', name: '闪避', base: 0 },
+  { id: 'dodge', name: '闪避', base: 0, baseFromDex: true }, // 规则：闪避基础值 = 敏捷(DEX)的一半
   { id: 'throw', name: '投掷', base: 20 },
   { id: 'demolition', name: '爆破', base: 0 },
   { id: 'heavy_weapons', name: '炮术', base: 0 },
@@ -118,6 +118,7 @@ function defaultSkillRow(s) {
     id: s.id,
     name: s.name,
     base: s.base,
+    baseFromDex: s.baseFromDex,
     typeOption: s.typeOption,
     custom: s.custom,
     typeValue: '',
@@ -166,9 +167,17 @@ function normalizeCharacter(c) {
   }
 }
 
-/** 技能成功率：基础+职业+兴趣+成长 */
-function skillSuccess(s) {
-  return (s?.base || 0) + (s?.career || 0) + (s?.interest || 0) + (s?.growth || 0)
+/** 技能基础值（闪避取 DEX/2 向下取整，其余取预设 base） */
+function getSkillBase(s, sheet) {
+  if (!s) return 0
+  if ((s.id === 'dodge' || s.baseFromDex) && sheet && sheet.dex != null) return Math.floor((Number(sheet.dex) || 0) / 2)
+  return s?.base ?? 0
+}
+
+/** 技能成功率：基础+职业+兴趣+成长（传 sheet 时闪避基础值按 DEX/2 计算） */
+function skillSuccess(s, sheet) {
+  const base = getSkillBase(s, sheet)
+  return base + (s?.career || 0) + (s?.interest || 0) + (s?.growth || 0)
 }
 
 /** 技能显示名（含类型选项时带括号） */
@@ -374,6 +383,7 @@ export function useCharactersStore() {
     getById,
     normalizeCharacter,
     getCreditDerived,
+    getSkillBase,
     skillSuccess,
     skillDisplayName,
     getCareerSkillNames,

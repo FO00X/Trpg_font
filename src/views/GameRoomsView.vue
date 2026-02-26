@@ -22,7 +22,7 @@
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="搜索房间名称、模组、KP..."
+            placeholder="搜索房间名称、房间描述..."
             class="w-full pl-10 pr-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] placeholder:text-accent-muted focus:border-accent/50 outline-none text-sm"
           />
         </div>

@@ -396,7 +396,7 @@ async function skillCheck() {
     return
   }
 
-  const target = skillSuccess(chosen)
+  const target = skillSuccess(chosen, sheet)
   const value = randomD100()
   let result = '失败'
   if (value <= Math.floor(target / 5)) result = '极难成功'

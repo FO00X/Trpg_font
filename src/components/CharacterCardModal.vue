@@ -23,6 +23,7 @@ const {
   getDerived,
   normalizeCharacter,
   getCreditDerived,
+  getSkillBase,
   skillSuccess,
   skillDisplayName,
   penetrateLabel,
@@ -260,7 +261,7 @@ function setTab(id) {
                     @click="showSkillTooltip(s, $event)"
                   >
                     <span class="text-accent-muted truncate min-w-0">{{ skillDisplayName(s) }}</span>
-                    <span class="text-white font-mono tabular-nums shrink-0">{{ skillSuccess(s) }}</span>
+                    <span class="text-white font-mono tabular-nums shrink-0">{{ skillSuccess(s, sheet) }}</span>
                   </div>
                 </div>
                 <!-- 技能详情气泡：点击技能后显示在上方 -->
@@ -274,14 +275,14 @@ function setTab(id) {
                     >
                       <div class="font-medium text-white mb-2 border-b border-chat-border pb-2">{{ skillDisplayName(skillTooltip.skill) }}</div>
                       <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-accent-muted">
-                        <span>基础</span><span class="text-white font-mono tabular-nums text-right">{{ skillTooltip.skill?.base ?? 0 }}</span>
+                        <span>基础</span><span class="text-white font-mono tabular-nums text-right">{{ getSkillBase(skillTooltip.skill, sheet) }}</span>
                         <span>本职</span><span class="text-white font-mono tabular-nums text-right">{{ skillTooltip.skill?.career ?? 0 }}</span>
                         <span>兴趣</span><span class="text-white font-mono tabular-nums text-right">{{ skillTooltip.skill?.interest ?? 0 }}</span>
                         <span>成长</span><span class="text-white font-mono tabular-nums text-right">{{ skillTooltip.skill?.growth ?? 0 }}</span>
                       </div>
                       <div class="mt-2 pt-2 border-t border-chat-border flex justify-between items-center">
                         <span class="text-accent-muted">成功率</span>
-                        <span class="text-accent font-mono tabular-nums">{{ skillSuccess(skillTooltip.skill) }}</span>
+                        <span class="text-accent font-mono tabular-nums">{{ skillSuccess(skillTooltip.skill, sheet) }}</span>
                       </div>
                     </div>
                   </template>

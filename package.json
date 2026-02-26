@@ -13,6 +13,8 @@
     "@headlessui/vue": "^1.7.22",
     "@iconify/vue": "^4.1.1",
     "@supabase/supabase-js": "^2.97.0",
+    "dompurify": "^3.3.1",
+    "marked": "^17.0.3",
     "vue": "^3.4.21",
     "vue-router": "^4.2.5"
   },

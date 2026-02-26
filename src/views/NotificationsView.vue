@@ -3,12 +3,20 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { useNotificationsStore } from '../stores/notifications'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useUpdateLogsStore } from '../stores/updateLogs'
 import { useAuthStore } from '../stores/auth'
+
+function renderMarkdown(text) {
+  if (!text || typeof text !== 'string') return ''
+  const raw = marked.parse(text.trim(), { gfm: true })
+  return DOMPurify.sanitize(raw, { ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'h1', 'h2', 'h3', 'blockquote', 'hr'], ALLOWED_ATTR: ['href', 'target', 'rel'] })
+}
 
 const router = useRouter()
 const notificationsStore = useNotificationsStore()
@@ -221,8 +229,26 @@ function closeDeleteConfirm() {
   deleteConfirmOpen.value = false
 }
 
-// 时间轴：最新在上（与接口 order 一致）
 const updateLogsTimeline = computed(() => updateLogsStore.list.value || [])
+const expandedLogId = ref(null)
+
+watch(
+  updateLogsTimeline,
+  (list) => {
+    if (list?.length && (!expandedLogId.value || !list.some((i) => i.id === expandedLogId.value))) {
+      expandedLogId.value = list[0].id
+    }
+  },
+  { immediate: true }
+)
+
+function toggleLogExpand(item) {
+  expandedLogId.value = expandedLogId.value === item.id ? null : item.id
+}
+
+function isLogExpanded(item) {
+  return expandedLogId.value === item.id
+}
 </script>
 
 <template>
@@ -343,7 +369,6 @@ const updateLogsTimeline = computed(() => updateLogsStore.list.value || [])
     <!-- 更新记录 Tab：时间轴 -->
     <div v-show="activeTab === 'updates'" class="flex-1 overflow-y-auto scroll-thin p-4">
       <div class="flex items-center justify-between mb-4">
-        <span class="text-xs text-accent-muted">最新在上</span>
         <button
           v-if="isAdmin"
           type="button"
@@ -366,11 +391,21 @@ const updateLogsTimeline = computed(() => updateLogsStore.list.value || [])
           :class="{ 'pb-8': index < updateLogsTimeline.length - 1 }"
         >
           <!-- 时间轴节点 -->
-          <div class="absolute left-0 -translate-x-[calc(1.5rem+3px)] w-3 h-3 rounded-full bg-accent border-2 border-chat-bg shrink-0 mt-1.5" />
-          <div class="flex-1 min-w-0 rounded-xl bg-chat-panel border border-chat-border p-4">
-            <div class="flex items-start justify-between gap-2 mb-1">
-              <h3 class="font-medium text-white">{{ item.title }}</h3>
-              <div v-if="isAdmin" class="flex items-center gap-1 shrink-0">
+          <div class="absolute -left-1 -translate-x-[calc(1.5rem+3px)] w-3 h-3 rounded-full bg-accent border-2 border-chat-bg shrink-0 mt-1.5" />
+          <div class="flex-1 min-w-0 rounded-xl bg-chat-panel border border-chat-border overflow-hidden">
+            <div
+              class="flex items-start justify-between gap-2 p-4 cursor-pointer select-none hover:bg-white/5 transition-colors"
+              @click="toggleLogExpand(item)"
+            >
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <Icon
+                  :icon="isLogExpanded(item) ? 'mdi:chevron-down' : 'mdi:chevron-right'"
+                  class="text-accent-muted shrink-0 transition-transform"
+                />
+                <h3 class="font-medium text-white truncate">{{ item.title }}</h3>
+                <span class="text-xs text-accent-muted shrink-0">{{ formatDate(item.created_at) }}</span>
+              </div>
+              <div v-if="isAdmin" class="flex items-center gap-1 shrink-0" @click.stop>
                 <button
                   type="button"
                   class="p-1.5 rounded-lg text-accent-muted hover:text-accent hover:bg-white/10"
@@ -389,8 +424,16 @@ const updateLogsTimeline = computed(() => updateLogsStore.list.value || [])
                 </button>
               </div>
             </div>
-            <p v-if="item.content" class="text-sm text-accent-muted whitespace-pre-wrap mb-2">{{ item.content }}</p>
-            <div class="text-xs text-accent-muted">{{ formatDate(item.created_at) }}</div>
+            <div
+              v-show="isLogExpanded(item)"
+              class="px-4 pb-4 pt-0 border-t border-chat-border/50"
+            >
+              <div
+                v-if="item.content"
+                class="markdown-body text-sm text-accent-muted mb-2 mt-2"
+                v-html="renderMarkdown(item.content)"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -474,3 +517,22 @@ const updateLogsTimeline = computed(() => updateLogsStore.list.value || [])
     </Dialog>
   </div>
 </template>
+
+<style scoped>
+.markdown-body :deep(p) { margin: 0.25em 0; }
+.markdown-body :deep(p:first-child) { margin-top: 0; }
+.markdown-body :deep(p:last-child) { margin-bottom: 0; }
+.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3) { font-weight: 600; margin: 0.5em 0 0.25em; color: #cdd6f4; }
+.markdown-body :deep(h1) { font-size: 1.1em; }
+.markdown-body :deep(h2) { font-size: 1.05em; }
+.markdown-body :deep(h3) { font-size: 1em; }
+.markdown-body :deep(ul), .markdown-body :deep(ol) { margin: 0.25em 0; padding-left: 1.25em; }
+.markdown-body :deep(li) { margin: 0.125em 0; }
+.markdown-body :deep(a) { color: #89b4fa; text-decoration: underline; }
+.markdown-body :deep(a:hover) { color: #b4befe; }
+.markdown-body :deep(code) { background: rgba(255,255,255,0.1); padding: 0.15em 0.35em; border-radius: 0.25em; font-size: 0.9em; }
+.markdown-body :deep(pre) { margin: 0.5em 0; padding: 0.5em; border-radius: 0.5em; background: rgba(0,0,0,0.2); overflow-x: auto; }
+.markdown-body :deep(pre code) { background: none; padding: 0; }
+.markdown-body :deep(blockquote) { margin: 0.25em 0; padding-left: 1em; border-left: 3px solid rgba(137, 180, 250, 0.5); color: #a6adc8; }
+.markdown-body :deep(hr) { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 0.5em 0; }
+</style>
