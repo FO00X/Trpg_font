@@ -85,13 +85,16 @@
               type="button"
               :class="[
                 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors',
-                currentPath === '/chat' && currentChannelId === dm.id
+                currentPath === '/friends' && dmChannelQuery === dm.id
                   ? 'bg-sidebar-active text-white'
                   : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
               ]"
               @click="selectDirectMessage(dm)"
             >
-              <Icon :icon="dm.icon || 'mdi:account'" class="text-lg shrink-0" />
+              <div class="w-6 h-6 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
+                <img v-if="getDirectChannelAvatar(dm)" :src="getDirectChannelAvatar(dm)" alt="" class="w-full h-full object-cover" />
+                <Icon v-else :icon="dm.icon || 'mdi:account'" class="text-base text-accent" />
+              </div>
               <span class="flex-1 truncate">{{ dm.name }}</span>
             </button>
           </div>
@@ -212,7 +215,7 @@
                         type="button"
                         :class="[
                           'flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-left transition-colors min-w-0 text-sm',
-                          currentPath === '/chat' && currentChannelId === sub.id
+                          currentPath === '/game-rooms' && currentChannelId === sub.id
                             ? 'bg-sidebar-active text-white'
                             : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
                         ]"
@@ -249,7 +252,7 @@
           <img v-if="authStore.user?.avatar" :src="authStore.user.avatar" alt="" class="w-full h-full object-cover" />
           <Icon v-else icon="mdi:account" class="text-accent" />
         </div>
-        <span class="flex-1 truncate text-sm text-[#a6adc8]">{{ currentUser.name }}</span>
+        <span class="flex-1 truncate text-sm text-[#a6adc8]">{{ displayName }}</span>
         <Menu as="div" class="relative">
         <MenuButton
           type="button"
@@ -457,6 +460,7 @@ import { useChatStore } from '../stores/chat'
 import { useAuthStore } from '../stores/auth'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useNotificationsStore } from '../stores/notifications'
+import { useFriendsStore } from '../stores/friends'
 
 const props = defineProps({
   open: { type: Boolean, default: true },
@@ -469,6 +473,8 @@ function onEscape(e) {
 }
 
 const router = useRouter()
+const route = router.currentRoute
+const dmChannelQuery = computed(() => route.value?.query?.dm ?? '')
 const {
   channels,
   modules,
@@ -487,6 +493,13 @@ const {
 const { rooms: gameRooms, fetchRooms } = useGameRoomsStore()
 const authStore = useAuthStore()
 const { unreadCount: notificationUnreadCount, fetchUnreadCount: fetchNotificationUnread } = useNotificationsStore()
+const { friends } = useFriendsStore()
+
+function getDirectChannelAvatar(dm) {
+  if (dm.avatar) return dm.avatar
+  const friend = friends.value.find((f) => f.id === dm.peerId)
+  return friend?.avatar || null
+}
 
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
@@ -502,6 +515,13 @@ watch(() => props.open, (isOpen) => {
 onUnmounted(() => {
   document.body.style.overflow = ''
   document.removeEventListener('keydown', onEscape)
+})
+
+const displayName = computed(() => {
+  const u = authStore.user?.value
+  if (u?.username) return u.username
+  if (u?.email) return u.email.split('@')[0]
+  return currentUser.value?.name ?? '我'
 })
 
 const myGameRooms = computed(() => {
@@ -601,17 +621,14 @@ function navigate(item) {
 
 function selectChannel(channelId) {
   setChannel(channelId)
-  if (router.currentRoute.value.path !== '/chat') {
-    router.push('/chat')
-  }
+  router.push('/game-rooms')
+  close()
 }
 
 function selectDirectMessage(dm) {
   if (!dm?.id) return
   setChannel(dm.id)
-  if (router.currentRoute.value.path !== '/chat') {
-    router.push('/chat')
-  }
+  router.push({ path: '/friends', query: { dm: dm.id } })
   close()
 }
 

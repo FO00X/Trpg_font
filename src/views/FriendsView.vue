@@ -1,19 +1,41 @@
 <template>
   <div class="flex flex-col h-full">
-    <PageHeader title="好友" icon="mdi:account-group">
-      <template #actions>
+    <!-- 私聊时：只显示聊天区域 + 返回 -->
+    <template v-if="dmChannelId">
+      <header class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-chat-border bg-chat-panel">
         <button
           type="button"
-          class="p-2 rounded-full bg-white/10 text-white/80 hover:text-white hover:bg-white/30 transition-colors"
-          title="添加好友"
-          @click="showAddFriend = true"
+          class="p-2 -ml-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 transition-colors"
+          title="返回好友列表"
+          @click="closeDm"
         >
-          <Icon icon="mdi:account-plus" class="text-xl" />
+          <Icon icon="mdi:arrow-left" class="text-xl" />
         </button>
-      </template>
-    </PageHeader>
+        <Icon icon="mdi:account" class="text-xl text-accent shrink-0" />
+        <h1 class="font-semibold text-white truncate flex-1">{{ currentChannel?.name || '私聊' }}</h1>
+      </header>
+      <div class="flex-1 min-h-0 flex flex-col">
+        <MessageList class="flex-1 overflow-y-auto min-h-0" />
+        <MessageInput class="shrink-0" />
+      </div>
+    </template>
 
-    <div class="flex-1 overflow-y-auto scroll-thin p-4 space-y-6">
+    <!-- 好友列表 -->
+    <template v-else>
+      <PageHeader title="好友" icon="mdi:account-group">
+        <template #actions>
+          <button
+            type="button"
+            class="p-2 rounded-full bg-white/10 text-white/80 hover:text-white hover:bg-white/30 transition-colors"
+            title="添加好友"
+            @click="showAddFriend = true"
+          >
+            <Icon icon="mdi:account-plus" class="text-xl" />
+          </button>
+        </template>
+      </PageHeader>
+
+      <div class="flex-1 overflow-y-auto scroll-thin p-4 space-y-6">
       <!-- 添加好友弹窗 -->
       <div
         v-if="showAddFriend"
@@ -60,8 +82,9 @@
           :key="req.id"
           class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border"
         >
-          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0">
-            <Icon icon="mdi:account" class="text-xl text-accent" />
+          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
+            <img v-if="req.from_avatar" :src="req.from_avatar" alt="" class="w-full h-full object-cover" />
+            <Icon v-else icon="mdi:account" class="text-xl text-accent" />
           </div>
           <div class="flex-1 min-w-0">
             <div class="font-medium text-white truncate">{{ req.from_name }}</div>
@@ -94,8 +117,9 @@
           :key="req.id"
           class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border"
         >
-          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0">
-            <Icon icon="mdi:account-clock" class="text-xl text-accent-muted" />
+          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
+            <img v-if="req.to_avatar" :src="req.to_avatar" alt="" class="w-full h-full object-cover" />
+            <Icon v-else icon="mdi:account-clock" class="text-xl text-accent-muted" />
           </div>
           <div class="flex-1 min-w-0">
             <div class="font-medium text-white truncate">{{ req.to_name }}</div>
@@ -120,8 +144,9 @@
           class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors cursor-pointer group"
           @click="startDirectMessage(f)"
         >
-          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0">
-            <Icon icon="mdi:account" class="text-xl text-accent" />
+          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
+            <img v-if="f.avatar" :src="f.avatar" alt="" class="w-full h-full object-cover" />
+            <Icon v-else icon="mdi:account" class="text-xl text-accent" />
           </div>
           <div class="flex-1 min-w-0">
             <div class="font-medium text-white truncate">{{ f.name }}</div>
@@ -148,20 +173,24 @@
           暂无好友，点击右上角「+」添加好友或等待他人通过你的请求。
         </p>
       </section>
-    </div>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
+import MessageList from '../components/MessageList.vue'
+import MessageInput from '../components/MessageInput.vue'
 import { useChatStore } from '../stores/chat'
 import { useFriendsStore } from '../stores/friends'
 
 const router = useRouter()
-const { openDirectMessage } = useChatStore()
+const route = useRoute()
+const { openDirectMessage, setChannel, currentChannel } = useChatStore()
 const {
   friends,
   pendingReceived,
@@ -187,13 +216,27 @@ async function loadAll() {
   await Promise.all([fetchFriends(), fetchPendingReceived(), fetchPendingSent()])
 }
 
+const dmChannelId = computed(() => (route.query.dm && typeof route.query.dm === 'string' ? route.query.dm : ''))
+
+watch(
+  dmChannelId,
+  (id) => {
+    if (id) setChannel(id)
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   loadAll()
 })
 
+function closeDm() {
+  router.replace({ path: '/friends', query: {} })
+}
+
 function startDirectMessage(friend) {
-  openDirectMessage({ id: friend.id, name: friend.name })
-  router.push('/chat')
+  const channelId = openDirectMessage({ id: friend.id, name: friend.name })
+  if (channelId) router.push({ path: '/friends', query: { dm: channelId } })
 }
 
 async function onSendRequest() {

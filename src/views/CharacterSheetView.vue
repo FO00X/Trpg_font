@@ -22,10 +22,6 @@
           <div class="flex flex-col items-end gap-2">
             <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
             <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
-            <div class="flex items-center gap-2">
-              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
-              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
-            </div>
           </div>
         </template>
         <template v-else-if="sheetTab === 'ability'">
@@ -33,10 +29,6 @@
           <div class="flex flex-col items-end gap-2">
             <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
             <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
-            <div class="flex items-center gap-2">
-              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
-              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
-            </div>
           </div>
         </template>
         <template v-else-if="sheetTab === 'assets'">
@@ -44,10 +36,6 @@
           <div class="flex flex-col items-end gap-2">
             <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
             <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
-            <div class="flex items-center gap-2">
-              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
-              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
-            </div>
           </div>
         </template>
         <template v-else-if="sheetTab === 'social'">
@@ -55,10 +43,6 @@
           <div class="flex flex-col items-end gap-2">
             <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
             <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
-            <div class="flex items-center gap-2">
-              <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
-              <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
-            </div>
           </div>
         </template>
       </div>

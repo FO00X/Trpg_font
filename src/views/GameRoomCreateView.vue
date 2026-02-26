@@ -35,14 +35,13 @@
           />
         </div>
 
-        <!-- 模组名称（用户自行填写） -->
+        <!-- 模组名称（可选择或自定义输入，并可选择图标） -->
         <div>
           <label class="block text-sm font-medium text-white mb-1.5">模组名称 *</label>
-          <input
+          <ModuleSelect
             v-model="roomForm.module"
-            type="text"
-            placeholder="例如：亡蝶葬仪 / 自编模组"
-            class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] placeholder:text-accent-muted focus:border-accent/50 outline-none text-sm"
+            v-model:icon="roomForm.icon"
+            placeholder="选择或输入模组名称..."
           />
         </div>
 
@@ -99,6 +98,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
+import ModuleSelect from '../components/ModuleSelect.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 
 const router = useRouter()
@@ -112,6 +112,7 @@ const roomForm = ref({
   name: '',
   description: '',
   module: '',
+  icon: '',
   maxPlayers: 6,
   tags: [],
 })

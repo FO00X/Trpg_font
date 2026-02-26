@@ -6,6 +6,6 @@ import './style.css'
 
 const app = createApp(App)
 app.use(router)
-useAuthStore().init().then(() => {
-  app.mount('#app')
-})
+app.mount('#app')
+// 在后台恢复登录状态，不阻塞首屏；路由守卫会自行 getSession 并 setSession
+useAuthStore().init().catch(() => {})

@@ -1,4 +1,4 @@
-import { ref, computed, shallowRef } from 'vue'
+import { ref, computed, shallowRef, watch } from 'vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
 
@@ -165,7 +165,9 @@ export function useChatStore() {
 
   const currentMessages = computed(() => {
     const list = messagesByChannel.value[currentChannelId.value] || []
-    return [...list].sort((a, b) => a.time - b.time)
+    const byId = new Map()
+    list.forEach((m) => byId.set(m.id, m))
+    return [...byId.values()].sort((a, b) => a.time - b.time)
   })
 
   /** 当前频道是否为子频道（跑团频道） */
@@ -248,10 +250,14 @@ export function useChatStore() {
   function initSocket() {
     if (realtimeChannel.value) return
     const auth = useAuthStore()
-    const u = auth.user?.value
-    if (u?.id) {
-      currentUser.value = { id: u.id, name: u.username || u.email?.split('@')[0] || '我', avatar: u.avatar || null }
+    function syncCurrentUser() {
+      const u = auth.user?.value
+      if (u?.id) {
+        currentUser.value = { id: u.id, name: u.username || u.email?.split('@')[0] || '我', avatar: u.avatar || null }
+      }
     }
+    syncCurrentUser()
+    watch(() => auth.user?.value, syncCurrentUser, { immediate: false })
     fetchChannels()
     const channel = supabase
       .channel('messages-realtime')
@@ -365,8 +371,15 @@ export function useChatStore() {
     if (!directChannels.value.some((c) => c.id === id)) {
       directChannels.value = [
         ...directChannels.value,
-        { id, name: peerName, icon: 'mdi:account', peerId },
+        { id, name: peerName, icon: 'mdi:account', peerId, avatar: friend?.avatar || null },
       ]
+    } else {
+      // 更新已存在的频道信息（如头像）
+      const existing = directChannels.value.find((c) => c.id === id)
+      if (existing && friend?.avatar) {
+        existing.avatar = friend.avatar
+        existing.name = peerName
+      }
     }
     if (!messagesByChannel.value[id]) {
       messagesByChannel.value[id] = []

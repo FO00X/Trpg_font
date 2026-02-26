@@ -26,16 +26,20 @@ export function useFriendsStore() {
       return { ok: true }
     }
 
-    const { data: profiles } = await supabase.from('profiles').select('id, username').in('id', friendIds)
+    const { data: profiles } = await supabase.from('profiles').select('id, username, avatar').in('id', friendIds)
     const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
 
-    friends.value = friendIds.map((id) => ({
-      id,
-      name: profileMap.get(id)?.username || id.slice(0, 8) + '…',
-      status: 'offline',
-      lastMsg: null,
-      lastMsgTime: null,
-    }))
+    friends.value = friendIds.map((id) => {
+      const profile = profileMap.get(id)
+      return {
+        id,
+        name: profile?.username || id.slice(0, 8) + '…',
+        avatar: profile?.avatar || null,
+        status: 'offline',
+        lastMsg: null,
+        lastMsgTime: null,
+      }
+    })
     return { ok: true }
   }
 
@@ -54,15 +58,19 @@ export function useFriendsStore() {
     if (error) return { ok: false, message: error.message }
 
     const fromIds = [...new Set((data || []).map((r) => r.from_user_id))]
-    const { data: profiles } = await supabase.from('profiles').select('id, username').in('id', fromIds)
+    const { data: profiles } = await supabase.from('profiles').select('id, username, avatar').in('id', fromIds)
     const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
 
-    pendingReceived.value = (data || []).map((r) => ({
-      id: r.id,
-      from_user_id: r.from_user_id,
-      from_name: profileMap.get(r.from_user_id)?.username || r.from_user_id.slice(0, 8) + '…',
-      created_at: r.created_at,
-    }))
+    pendingReceived.value = (data || []).map((r) => {
+      const profile = profileMap.get(r.from_user_id)
+      return {
+        id: r.id,
+        from_user_id: r.from_user_id,
+        from_name: profile?.username || r.from_user_id.slice(0, 8) + '…',
+        from_avatar: profile?.avatar || null,
+        created_at: r.created_at,
+      }
+    })
     return { ok: true }
   }
 
@@ -81,15 +89,19 @@ export function useFriendsStore() {
     if (error) return { ok: false, message: error.message }
 
     const toIds = [...new Set((data || []).map((r) => r.to_user_id))]
-    const { data: profiles } = await supabase.from('profiles').select('id, username').in('id', toIds)
+    const { data: profiles } = await supabase.from('profiles').select('id, username, avatar').in('id', toIds)
     const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
 
-    pendingSent.value = (data || []).map((r) => ({
-      id: r.id,
-      to_user_id: r.to_user_id,
-      to_name: profileMap.get(r.to_user_id)?.username || r.to_user_id.slice(0, 8) + '…',
-      created_at: r.created_at,
-    }))
+    pendingSent.value = (data || []).map((r) => {
+      const profile = profileMap.get(r.to_user_id)
+      return {
+        id: r.id,
+        to_user_id: r.to_user_id,
+        to_name: profile?.username || r.to_user_id.slice(0, 8) + '…',
+        to_avatar: profile?.avatar || null,
+        created_at: r.created_at,
+      }
+    })
     return { ok: true }
   }
 

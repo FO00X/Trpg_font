@@ -204,7 +204,6 @@ function setupRealtime() {
       },
       (payload) => {
         const row = payload.new
-        // 避免重复：自己发送时 insert 返回已加入列表，realtime 会再发一次，去重
         if (messages.value.some((m) => m.id === row.id)) return
         messages.value.push(normalizeRow(row))
         scrollToBottom()

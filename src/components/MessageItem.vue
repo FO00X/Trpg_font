@@ -16,6 +16,7 @@
     <div :class="['flex flex-col max-w-[75%]', isSelf ? 'items-end' : 'items-start']">
       <div class="flex items-baseline gap-2 mb-0.5">
         <span
+          v-if="!isDirectChannel"
           class="px-2 py-0.5 rounded text-xs font-medium"
           :class="speakerBadge.class"
         >
@@ -50,8 +51,9 @@ const props = defineProps({
   },
 })
 
-const { currentUser } = useChatStore()
-const isSelf = computed(() => props.message.userId === currentUser.value.id)
+const { currentUser, currentChannelId } = useChatStore()
+const isSelf = computed(() => props.message.userId === currentUser.value?.id)
+const isDirectChannel = computed(() => (currentChannelId.value || '').startsWith('dm:'))
 const timeStr = computed(() => {
   const d = new Date(props.message.time)
   const now = new Date()
