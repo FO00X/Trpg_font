@@ -6,6 +6,7 @@ import { labelCls, inputCls, sectionCls, sectionTitleCls, genderOptions } from '
 import { CHAR_LABELS } from '../../data/characterConstants'
 import { getOccupationMeta } from '../../data/occupationMeta'
 import { NAME_COUNTRY_OPTIONS, NAME_GENDER_OPTIONS } from '../../utils/randomName'
+import { useCharactersStore } from '../../stores/characters'
 import ListboxSelect from '../ui/ListboxSelect.vue'
 import HpMpSanBar from './HpMpSanBar.vue'
 import StatusBadges from './StatusBadges.vue'
@@ -13,6 +14,8 @@ import StatusBadges from './StatusBadges.vue'
 const {
   form,
   syncDerived,
+  id: characterId,
+  isNew,
   openRollAllChars,
   openRollLuckOnly,
   charPointsRemaining,
@@ -34,6 +37,34 @@ const {
   selectOccupation,
   occupationGroups,
 } = inject('characterForm')
+
+const { uploadCharacterPortrait } = useCharactersStore()
+const portraitInputRef = ref(null)
+const portraitMessage = ref('')
+const portraitUploading = ref(false)
+
+function triggerPortraitInput() {
+  portraitInputRef.value?.click()
+}
+
+async function onPortraitFileChange(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file || !characterId.value) return
+  portraitMessage.value = ''
+  portraitUploading.value = true
+  try {
+    const res = await uploadCharacterPortrait(characterId.value, file)
+    if (res.ok) {
+      form.value.portrait = res.url
+      portraitMessage.value = '✓ 头像已更新，请保存角色卡'
+    } else {
+      portraitMessage.value = res.message || '上传失败'
+    }
+  } finally {
+    portraitUploading.value = false
+  }
+}
 
 const occupationMeta = computed(() => getOccupationMeta(form.value?.occupation))
 const occupationCategoryFilter = ref('')
@@ -65,6 +96,35 @@ function clampChar(key) {
     <section :class="sectionCls" data-guide="investigator-info-card">
       <h2 :class="sectionTitleCls">基础信息（Basic Information）</h2>
       <p class="text-xs text-accent-muted mb-3">填写或选择调查员的姓名、性别、职业等基础信息。*年龄会对移动造成一定影响。</p>
+      <!-- 角色头像 -->
+      <div class="flex items-start gap-4 mb-4">
+        <div class="w-20 h-20 rounded-xl bg-chat-bg border border-chat-border flex items-center justify-center overflow-hidden shrink-0">
+          <img v-if="form.portrait" :src="form.portrait" alt="" class="w-full h-full object-cover" />
+          <Icon v-else icon="mdi:account-circle-outline" class="text-4xl text-accent-muted" />
+        </div>
+        <div class="flex-1 min-w-0">
+          <input
+            ref="portraitInputRef"
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            class="hidden"
+            @change="onPortraitFileChange"
+          >
+          <template v-if="characterId">
+            <button
+              type="button"
+              :disabled="portraitUploading"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg border border-chat-border text-accent-muted hover:text-white hover:bg-sidebar-hover text-sm transition-colors disabled:opacity-50"
+              @click="triggerPortraitInput"
+            >
+              <Icon :icon="portraitUploading ? 'mdi:loading' : 'mdi:image-edit-outline'" class="text-lg shrink-0" :class="{ 'animate-spin': portraitUploading }" />
+              {{ portraitUploading ? '上传中…' : '上传头像' }}
+            </button>
+            <p v-if="portraitMessage" class="mt-1.5 text-xs" :class="portraitMessage.startsWith('✓') ? 'text-green-400' : 'text-red-400'">{{ portraitMessage }}</p>
+          </template>
+          <p v-else class="text-xs text-accent-muted">保存角色卡后可上传头像。</p>
+        </div>
+      </div>
       <div class="space-y-3">
         <!-- 姓名：输入 + 随机生成按钮 -->
         <div class="grid grid-cols-[auto,1fr] gap-2 items-center">

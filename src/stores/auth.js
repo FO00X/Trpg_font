@@ -17,13 +17,17 @@ export function useAuthStore() {
       id: u.id,
       email: u.email,
       username: u.email?.split('@')[0] || u.id,
+      role: 'user',
+      avatar: null,
     }
     const { data: profile } = await supabase
       .from('profiles')
-      .select('username')
+      .select('username, role, avatar')
       .eq('id', u.id)
       .single()
     if (profile?.username) user.value.username = profile.username
+    if (profile?.role) user.value.role = profile.role
+    if (profile?.avatar) user.value.avatar = profile.avatar
   }
 
   /** 应用启动时调用一次，用于恢复 session 并同步 user */
@@ -92,6 +96,28 @@ export function useAuthStore() {
     return { ok: true }
   }
 
+  /** 上传头像：上传到 storage avatars 桶并更新 profiles.avatar */
+  async function uploadAvatar(file) {
+    const uid = user.value?.id
+    if (!uid) return { ok: false, message: '请先登录' }
+    if (!file?.type?.startsWith('image/')) return { ok: false, message: '请选择图片文件（JPG/PNG/GIF/WebP）' }
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const safeExt = ['jpeg', 'jpg', 'png', 'gif', 'webp'].includes(ext) ? ext : 'jpg'
+    const path = `${uid}/avatar.${safeExt}`
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { cacheControl: '3600', upsert: true })
+    if (uploadError) return { ok: false, message: uploadError.message || '上传失败' }
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ avatar: publicUrl, updated_at: new Date().toISOString() })
+      .eq('id', uid)
+    if (updateError) return { ok: false, message: updateError.message || '保存失败' }
+    user.value.avatar = publicUrl
+    return { ok: true }
+  }
+
   return {
     user,
     isLoggedIn,
@@ -101,5 +127,6 @@ export function useAuthStore() {
     signUp,
     logout,
     updateProfileUsername,
+    uploadAvatar,
   }
 }

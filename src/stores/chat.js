@@ -250,7 +250,7 @@ export function useChatStore() {
     const auth = useAuthStore()
     const u = auth.user?.value
     if (u?.id) {
-      currentUser.value = { id: u.id, name: u.username || u.email?.split('@')[0] || '我', avatar: null }
+      currentUser.value = { id: u.id, name: u.username || u.email?.split('@')[0] || '我', avatar: u.avatar || null }
     }
     fetchChannels()
     const channel = supabase
@@ -291,10 +291,12 @@ export function useChatStore() {
   async function sendMessage(content) {
     const channelId = currentChannelId.value
     const mod = getCurrentModule()
+    const uid = currentUser.value.id
+    const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uid)
     const isKP = mod && mod.ownerId === currentUser.value.id
     const payload = {
       channel_id: channelId,
-      user_id: currentUser.value.id,
+      user_id: validUuid ? uid : null,
       user_name: currentUser.value.name,
       content: content.trim(),
       type: 'text',

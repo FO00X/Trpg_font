@@ -240,12 +240,17 @@
     </div>
 
     <!-- 用户信息 + 设置 -->
-    <div class="border-t border-chat-border px-3 py-2 shrink-0 flex items-center gap-2">
-      <div class="w-8 h-8 rounded-full bg-sidebar-active flex items-center justify-center shrink-0">
-        <Icon icon="mdi:account" class="text-accent" />
+    <div class="border-t border-chat-border px-3 py-2 shrink-0">
+      <div v-if="avatarMessage" class="mb-2 px-2 py-1.5 rounded-lg text-xs" :class="avatarMessage.startsWith('✓') ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'">
+        {{ avatarMessage }}
       </div>
-      <span class="flex-1 truncate text-sm text-[#a6adc8]">{{ currentUser.name }}</span>
-      <Menu as="div" class="relative">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
+          <img v-if="authStore.user?.avatar" :src="authStore.user.avatar" alt="" class="w-full h-full object-cover" />
+          <Icon v-else icon="mdi:account" class="text-accent" />
+        </div>
+        <span class="flex-1 truncate text-sm text-[#a6adc8]">{{ currentUser.name }}</span>
+        <Menu as="div" class="relative">
         <MenuButton
           type="button"
           class="p-1.5 rounded-lg text-accent-muted hover:text-white hover:bg-sidebar-hover transition-colors"
@@ -265,6 +270,26 @@
           <MenuItems
             class="absolute right-0 bottom-full mb-2 w-48 rounded-xl bg-sidebar border border-chat-border shadow-xl py-1 z-[9999] focus:outline-none"
           >
+            <MenuItem v-slot="{ active }">
+              <button
+                type="button"
+                :class="[
+                  'w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
+                  active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
+                ]"
+                @click="triggerAvatarInput"
+              >
+                <Icon icon="mdi:image-edit-outline" class="text-lg shrink-0" />
+                上传头像
+              </button>
+            </MenuItem>
+            <input
+              ref="avatarInputRef"
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              class="hidden"
+              @change="onAvatarFileChange"
+            >
             <MenuItem v-slot="{ active }">
               <button
                 type="button"
@@ -294,6 +319,8 @@
           </MenuItems>
         </transition>
       </Menu>
+      </div>
+    </div>
 
       <!-- 修改昵称弹窗 -->
       <Dialog v-if="nicknameDialogOpen" :open="true" @close="closeNicknameDialog" class="relative z-[10000]">
@@ -417,7 +444,6 @@
           </DialogPanel>
         </div>
       </Dialog>
-    </div>
     </aside>
   </Transition>
 </template>
@@ -488,6 +514,27 @@ const myGameRooms = computed(() => {
 
 const dmOpen = ref(true)
 
+const avatarInputRef = ref(null)
+const avatarMessage = ref('')
+
+function triggerAvatarInput() {
+  avatarInputRef.value?.click()
+}
+
+async function onAvatarFileChange(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  avatarMessage.value = ''
+  const res = await authStore.uploadAvatar(file)
+  if (res.ok) {
+    avatarMessage.value = '✓ 头像已更新'
+    setTimeout(() => { avatarMessage.value = '' }, 2000)
+  } else {
+    avatarMessage.value = res.message || '上传失败'
+  }
+}
+
 const nicknameDialogOpen = ref(false)
 const nicknameInput = ref('')
 const nicknameMessage = ref('')
@@ -527,12 +574,20 @@ function handleLogout() {
   router.replace({ path: '/', query: {} })
 }
 
-const navItems = [
-  { path: '/friends', name: '好友', icon: 'mdi:account-group-outline' },
-  { path: '/characters', name: '角色卡', icon: 'mdi:card-account-details-outline' },
-  { path: '/notifications', name: '消息', icon: 'mdi:bell-outline' },
-  { path: '/notes', name: '笔记', icon: 'mdi:note-text-outline' },
-]
+const isAdminUser = computed(() => authStore.user?.value?.role === 'admin')
+
+const navItems = computed(() => {
+  const items = [
+    { path: '/friends', name: '好友', icon: 'mdi:account-group-outline' },
+    { path: '/characters', name: '角色卡', icon: 'mdi:card-account-details-outline' },
+    { path: '/notifications', name: '消息', icon: 'mdi:bell-outline' },
+    { path: '/notes', name: '笔记', icon: 'mdi:note-text-outline' },
+  ]
+  if (isAdminUser.value) {
+    items.push({ path: '/admin/users', name: '用户列表', icon: 'mdi:account-supervisor' })
+  }
+  return items
+})
 
 const currentPath = computed(() => router.currentRoute.value.path)
 function isActive(item) {

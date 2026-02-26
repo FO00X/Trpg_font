@@ -54,9 +54,7 @@
       <div v-if="!messages.length && !loading" class="text-center text-xs text-accent-muted py-6">
         暂无消息，开始在房间里说点什么吧～
       </div>
-      <div v-if="loading" class="text-center text-xs text-accent-muted py-4">
-        加载中…
-      </div>
+      <LoadingSpinner v-if="loading" :block="false" size="sm" message="加载中…" className="justify-center py-4" />
     </div>
 
     <!-- 输入区 + 掷骰 / 技能检定 -->
@@ -103,6 +101,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
+import LoadingSpinner from './LoadingSpinner.vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
 import { useGameRoomsStore } from '../stores/gameRooms'

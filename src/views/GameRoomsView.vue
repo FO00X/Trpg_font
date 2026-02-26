@@ -237,10 +237,7 @@
                 <Icon icon="mdi:close" class="text-xl" />
               </button>
             </div>
-            <div v-if="loadingMembers" class="text-center py-8 text-accent-muted">
-              <Icon icon="mdi:loading" class="text-2xl animate-spin mx-auto mb-2" />
-              <p>加载中…</p>
-            </div>
+            <LoadingSpinner v-if="loadingMembers" message="加载中…" />
             <div v-else-if="roomMembers.length === 0" class="text-center py-8 text-accent-muted">
               暂无成员
             </div>
@@ -281,6 +278,7 @@ import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems, Dialog, DialogPanel, DialogTitle } from '@headlessui/vue'
 import PageHeader from '../components/PageHeader.vue'
+import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useAuthStore } from '../stores/auth'
 import { supabase } from '../lib/supabase'

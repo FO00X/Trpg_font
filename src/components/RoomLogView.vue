@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
+import LoadingSpinner from './LoadingSpinner.vue'
 import { supabase } from '../lib/supabase'
 
 const props = defineProps({
@@ -108,10 +109,7 @@ watch(() => props.roomId, () => {
 <template>
   <div class="flex flex-col h-full">
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
-      <div v-if="loading" class="flex items-center justify-center py-12 text-accent-muted">
-        <Icon icon="mdi:loading" class="text-2xl animate-spin mr-2" />
-        <span>加载日志中…</span>
-      </div>
+      <LoadingSpinner v-if="loading" message="加载日志中…" />
       <div v-else-if="error" class="text-center py-12 text-red-400">
         {{ error }}
       </div>

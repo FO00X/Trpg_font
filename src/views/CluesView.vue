@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
+import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { useCluesStore } from '../stores/clues'
 
 const route = useRoute()
@@ -61,7 +62,7 @@ function back() {
       </template>
     </PageHeader>
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
-      <div v-if="loading" class="text-accent-muted">加载中…</div>
+      <LoadingSpinner v-if="loading" message="加载中…" />
       <div v-else-if="error" class="text-red-400">{{ error }}</div>
       <div v-else-if="!cluesStore.getList(roomId).length" class="text-accent-muted text-center py-8">
         暂无线索，点击右上角 + 新建

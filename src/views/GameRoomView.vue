@@ -115,8 +115,8 @@
       </template>
     </PageHeader>
 
-    <div v-if="loading" class="flex-1 flex items-center justify-center text-accent-muted">
-      <span>加载中…</span>
+    <div v-if="loading" class="flex-1 flex items-center justify-center">
+      <LoadingSpinner message="加载中…" />
     </div>
     <div v-else-if="!room" class="flex-1 flex items-center justify-center text-accent-muted">
       <div class="text-center">
@@ -532,6 +532,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems, MenuItem, Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
 import PageHeader from '../components/PageHeader.vue'
+import LoadingSpinner from '../components/LoadingSpinner.vue'
 import RoomLogView from '../components/RoomLogView.vue'
 import RoomChat from '../components/RoomChat.vue'
 import { APP_TITLE } from '../constants/app'

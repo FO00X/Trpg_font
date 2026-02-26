@@ -113,6 +113,12 @@ const routes = [
     meta: { title: '编辑线索', requiresAuth: true },
   },
   {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('../views/AdminUsersView.vue'),
+    meta: { title: '用户列表（管理员）', requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('../views/NotFoundView.vue'),

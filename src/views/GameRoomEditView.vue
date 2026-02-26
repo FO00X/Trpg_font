@@ -22,8 +22,8 @@
       </template>
     </PageHeader>
 
-    <div v-if="loading" class="flex-1 flex items-center justify-center text-accent-muted">
-      <span>加载中…</span>
+    <div v-if="loading" class="flex-1 flex items-center justify-center">
+      <LoadingSpinner message="加载中…" />
     </div>
     <div v-else-if="!room || !isOwner" class="flex-1 flex items-center justify-center text-accent-muted">
       <p>无权修改此房间</p>
@@ -104,6 +104,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../components/PageHeader.vue'
+import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useAuthStore } from '../stores/auth'
 

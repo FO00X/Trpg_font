@@ -206,6 +206,7 @@ function getDefaultSheet() {
   const basic = {
     name: '', occupation: '', age: 18, gender: '男',
     currentResidence: '', birthplace: '',
+    portrait: '', // 角色头像 URL（上传到 storage avatars/{userId}/characters/{characterId}/avatar.*）
   }
   const characteristics = {
     str: 0, dex: 0, siz: 0, app: 0, con: 0, int: 0, pow: 0, edu: 0, luc: 0,
@@ -345,6 +346,25 @@ export function useCharactersStore() {
     return true
   }
 
+  /** 上传角色卡头像到 storage avatars/{userId}/characters/{characterId}/avatar.{ext}，返回公开 URL */
+  async function uploadCharacterPortrait(characterId, file) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '请先登录' }
+    const character = getById(characterId)
+    if (!character) return { ok: false, message: '未找到该角色卡' }
+    if (!file?.type?.startsWith('image/')) return { ok: false, message: '请选择图片文件（JPG/PNG/GIF/WebP）' }
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const safeExt = ['jpeg', 'jpg', 'png', 'gif', 'webp'].includes(ext) ? ext : 'jpg'
+    const path = `${uid}/characters/${characterId}/avatar.${safeExt}`
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { cacheControl: '3600', upsert: true })
+    if (uploadError) return { ok: false, message: uploadError.message || '上传失败' }
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+    return { ok: true, url: publicUrl }
+  }
+
   return {
     characters,
     fetchList,
@@ -361,6 +381,7 @@ export function useCharactersStore() {
     create,
     update,
     remove,
+    uploadCharacterPortrait,
     PRESET_SKILLS,
     SKILL_TYPE_OPTIONS,
     PRESET_WEAPONS: PRESET_WEAPONS_FULL,
