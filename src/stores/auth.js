@@ -1,10 +1,12 @@
 import { ref, computed } from 'vue'
 import { supabase } from '../lib/supabase'
+import { useProfileCache } from './profileCache'
 
 const user = ref(null)
 
 export function useAuthStore() {
   const isLoggedIn = computed(() => !!user.value)
+  const profileCache = useProfileCache()
 
   /** 由路由守卫或初始化时调用：用 Supabase session 同步本地 user */
   async function setSession(session) {
@@ -20,14 +22,23 @@ export function useAuthStore() {
       role: 'user',
       avatar: null,
     }
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('username, role, avatar')
-      .eq('id', u.id)
-      .single()
-    if (profile?.username) user.value.username = profile.username
-    if (profile?.role) user.value.role = profile.role
-    if (profile?.avatar) user.value.avatar = profile.avatar
+    // 优先从缓存取，避免重复请求
+    const cached = await profileCache.getProfile(u.id)
+    if (cached) {
+      if (cached.username) user.value.username = cached.username
+      if (cached.role) user.value.role = cached.role
+      if (cached.avatar) user.value.avatar = cached.avatar
+    } else {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, role, avatar')
+        .eq('id', u.id)
+        .single()
+      if (profile?.username) user.value.username = profile.username
+      if (profile?.role) user.value.role = profile.role
+      if (profile?.avatar) user.value.avatar = profile.avatar
+      profileCache.setProfile(u.id, { username: profile?.username, role: profile?.role, avatar: profile?.avatar })
+    }
   }
 
   /** 应用启动时调用一次，用于恢复 session 并同步 user */
@@ -81,6 +92,7 @@ export function useAuthStore() {
   async function logout() {
     await supabase.auth.signOut()
     user.value = null
+    profileCache.clear()
   }
 
   /** 更新个人资料中的用户名（昵称），会写入 Supabase profiles，好友搜索时使用此名 */
@@ -93,6 +105,7 @@ export function useAuthStore() {
       .eq('id', user.value.id)
     if (error) return { ok: false, message: error.message || '保存失败' }
     user.value.username = trimmed
+    profileCache.setProfile(user.value.id, { username: trimmed, avatar: user.value.avatar, role: user.value.role })
     return { ok: true }
   }
 
@@ -115,6 +128,7 @@ export function useAuthStore() {
       .eq('id', uid)
     if (updateError) return { ok: false, message: updateError.message || '保存失败' }
     user.value.avatar = publicUrl
+    profileCache.setProfile(uid, { username: user.value.username, avatar: publicUrl, role: user.value.role })
     return { ok: true }
   }
 

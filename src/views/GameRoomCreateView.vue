@@ -133,6 +133,7 @@ async function confirmCreateRoom() {
     name: roomForm.value.name.trim(),
     description: roomForm.value.description.trim(),
     module: moduleName || '自定义模组',
+    icon: roomForm.value.icon || '',
     maxPlayers: roomForm.value.maxPlayers,
     tags: [...roomForm.value.tags],
   }

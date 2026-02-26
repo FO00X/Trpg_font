@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useCharactersStore } from '../stores/characters'
@@ -8,10 +8,13 @@ import PageHeader from '../components/PageHeader.vue'
 import { useCharacterCardModal } from '../composables/useCharacterCardModal'
 
 const router = useRouter()
-const { characters, remove, fetchList } = useCharactersStore()
+const { characters, remove, fetchList, getById, update, uploadCharacterPortrait } = useCharactersStore()
 const gameRoomsStore = useGameRoomsStore()
 const { openCharacterCard } = useCharacterCardModal()
 const openMenuId = ref(null)
+const portraitInputRef = ref(null)
+const portraitUploadTargetId = ref(null)
+const portraitUploading = ref(false)
 
 const reviewDialogOpen = ref(false)
 const reviewTargetCharacter = ref(null)
@@ -49,6 +52,41 @@ function toggleMenu(e, id) {
 
 function closeMenu() {
   openMenuId.value = null
+}
+
+function openPortraitUpload(c) {
+  portraitUploadTargetId.value = c.id
+  closeMenu()
+  nextTick(() => {
+    portraitInputRef.value?.click()
+  })
+}
+
+async function onPortraitFileChange(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  const id = portraitUploadTargetId.value
+  portraitUploadTargetId.value = null
+  if (!file || !id) return
+  portraitUploading.value = true
+  try {
+    const res = await uploadCharacterPortrait(id, file)
+    if (res.ok) {
+      const c = getById(id)
+      if (c) {
+        const draft = { ...c }
+        delete draft.id
+        delete draft.updated_at
+        draft.portrait = res.url
+        const ok = await update(id, draft)
+        if (!ok) alert('头像已上传，但保存到角色卡失败，请到编辑页保存一次')
+      }
+    } else {
+      alert(res.message || '上传失败')
+    }
+  } finally {
+    portraitUploading.value = false
+  }
 }
 
 async function deleteCharacter(c) {
@@ -172,6 +210,13 @@ onUnmounted(() => {
         </button>
       </template>
     </PageHeader>
+    <input
+      ref="portraitInputRef"
+      type="file"
+      accept="image/jpeg,image/png,image/gif,image/webp"
+      class="hidden"
+      @change="onPortraitFileChange"
+    />
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <div class="max-w-2xl mx-auto space-y-2">
         <div
@@ -180,8 +225,9 @@ onUnmounted(() => {
           class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors cursor-pointer"
           @click="onCardClick(c)"
         >
-          <div class="w-10 h-10 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0">
-            <Icon icon="mdi:dice-multiple" class="text-xl text-accent" />
+          <div class="w-10 h-10 rounded-lg bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0">
+            <img v-if="c.portrait" :src="c.portrait" alt="" class="w-full h-full object-cover" />
+            <Icon v-else icon="mdi:dice-multiple" class="text-xl text-accent" />
           </div>
           <div class="flex-1 min-w-0 min-h-0">
             <div class="flex items-center gap-2">
@@ -230,6 +276,15 @@ onUnmounted(() => {
               >
                 <Icon icon="mdi:pencil-outline" class="text-lg shrink-0" />
                 编辑
+              </button>
+              <button
+                type="button"
+                class="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="portraitUploading"
+                @click="openPortraitUpload(c)"
+              >
+                <Icon :icon="portraitUploading ? 'mdi:loading' : 'mdi:image-edit-outline'" class="text-lg shrink-0" :class="{ 'animate-spin': portraitUploading }" />
+                修改头像
               </button>
               <button
                 type="button"

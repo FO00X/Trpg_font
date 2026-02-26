@@ -11,7 +11,10 @@
         >
           <Icon icon="mdi:arrow-left" class="text-xl" />
         </button>
-        <Icon icon="mdi:account" class="text-xl text-accent shrink-0" />
+        <div class="w-9 h-9 rounded-full bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0">
+          <img v-if="currentChannel?.avatar" :src="currentChannel.avatar" alt="" class="w-full h-full object-cover" />
+          <Icon v-else icon="mdi:account" class="text-xl text-accent" />
+        </div>
         <h1 class="font-semibold text-white truncate flex-1">{{ currentChannel?.name || '私聊' }}</h1>
       </header>
       <div class="flex-1 min-h-0 flex flex-col">
@@ -190,7 +193,7 @@ import { useFriendsStore } from '../stores/friends'
 
 const router = useRouter()
 const route = useRoute()
-const { openDirectMessage, setChannel, currentChannel } = useChatStore()
+const { openDirectMessage, setChannel, currentChannel, ensureDmChannelPeerInfo } = useChatStore()
 const {
   friends,
   pendingReceived,
@@ -221,7 +224,10 @@ const dmChannelId = computed(() => (route.query.dm && typeof route.query.dm === 
 watch(
   dmChannelId,
   (id) => {
-    if (id) setChannel(id)
+    if (id) {
+      setChannel(id)
+      ensureDmChannelPeerInfo(id)
+    }
   },
   { immediate: true }
 )

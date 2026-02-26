@@ -173,14 +173,18 @@ function setTab(id) {
           <!-- 头部：正方形头像 + 姓名等基础信息 -->
           <div class="shrink-0 px-4 pr-12 pt-6 pb-4 border-b border-chat-border">
             <div class="flex gap-4">
-              <div class="w-20 h-20 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0 text-2xl font-bold text-accent">
-                {{ (sheet.name || '未命名').slice(0, 1) }}
+              <div class="w-20 h-20 rounded-lg bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0 text-2xl font-bold text-accent">
+                <img v-if="sheet.portrait" :src="sheet.portrait" alt="" class="w-full h-full object-cover" />
+                <span v-else>{{ (sheet.name || '未命名').slice(0, 1) }}</span>
               </div>
               <div class="flex-1 min-w-0 space-y-1">
                 <div class="font-semibold text-lg text-white">{{ sheet.name || '未命名' }}</div>
-                <div class="text-sm text-accent-muted">职业 {{ sheet.occupation || '-' }} · 年龄 {{ sheet.age ?? '-' }} · {{ sheet.gender || '-' }}</div>
-                <div class="text-sm text-accent-muted">现居地 {{ sheet.currentResidence || '-' }}</div>
-                <div class="text-sm text-accent-muted">出生地 {{ sheet.birthplace || '-' }}</div>
+                <div class="text-sm text-accent-muted">职业 {{ sheet.occupation || '-' }}</div>
+                <div class="text-sm text-accent-muted">{{ sheet.age ?? '-' }}岁 {{ sheet.gender || '-' }}</div>
+                <div class="text-sm text-accent-muted flex gap-4">
+        <div>现居地 {{ sheet.currentResidence || '-' }}</div>
+        <div>出生地 {{ sheet.birthplace || '-' }}</div>
+      </div>
               </div>
             </div>
             <!-- 生命 / 魔法 / 理智 -->

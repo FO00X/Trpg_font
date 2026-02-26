@@ -7,16 +7,6 @@
       <template #actions>
         <div class="flex items-center gap-2">
           <!-- 查看房间用户 / 角色列表 -->
-          <button
-            v-if="room"
-            type="button"
-            class="p-2 rounded-lg bg-sidebar-active text-white hover:bg-sidebar-hover transition-colors"
-            title="查看房间用户与角色"
-            @click="membersOpen = true"
-          >
-            <Icon icon="mdi:account-group-outline" class="text-lg" />
-          </button>
-
           <!-- 玩家：没有角色卡时，显示“暂无角色卡，去创建” -->
           <button
             v-if="room && !isOwner && !characters.length"
@@ -111,6 +101,15 @@
               </MenuItems>
             </transition>
           </Menu>
+          <button
+            v-if="room"
+            type="button"
+            class="p-2 rounded-lg bg-sidebar-active text-white hover:bg-sidebar-hover transition-colors"
+            title="查看房间用户与角色"
+            @click="membersOpen = true"
+          >
+            <Icon icon="mdi:account-group-outline" class="text-lg" />
+          </button>
         </div>
       </template>
     </PageHeader>
@@ -536,8 +535,8 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import RoomLogView from '../components/RoomLogView.vue'
 import RoomChat from '../components/RoomChat.vue'
 import { APP_TITLE } from '../constants/app'
-import { supabase } from '../lib/supabase'
 import { useGameRoomsStore } from '../stores/gameRooms'
+import { useProfileCache } from '../stores/profileCache'
 import { useCharactersStore } from '../stores/characters'
 import { useAuthStore } from '../stores/auth'
 import { useCharacterCardModal } from '../composables/useCharacterCardModal'
@@ -559,6 +558,7 @@ const {
 } = useGameRoomsStore()
 const { characters, fetchList, getById } = useCharactersStore()
 const { openCharacterCard: openCharacterCardModal } = useCharacterCardModal()
+const profileCache = useProfileCache()
 
 const room = ref(null)
 const loading = ref(true)
@@ -787,14 +787,9 @@ async function load() {
   loading.value = false
   if (room.value) {
     document.title = `${room.value.title} - 跑团 - ${APP_TITLE}`
-    // 加载房主名称（KP 名）
     if (room.value.ownerId) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, username')
-        .eq('id', room.value.ownerId)
-        .maybeSingle()
-      ownerName.value = data?.username || ''
+      const profile = await profileCache.getProfile(room.value.ownerId)
+      ownerName.value = profile?.username ?? ''
     }
   }
 }

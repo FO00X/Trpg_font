@@ -1,6 +1,7 @@
 import { ref, computed, shallowRef, watch } from 'vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
+import { useProfileCache } from '../stores/profileCache'
 
 // 频道列表（大厅等）与模组/子频道，由 fetchChannels 从后端拉取
 const channels = ref([{ id: 'general', name: '大厅', icon: 'mdi:home', unread: 0 }])
@@ -46,7 +47,12 @@ const moduleNPCs = ref({})
 
 const realtimeChannel = shallowRef(null)
 
+// 当前私聊对方资料（用于消息列表显示头像与用户名）
+const dmPeerProfile = ref(null)
+
 export function useChatStore() {
+  const profileCache = useProfileCache()
+
   const currentChannel = computed(() => {
     const dm = directChannels.value.find((c) => c.id === currentChannelId.value)
     if (dm) return dm
@@ -257,7 +263,11 @@ export function useChatStore() {
       }
     }
     syncCurrentUser()
-    watch(() => auth.user?.value, syncCurrentUser, { immediate: false })
+    watch(
+      () => [auth.user?.value?.id, auth.user?.value?.username, auth.user?.value?.avatar],
+      syncCurrentUser,
+      { immediate: false }
+    )
     fetchChannels()
     const channel = supabase
       .channel('messages-realtime')
@@ -353,16 +363,43 @@ export function useChatStore() {
     if (isDirectMessageChannelId(id)) {
       if (!messagesByChannel.value[id]) messagesByChannel.value[id] = []
       fetchMessages(id, { limit: 50 }).catch(() => {})
+      ensureDmChannelPeerInfo(id)
       return
     }
 
+    dmPeerProfile.value = null
     fetchMessages(id, { limit: 50 }).catch(() => {})
   }
 
-  /** 打开/创建一个私聊频道（DM）并切换到该频道 */
+  /** 根据私聊 channelId 解析对方 id，从 profileCache 拉取用户名和头像，更新 directChannels 并设置 dmPeerProfile */
+  async function ensureDmChannelPeerInfo(channelId) {
+    if (!isDirectMessageChannelId(channelId)) return
+    const parts = channelId.split(':')
+    if (parts.length < 3 || !parts[1] || !parts[2]) return
+    const myId = currentUser.value?.id
+    if (!myId) return
+    const peerId = myId === parts[1] ? parts[2] : parts[1]
+    const profile = await profileCache.getProfile(peerId)
+    const name = profile?.username || profile?.id?.slice(0, 8) + '…' || '私聊'
+    const avatar = profile?.avatar || null
+    dmPeerProfile.value = { id: peerId, username: name, avatar }
+
+    const existing = directChannels.value.find((c) => c.id === channelId)
+    if (existing) {
+      existing.name = name
+      existing.avatar = avatar
+    } else {
+      directChannels.value = [
+        ...directChannels.value,
+        { id: channelId, name, icon: 'mdi:account', peerId, avatar },
+      ]
+    }
+  }
+
+  /** 打开/创建一个私聊频道（DM）并切换到该频道；优先使用传入的 name/avatar，否则从 profileCache 拉取 */
   function openDirectMessage(friend) {
     const peerId = friend?.id || friend?.userId
-    const peerName = friend?.name || friend?.userName || '私聊'
+    const peerName = (friend?.name || friend?.userName || '').trim() || '私聊'
     if (!peerId) return null
     const myId = currentUser.value?.id
     if (!myId) return null
@@ -371,14 +408,13 @@ export function useChatStore() {
     if (!directChannels.value.some((c) => c.id === id)) {
       directChannels.value = [
         ...directChannels.value,
-        { id, name: peerName, icon: 'mdi:account', peerId, avatar: friend?.avatar || null },
+        { id, name: peerName, icon: 'mdi:account', peerId, avatar: friend?.avatar ?? null },
       ]
     } else {
-      // 更新已存在的频道信息（如头像）
       const existing = directChannels.value.find((c) => c.id === id)
-      if (existing && friend?.avatar) {
-        existing.avatar = friend.avatar
+      if (existing) {
         existing.name = peerName
+        existing.avatar = friend?.avatar ?? existing.avatar
       }
     }
     if (!messagesByChannel.value[id]) {
@@ -427,6 +463,8 @@ export function useChatStore() {
     currentChannel,
     currentMessages,
     currentUser,
+    dmPeerProfile,
+    ensureDmChannelPeerInfo,
     onlineUsers,
     subChannelMemberCharacter,
     speakerRoleInChannel,

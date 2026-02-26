@@ -54,7 +54,11 @@ export function useGameRoomsStore() {
   async function fetchModules() {
     const { data, error } = await supabase.from('game_room_module_options').select('id, name, icon').order('id')
     if (error) return { ok: false, message: error.message }
-    availableModules.value = (data || []).map((m) => ({ id: m.id, name: m.name, icon: m.icon || 'mdi:dots-horizontal' }))
+    // 不再展示「其他」，仅展示预设与用户创建房间时加入的自定义模组
+    const list = (data || [])
+      .filter((m) => m.id !== 'other' && m.name !== '其他')
+      .map((m) => ({ id: m.id, name: m.name, icon: m.icon || 'mdi:dots-horizontal' }))
+    availableModules.value = list
     return { ok: true, modules: availableModules.value }
   }
 
@@ -65,14 +69,34 @@ export function useGameRoomsStore() {
     return { ok: true, tags: availableTags.value }
   }
 
+  /** 将自定义模组名称加入模组选项表，便于后续创建房间时出现在列表中（已存在则跳过） */
+  async function ensureModuleOption(moduleName, icon) {
+    const name = (moduleName || '').trim()
+    if (!name) return
+    const id = name
+    const { error } = await supabase.from('game_room_module_options').insert({
+      id,
+      name,
+      icon: icon || 'mdi:dots-horizontal',
+    })
+    if (!error) {
+      const exists = availableModules.value.some((m) => m.id === id || m.name === name)
+      if (!exists) {
+        availableModules.value = [...availableModules.value, { id, name, icon: icon || 'mdi:dots-horizontal' }]
+      }
+    }
+    // 若 error.code === '23505' 表示该模组已存在，忽略即可
+  }
+
   async function addRoom(payload) {
     const auth = useAuthStore()
     const uid = auth.user?.value?.id
     if (!uid) return null
+    const moduleName = (payload.module || '').trim() || null
     const row = {
       owner_id: uid,
       title: payload.name || payload.title || '',
-      module: payload.module || null,
+      module: moduleName,
       tags: Array.isArray(payload.tags) ? payload.tags : [],
       status: 'recruiting',
       description: payload.description || null,
@@ -80,6 +104,9 @@ export function useGameRoomsStore() {
     }
     const { data, error } = await supabase.from('game_rooms').insert(row).select('id, owner_id, title, module, tags, status, description, max_players, created_at, updated_at').single()
     if (error) return null
+    if (moduleName) {
+      await ensureModuleOption(moduleName, payload.icon)
+    }
     const room = {
       id: data.id,
       ownerId: data.owner_id,

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from './auth'
+import { useProfileCache } from './profileCache'
 
 const friends = ref([])
 const pendingReceived = ref([])
@@ -26,8 +27,8 @@ export function useFriendsStore() {
       return { ok: true }
     }
 
-    const { data: profiles } = await supabase.from('profiles').select('id, username, avatar').in('id', friendIds)
-    const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
+    const profileCache = useProfileCache()
+    const profileMap = await profileCache.getProfiles(friendIds)
 
     friends.value = friendIds.map((id) => {
       const profile = profileMap.get(id)
@@ -58,8 +59,8 @@ export function useFriendsStore() {
     if (error) return { ok: false, message: error.message }
 
     const fromIds = [...new Set((data || []).map((r) => r.from_user_id))]
-    const { data: profiles } = await supabase.from('profiles').select('id, username, avatar').in('id', fromIds)
-    const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
+    const profileCache = useProfileCache()
+    const profileMap = await profileCache.getProfiles(fromIds)
 
     pendingReceived.value = (data || []).map((r) => {
       const profile = profileMap.get(r.from_user_id)
@@ -89,8 +90,8 @@ export function useFriendsStore() {
     if (error) return { ok: false, message: error.message }
 
     const toIds = [...new Set((data || []).map((r) => r.to_user_id))]
-    const { data: profiles } = await supabase.from('profiles').select('id, username, avatar').in('id', toIds)
-    const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
+    const profileCache = useProfileCache()
+    const profileMap = await profileCache.getProfiles(toIds)
 
     pendingSent.value = (data || []).map((r) => {
       const profile = profileMap.get(r.to_user_id)

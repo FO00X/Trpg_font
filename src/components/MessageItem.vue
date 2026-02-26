@@ -8,10 +8,9 @@
     </span>
   </div>
   <div v-else :class="['flex gap-3', isSelf ? 'flex-row-reverse' : 'flex-row']">
-    <div
-      class="w-9 h-9 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 text-accent"
-    >
-      <Icon icon="mdi:account" class="text-lg" />
+    <div class="w-9 h-9 rounded-full bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0 text-accent">
+      <img v-if="senderAvatar" :src="senderAvatar" alt="" class="w-full h-full object-cover" />
+      <Icon v-else icon="mdi:account" class="text-lg" />
     </div>
     <div :class="['flex flex-col max-w-[75%]', isSelf ? 'items-end' : 'items-start']">
       <div class="flex items-baseline gap-2 mb-0.5">
@@ -51,7 +50,7 @@ const props = defineProps({
   },
 })
 
-const { currentUser, currentChannelId } = useChatStore()
+const { currentUser, currentChannelId, dmPeerProfile } = useChatStore()
 const isSelf = computed(() => props.message.userId === currentUser.value?.id)
 const isDirectChannel = computed(() => (currentChannelId.value || '').startsWith('dm:'))
 const timeStr = computed(() => {
@@ -63,11 +62,18 @@ const timeStr = computed(() => {
 })
 const isSystem = computed(() => props.message.type === 'system')
 
+const senderAvatar = computed(() => {
+  if (isSelf.value) return currentUser.value?.avatar ?? null
+  if (isDirectChannel.value && dmPeerProfile.value?.id === props.message.userId) return dmPeerProfile.value?.avatar ?? null
+  return null
+})
+
 const speakerName = computed(() => {
   const msg = props.message
   if (msg.type === 'system') return '骰娘'
   if (msg.speakerRole === 'kp') return 'KP'
   if (msg.speakerRole === 'npc' && msg.speakerNpcName) return msg.speakerNpcName
+  if (isDirectChannel.value && !isSelf.value && dmPeerProfile.value?.username) return dmPeerProfile.value.username
   return msg.userName || '未知'
 })
 

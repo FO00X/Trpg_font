@@ -249,7 +249,7 @@
       </div>
       <div class="flex items-center gap-2">
         <div class="w-8 h-8 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
-          <img v-if="authStore.user?.avatar" :src="authStore.user.avatar" alt="" class="w-full h-full object-cover" />
+          <img v-if="authUser?.avatar" :src="authUser.avatar" alt="" class="w-full h-full object-cover" />
           <Icon v-else icon="mdi:account" class="text-accent" />
         </div>
         <span class="flex-1 truncate text-sm text-[#a6adc8]">{{ displayName }}</span>
@@ -517,8 +517,10 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onEscape)
 })
 
+const authUser = computed(() => authStore.user?.value ?? null)
+
 const displayName = computed(() => {
-  const u = authStore.user?.value
+  const u = authUser.value
   if (u?.username) return u.username
   if (u?.email) return u.email.split('@')[0]
   return currentUser.value?.name ?? '我'

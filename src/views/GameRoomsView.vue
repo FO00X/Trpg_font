@@ -261,7 +261,6 @@
                       房主
                     </span>
                   </div>
-                  <p v-if="member.id" class="text-xs text-accent-muted truncate">{{ member.id }}</p>
                 </div>
               </li>
             </ul>
@@ -281,9 +280,11 @@ import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useAuthStore } from '../stores/auth'
+import { useProfileCache } from '../stores/profileCache'
 import { supabase } from '../lib/supabase'
 
 const router = useRouter()
+const profileCache = useProfileCache()
 const { rooms, availableModules, fetchRooms, fetchModules, fetchTags, applyToRoom } = useGameRoomsStore()
 const authStore = useAuthStore()
 const myId = computed(() => authStore.user?.value?.id)
@@ -293,7 +294,7 @@ const roomMembers = ref([])
 const loadingMembers = ref(false)
 const currentRoomForDetails = ref(null)
 
-// 房主用户名缓存：{ ownerId -> username }
+// 房主显示名（由 profileCache 填充，避免重复请求）
 const ownerNameById = ref({})
 
 /** 招募中时：房主或已通过申请的用户显示「进入房间」 */
@@ -426,30 +427,15 @@ async function openRoomDetails(room) {
   try {
     const members = []
     
-    // 获取房主信息
-    const { data: ownerProfile } = await supabase
-      .from('profiles')
-      .select('id, username, avatar')
-      .eq('id', room.ownerId)
-      .single()
+    // 房主信息（走缓存，减少接口）
+    const ownerProfile = room.ownerId ? await profileCache.getProfile(room.ownerId) : null
+    members.push({
+      id: room.ownerId,
+      username: ownerProfile?.username ?? null,
+      avatar: ownerProfile?.avatar ?? null,
+      isOwner: true,
+    })
     
-    if (ownerProfile) {
-      members.push({
-        id: ownerProfile.id,
-        username: ownerProfile.username,
-        avatar: ownerProfile.avatar,
-        isOwner: true,
-      })
-    } else {
-      members.push({
-        id: room.ownerId,
-        username: null,
-        avatar: null,
-        isOwner: true,
-      })
-    }
-    
-    // 获取已通过申请的成员
     const { data: applications } = await supabase
       .from('game_room_applications')
       .select('user_id')
@@ -458,36 +444,17 @@ async function openRoomDetails(room) {
     
     if (applications && applications.length > 0) {
       const memberIds = applications.map((a) => a.user_id).filter((id) => id !== room.ownerId)
+      const memberMap = memberIds.length > 0 ? await profileCache.getProfiles(memberIds) : new Map()
       
-      if (memberIds.length > 0) {
-        const { data: memberProfiles } = await supabase
-          .from('profiles')
-          .select('id, username, avatar')
-          .in('id', memberIds)
-        
-        if (memberProfiles) {
-          memberProfiles.forEach((profile) => {
-            members.push({
-              id: profile.id,
-              username: profile.username,
-              avatar: profile.avatar,
-              isOwner: false,
-            })
-          })
-        }
-        
-        // 对于没有 profile 的成员，也添加进去
-        memberIds.forEach((id) => {
-          if (!memberProfiles?.find((p) => p.id === id)) {
-            members.push({
-              id,
-              username: null,
-              avatar: null,
-              isOwner: false,
-            })
-          }
+      memberIds.forEach((id) => {
+        const profile = memberMap.get(id)
+        members.push({
+          id,
+          username: profile?.username ?? null,
+          avatar: profile?.avatar ?? null,
+          isOwner: false,
         })
-      }
+      })
     }
     
     roomMembers.value = members
@@ -502,13 +469,9 @@ async function loadOwnerNames() {
   const ids = Array.from(new Set(rooms.value.map((r) => r.ownerId).filter(Boolean)))
   if (!ids.length) return
   try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username')
-      .in('id', ids)
-    if (error) return
+    const map = await profileCache.getProfiles(ids)
     ownerNameById.value = Object.fromEntries(
-      (data || []).map((p) => [p.id, p.username])
+      [...map.entries()].map(([id, p]) => [id, p.username ?? null])
     )
   } catch {
     // 忽略错误，保持回退为 ID
