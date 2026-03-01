@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col h-full">
-    <PageHeader title="用户列表（管理员）" icon="mdi:account-supervisor">
+    <PageHeader title="用户列表" icon="mdi:account-supervisor">
       <template #actions>
         <button
           type="button"
