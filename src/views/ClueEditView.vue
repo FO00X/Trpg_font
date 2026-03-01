@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import Toast from '../components/Toast.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useCluesStore } from '../stores/clues'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
@@ -25,6 +27,36 @@ const saving = ref(false)
 const loading = ref(true)
 const error = ref('')
 const uploadingImage = ref(false)
+
+// Toast 和确认对话框
+const toastRef = ref(null)
+const confirmDialogVisible = ref(false)
+const confirmDialogTitle = ref('确认')
+const confirmDialogMessage = ref('')
+let confirmDialogResolve = null
+let confirmDialogReject = null
+
+function showToast(message, duration = 3000) {
+  if (toastRef.value) {
+    toastRef.value.show(message, duration)
+  }
+}
+
+function showConfirm(title, message) {
+  return new Promise((resolve) => {
+    confirmDialogTitle.value = title
+    confirmDialogMessage.value = message
+    confirmDialogVisible.value = true
+    confirmDialogResolve = () => {
+      resolve(true)
+      confirmDialogVisible.value = false
+    }
+    confirmDialogReject = () => {
+      resolve(false)
+      confirmDialogVisible.value = false
+    }
+  })
+}
 
 onMounted(async () => {
   if (isNew.value) {
@@ -117,7 +149,8 @@ async function save() {
 }
 
 async function removeClue() {
-  if (!confirm('确定删除这条线索？')) return
+  const confirmed = await showConfirm('确认删除', '确定删除这条线索？')
+  if (!confirmed) return
   saving.value = true
   const res = await cluesStore.remove(clueId.value)
   saving.value = false
@@ -138,103 +171,66 @@ function back() {
     <PageHeader
       :title="isNew ? '新建线索' : '编辑线索'"
       icon="mdi:lightbulb-on-outline"
-      hide-sidebar
+      hide-base-100
     >
       <template #actions>
-        <button
-          v-if="!isNew"
-          type="button"
-          class="p-2 rounded-lg text-red-400 hover:bg-white/10"
-          title="删除"
-          :disabled="saving"
-          @click="removeClue"
-        >
+        <button v-if="!isNew" type="button" class="btn btn-ghost btn-square btn-sm text-error" title="删除" :disabled="saving" @click="removeClue">
           <Icon icon="mdi:delete-outline" class="text-lg" />
         </button>
-        <button
-          type="button"
-          class="p-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/10"
-          title="返回"
-          @click="back"
-        >
+        <button type="button" class="btn btn-ghost btn-square btn-sm" title="返回" @click="back">
           <Icon icon="mdi:arrow-left" class="text-lg" />
         </button>
       </template>
     </PageHeader>
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <LoadingSpinner v-if="loading" message="加载中…" />
-      <div v-else-if="error" class="text-red-400 mb-4">{{ error }}</div>
+      <div v-else-if="error" class="alert alert-error mb-4">{{ error }}</div>
       <template v-else>
         <div class="max-w-2xl mx-auto space-y-4">
-          <input
-            v-model="title"
-            type="text"
-            placeholder="标题"
-            class="w-full px-4 py-3 rounded-xl bg-chat-panel border border-chat-border text-white placeholder-accent-muted focus:border-accent outline-none"
-          />
-          <textarea
-            v-model="content"
-            placeholder="内容（可选）…"
-            rows="10"
-            class="w-full px-4 py-3 rounded-xl bg-chat-panel border border-chat-border text-white placeholder-accent-muted focus:border-accent outline-none resize-y min-h-[200px]"
-          />
-          <div class="rounded-xl bg-chat-panel border border-chat-border p-4">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-sm font-medium text-accent-muted uppercase tracking-wider">图片</h3>
-              <label
-                class="px-3 py-1.5 rounded-lg bg-accent/20 text-accent text-sm cursor-pointer hover:bg-accent/30 transition-colors"
-              >
-                <Icon icon="mdi:image-plus" class="inline text-lg mr-1" />
-                <span>添加图片</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  class="hidden"
-                  :disabled="uploadingImage"
-                  @change="handleImageUpload"
-                />
-              </label>
-            </div>
-            <div v-if="uploadingImage" class="text-sm text-accent-muted mb-2">上传中…</div>
-            <div v-if="imageUrls.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div
-                v-for="(url, index) in imageUrls"
-                :key="index"
-                class="relative group aspect-square rounded-lg overflow-hidden bg-chat-bg border border-chat-border"
-              >
-                <img :src="url" alt="" class="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
-                  @click="removeImage(index)"
-                >
-                  <Icon icon="mdi:delete" class="text-2xl" />
-                </button>
+          <input v-model="title" type="text" placeholder="标题" class="input input-bordered w-full" />
+          <textarea v-model="content" placeholder="内容（可选）…" rows="10" class="textarea textarea-bordered w-full resize-y min-h-[200px]" />
+          <div class="card card-bordered bg-base-200">
+            <div class="card-body p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-medium text-base-content/60 uppercase tracking-wider">图片</h3>
+                <label class="btn btn-primary btn-sm gap-1">
+                  <Icon icon="mdi:image-plus" class="text-lg" />
+                  添加图片
+                  <input type="file" accept="image/*" multiple class="hidden" :disabled="uploadingImage" @change="handleImageUpload" />
+                </label>
               </div>
+              <div v-if="uploadingImage" class="text-sm text-base-content/60 mb-2">上传中…</div>
+              <div v-if="imageUrls.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div v-for="(url, index) in imageUrls" :key="index" class="relative group aspect-square rounded-lg overflow-hidden bg-base-300">
+                  <img :src="url" alt="" class="w-full h-full object-cover" />
+                  <button type="button" class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-primary-content" @click="removeImage(index)">
+                    <Icon icon="mdi:delete" class="text-2xl" />
+                  </button>
+                </div>
+              </div>
+              <p v-else class="text-sm text-base-content/50">暂无图片，点击上方按钮添加</p>
             </div>
-            <p v-else class="text-sm text-accent-muted">暂无图片，点击上方按钮添加</p>
           </div>
           <div class="flex gap-2">
-            <button
-              type="button"
-              class="px-4 py-2 rounded-xl bg-accent text-white font-medium disabled:opacity-50"
-              :disabled="saving"
-              @click="save"
-            >
+            <button type="button" class="btn btn-primary" :disabled="saving" @click="save">
               {{ saving ? '保存中…' : (isNew ? '创建' : '保存') }}
             </button>
-            <button
-              type="button"
-              class="px-4 py-2 rounded-xl border border-chat-border text-accent-muted hover:bg-white/5"
-              :disabled="saving"
-              @click="back"
-            >
-              取消
-            </button>
+            <button type="button" class="btn btn-ghost" :disabled="saving" @click="back">取消</button>
           </div>
         </div>
       </template>
     </div>
   </div>
+
+  <!-- Toast 提示 -->
+  <Toast ref="toastRef" />
+  
+  <!-- 确认对话框 -->
+  <ConfirmDialog
+    v-model:visible="confirmDialogVisible"
+    :title="confirmDialogTitle"
+    :message="confirmDialogMessage"
+    @confirm="confirmDialogResolve"
+    @cancel="confirmDialogReject"
+  />
 </template>

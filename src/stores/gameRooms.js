@@ -55,7 +55,6 @@ export function useGameRoomsStore() {
   async function fetchModules() {
     const { data, error } = await supabase.from('game_room_module_options').select('id, name, icon').order('id')
     if (error) return { ok: false, message: error.message }
-    // 不再展示「其他」，仅展示预设与用户创建房间时加入的自定义模组
     const list = (data || [])
       .filter((m) => m.id !== 'other' && m.name !== '其他')
       .map((m) => ({ id: m.id, name: m.name, icon: m.icon || 'mdi:dots-horizontal' }))
@@ -91,7 +90,6 @@ export function useGameRoomsStore() {
     return { ok: true, tags: availableTags.value, groups: availableTagGroups.value }
   }
 
-  /** 将自定义模组名称加入模组选项表，便于后续创建房间时出现在列表中（已存在则跳过） */
   async function ensureModuleOption(moduleName, icon) {
     const name = (moduleName || '').trim()
     if (!name) return
@@ -150,11 +148,18 @@ export function useGameRoomsStore() {
   }
 
   async function fetchRoom(roomId) {
-    const { data, error } = await supabase
+    const baseCols = 'id, owner_id, title, module, tags, status, description, module_files, max_players, created_at, updated_at'
+    let data, error
+    ;({ data, error } = await supabase
       .from('game_rooms')
-      .select('id, owner_id, title, module, tags, status, description, module_files, max_players, created_at, updated_at')
+      .select(`${baseCols}, module_entries`)
       .eq('id', roomId)
-      .single()
+      .single())
+    if (error && (error.code === 'PGRST204' || (error.message && /module_entries|schema cache/i.test(error.message)))) {
+      const res = await supabase.from('game_rooms').select(baseCols).eq('id', roomId).single()
+      data = res.data
+      error = res.error
+    }
     if (error || !data) return null
     const auth = useAuthStore()
     const myId = auth.user?.value?.id
@@ -177,6 +182,7 @@ export function useGameRoomsStore() {
       status: data.status,
       description: data.description,
       moduleFiles: data.module_files || [],
+      moduleEntries: Array.isArray(data.module_entries) ? data.module_entries : [],
       maxPlayers: data.max_players ?? 6,
       created_at: data.created_at,
       updated_at: data.updated_at,
@@ -198,6 +204,26 @@ export function useGameRoomsStore() {
     if (error) return { ok: false, message: error.message }
     const r = rooms.value.find((x) => x.id === roomId)
     if (r) r.moduleFiles = moduleFiles
+    return { ok: true }
+  }
+
+  /** 更新模组词条（左侧词条列表 + 右侧正文，仅房主可改）。需在 game_rooms 表存在列：module_entries jsonb DEFAULT '[]' */
+  async function updateModuleEntries(roomId, entries) {
+    const auth = useAuthStore()
+    const uid = auth.user?.value?.id
+    if (!uid) return { ok: false, message: '未登录' }
+    const { data: roomRow } = await supabase.from('game_rooms').select('owner_id').eq('id', roomId).single()
+    if (!roomRow || roomRow.owner_id !== uid) return { ok: false, message: '仅房主可修改模组信息' }
+    const list = Array.isArray(entries) ? entries : []
+    const { error } = await supabase.from('game_rooms').update({ module_entries: list, updated_at: new Date().toISOString() }).eq('id', roomId)
+    if (error) {
+      if (error.code === 'PGRST204' || (error.message && /module_entries|schema cache/i.test(error.message))) {
+        return { ok: false, message: '数据库尚未添加模组词条字段，请在 Supabase SQL 编辑器中执行：ALTER TABLE game_rooms ADD COLUMN IF NOT EXISTS module_entries jsonb DEFAULT \'[]\';' }
+      }
+      return { ok: false, message: error.message }
+    }
+    const r = rooms.value.find((x) => x.id === roomId)
+    if (r) r.moduleEntries = list
     return { ok: true }
   }
 
@@ -465,6 +491,7 @@ export function useGameRoomsStore() {
     updateRoom,
     deleteRoom,
     updateModuleFiles,
+    updateModuleEntries,
     roomCharacterSelection,
     setRoomCharacter,
     getRoomCharacter,

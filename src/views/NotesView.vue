@@ -36,20 +36,15 @@ function openNew() {
   <div class="flex flex-col h-full">
     <PageHeader title="笔记" icon="mdi:note-text-outline">
       <template #actions>
-        <button
-          type="button"
-          class="p-2 rounded-lg text-accent hover:bg-white/10"
-          title="新建笔记"
-          @click="openNew"
-        >
+        <button type="button" class="btn btn-ghost btn-square btn-sm" title="新建笔记" @click="openNew">
           <Icon icon="mdi:plus" class="text-xl" />
         </button>
       </template>
     </PageHeader>
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <LoadingSpinner v-if="loading" message="加载中…" />
-      <div v-else-if="error" class="text-red-400">{{ error }}</div>
-      <div v-else-if="!notesStore.list.value.length" class="text-accent-muted text-center py-8">
+      <div v-else-if="error" class="alert alert-error">{{ error }}</div>
+      <div v-else-if="!notesStore.list.value.length" class="text-base-content/60 text-center py-8">
         暂无笔记，点击右上角 + 新建
       </div>
       <div v-else class="space-y-2">
@@ -57,18 +52,20 @@ function openNew() {
           v-for="n in notesStore.list.value"
           :key="n.id"
           type="button"
-          class="w-full flex items-start gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors text-left"
+          class="card card-bordered bg-base-200 hover:border-primary/40 transition-colors text-left w-full"
           @click="openNote(n)"
         >
-          <div class="w-10 h-10 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0">
-            <Icon icon="mdi:note-text" class="text-xl text-accent" />
+          <div class="card-body flex-row items-start gap-3 p-3">
+            <div class="w-10 h-10 rounded-lg bg-base-300 flex items-center justify-center shrink-0">
+              <Icon icon="mdi:note-text" class="text-xl text-primary" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-base-content truncate">{{ n.title || '无标题' }}</div>
+              <div class="text-sm text-base-content/60 line-clamp-2">{{ n.content || '无内容' }}</div>
+              <div class="text-xs text-base-content/50 mt-1">{{ formatDate(n.updated_at) }}</div>
+            </div>
+            <Icon icon="mdi:chevron-right" class="text-base-content/50 shrink-0 mt-1" />
           </div>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-white truncate">{{ n.title || '无标题' }}</div>
-            <div class="text-sm text-accent-muted line-clamp-2">{{ n.content || '无内容' }}</div>
-            <div class="text-xs text-accent-muted mt-1">{{ formatDate(n.updated_at) }}</div>
-          </div>
-          <Icon icon="mdi:chevron-right" class="text-accent-muted shrink-0 mt-1" />
         </button>
       </div>
     </div>

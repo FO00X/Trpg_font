@@ -1,24 +1,49 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@plugin "daisyui";
 
-@layer base {
-  body {
-    @apply bg-chat-bg text-[#cdd6f4] antialiased;
-  }
-}
-
-/* 滚动条样式 */
+/* 滚动条 */
 .scroll-thin::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 .scroll-thin::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: transparent;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-accent-muted/50;
+  border-radius: 9999px;
+  background: var(--color-neutral-content);
 }
 .scroll-thin::-webkit-scrollbar-thumb:hover {
-  @apply bg-accent-muted;
+  background: var(--color-neutral-content);
+}
+
+/* 路由动画 */
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active,
+.fade-enter-active,
+.fade-leave-active {
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease;
+  will-change: transform, opacity;
+}
+.slide-left-enter-from {
+  transform: translateX(100%);
+  opacity: 0.5;
+}
+.slide-left-leave-to {
+  transform: translateX(-30%);
+  opacity: 0;
+}
+.slide-right-enter-from {
+  transform: translateX(-30%);
+  opacity: 0.5;
+}
+.slide-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }

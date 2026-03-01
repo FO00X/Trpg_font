@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'flex items-center gap-2 text-accent-muted',
+      'flex items-center gap-2 text-base-content',
       block ? 'w-full justify-center py-12' : '',
       className,
     ]"

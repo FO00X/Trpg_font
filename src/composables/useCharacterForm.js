@@ -20,10 +20,10 @@ export const occupationOptions = [
   '神职人员', '神秘学家', '探险家', '飞行员', '水手', '演员', '舞蹈家', '音乐家', '摄影师',
 ]
 
-export const inputCls = 'w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white placeholder-accent-muted focus:border-accent outline-none'
-export const labelCls = 'block text-sm text-[#a6adc8] mb-1'
-export const sectionCls = 'rounded-xl bg-chat-panel border border-chat-border p-4'
-export const sectionTitleCls = 'text-sm font-medium text-accent-muted uppercase tracking-wider mb-3'
+export const inputCls = 'w-full px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content placeholder-accent-muted focus:border-accent outline-none'
+export const labelCls = 'block text-sm text-base-content/60 mb-1'
+export const sectionCls = 'rounded-xl bg-base-100 border border-base-200 p-4'
+export const sectionTitleCls = 'text-sm font-semibold text-base-content uppercase tracking-wider mb-3'
 
 const ROLL_CACHE_STORAGE_KEY = 'foxtrpg-roll-cache'
 function loadRollCacheFromStorage() {
@@ -42,7 +42,8 @@ function saveRollCacheToStorage(all) {
   } catch (_) {}
 }
 
-export function useCharacterForm() {
+export function useCharacterForm(options = {}) {
+  const { confirmFn } = options
   const route = useRoute()
   const router = useRouter()
   const {
@@ -307,8 +308,17 @@ export function useCharacterForm() {
     }
   }
 
-  function goBack(force = false) {
-    if (!force && isDirty.value && !window.confirm('当前有未保存的修改，确定要离开吗？')) return
+  async function goBack(force = false) {
+    if (!force && isDirty.value) {
+      const message = '当前有未保存的修改，确定要离开吗？'
+      let confirmed = false
+      if (confirmFn) {
+        confirmed = await confirmFn('确认离开', message)
+      } else {
+        confirmed = window.confirm(message)
+      }
+      if (!confirmed) return
+    }
     isDirty.value = false
     if (window.history.length > 1) {
       router.back()

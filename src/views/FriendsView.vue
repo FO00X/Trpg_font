@@ -2,20 +2,17 @@
   <div class="flex flex-col h-full">
     <!-- 私聊时：只显示聊天区域 + 返回 -->
     <template v-if="dmChannelId">
-      <header class="h-14 shrink-0 flex items-center gap-2 px-4 border-b border-chat-border bg-chat-panel">
-        <button
-          type="button"
-          class="p-2 -ml-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 transition-colors"
-          title="返回好友列表"
-          @click="closeDm"
-        >
+      <header class="navbar h-14 shrink-0 px-4 border-b border-base-300 bg-base-200 rounded-none">
+        <button type="button" class="btn btn-ghost btn-square btn-sm" title="返回好友列表" @click="closeDm">
           <Icon icon="mdi:arrow-left" class="text-xl" />
         </button>
-        <div class="w-9 h-9 rounded-full bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0">
-          <img v-if="currentChannel?.avatar" :src="currentChannel.avatar" alt="" class="w-full h-full object-cover" />
-          <Icon v-else icon="mdi:account" class="text-xl text-accent" />
+        <div class="avatar placeholder shrink-0">
+          <div class="w-9 rounded-full bg-base-100 text-primary flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+            <img v-if="currentChannel?.avatar" :src="currentChannel.avatar" alt="" class="w-full h-full object-cover" />
+            <Icon v-else icon="mdi:account" class="text-xl" />
+          </div>
         </div>
-        <h1 class="font-semibold text-white truncate flex-1">{{ currentChannel?.name || '私聊' }}</h1>
+        <h1 class="font-semibold text-base-content truncate flex-1 ml-2">{{ currentChannel?.name || '私聊' }}</h1>
       </header>
       <div class="flex-1 min-h-0 flex flex-col">
         <MessageList class="flex-1 overflow-y-auto min-h-0" />
@@ -27,12 +24,7 @@
     <template v-else>
       <PageHeader title="好友" icon="mdi:account-group">
         <template #actions>
-          <button
-            type="button"
-            class="p-2 rounded-full bg-white/10 text-white/80 hover:text-white hover:bg-white/30 transition-colors"
-            title="添加好友"
-            @click="showAddFriend = true"
-          >
+          <button type="button" class="btn btn-primary btn-circle btn-sm" title="添加好友" @click="showAddFriend = true">
             <Icon icon="mdi:account-plus" class="text-xl" />
           </button>
         </template>
@@ -40,144 +32,109 @@
 
       <div class="flex-1 overflow-y-auto scroll-thin p-4 space-y-6">
       <!-- 添加好友弹窗 -->
-      <div
-        v-if="showAddFriend"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-        @click.self="showAddFriend = false"
-      >
-        <div class="w-full max-w-sm rounded-xl bg-chat-panel border border-chat-border p-4 shadow-xl">
-          <h3 class="text-lg font-semibold text-white mb-3">添加好友</h3>
-          <p class="text-sm text-accent-muted mb-2">输入对方的用户名（与个人资料中的昵称一致）</p>
-          <div class="flex gap-2 mb-3">
-            <input
-              v-model="addFriendInput"
-              type="text"
-              placeholder="用户名"
-              class="flex-1 px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white placeholder-accent-muted focus:border-accent outline-none text-sm"
-              @keydown.enter="onSendRequest"
-            />
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90 disabled:opacity-50 text-sm"
-              :disabled="!addFriendInput.trim() || addFriendLoading"
-              @click="onSendRequest"
-            >
+      <dialog :open="showAddFriend" class="modal" @click="showAddFriend = false">
+        <div class="modal-box max-w-sm" @click.stop>
+          <h3 class="font-semibold text-lg text-base-content mb-3">添加好友</h3>
+          <p class="text-sm text-base-content/60 mb-2">输入对方的用户名（与个人资料中的昵称一致）</p>
+          <div class="flex gap-2 mb-3 items-center">
+            <input v-model="addFriendInput" type="text" placeholder="用户名" class="input input-bordered flex-1 text-sm" @keydown.enter="onSendRequest" />
+            <button type="button" class="btn btn-primary" :disabled="!addFriendInput.trim() || addFriendLoading" @click="onSendRequest">
               {{ addFriendLoading ? '发送中…' : '发送' }}
             </button>
           </div>
-          <p v-if="addFriendError" class="text-sm text-red-400 mb-2">{{ addFriendError }}</p>
-          <p v-if="addFriendSuccess" class="text-sm text-green-400 mb-2">已发送好友请求</p>
-          <button
-            type="button"
-            class="w-full py-2 rounded-lg border border-chat-border text-accent-muted hover:text-white text-sm"
-            @click="showAddFriend = false; addFriendError = ''; addFriendSuccess = false"
-          >
-            关闭
-          </button>
+          <div v-if="addFriendError" class="alert alert-error text-sm mb-2">{{ addFriendError }}</div>
+          <div v-if="addFriendSuccess" class="alert alert-success text-sm mb-2">已发送好友请求</div>
+          <button type="button" class="btn btn-ghost btn-sm w-full" @click="showAddFriend = false; addFriendError = ''; addFriendSuccess = false">关闭</button>
         </div>
-      </div>
+        <form method="dialog" class="modal-backdrop"><button type="button" @click="showAddFriend = false">Close</button></form>
+      </dialog>
 
-      <!-- 收到的请求 -->
       <section v-if="pendingReceived.length > 0" class="space-y-2">
-        <h2 class="text-sm font-medium text-accent-muted uppercase tracking-wider">收到的请求</h2>
-        <div
-          v-for="req in pendingReceived"
-          :key="req.id"
-          class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border"
-        >
-          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
-            <img v-if="req.from_avatar" :src="req.from_avatar" alt="" class="w-full h-full object-cover" />
-            <Icon v-else icon="mdi:account" class="text-xl text-accent" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-white truncate">{{ req.from_name }}</div>
-            <div class="text-xs text-accent-muted">请求添加你为好友</div>
-          </div>
-          <div class="flex gap-2 shrink-0">
-            <button
-              type="button"
-              class="px-3 py-1.5 rounded-lg bg-accent/20 text-accent hover:bg-accent/30 text-sm font-medium"
-              @click="onAcceptRequest(req.id)"
-            >
-              同意
-            </button>
-            <button
-              type="button"
-              class="px-3 py-1.5 rounded-lg border border-chat-border text-accent-muted hover:text-white text-sm"
-              @click="onRejectRequest(req.id)"
-            >
-              拒绝
-            </button>
+        <h2 class="text-sm font-medium text-base-content/60 uppercase tracking-wider">收到的请求</h2>
+        <div v-for="req in pendingReceived" :key="req.id" class="card card-bordered bg-base-200">
+          <div class="card-body flex-row items-center gap-3 p-3">
+            <div class="avatar placeholder shrink-0">
+              <div class="w-10 rounded-full bg-base-100 text-primary flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                <img v-if="req.from_avatar" :src="req.from_avatar" alt="" class="w-full h-full object-cover" />
+                <Icon v-else icon="mdi:account" class="text-xl" />
+              </div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-base-content truncate">{{ req.from_name }}</div>
+              <div class="text-xs text-base-content/60">请求添加你为好友</div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+              <button type="button" class="btn btn-primary btn-sm" @click="onAcceptRequest(req.id)">同意</button>
+              <button type="button" class="btn btn-ghost btn-sm" @click="onRejectRequest(req.id)">拒绝</button>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- 已发送的请求 -->
       <section v-if="pendingSent.length > 0" class="space-y-2">
-        <h2 class="text-sm font-medium text-accent-muted uppercase tracking-wider">已发送</h2>
-        <div
-          v-for="req in pendingSent"
-          :key="req.id"
-          class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border"
-        >
-          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
-            <img v-if="req.to_avatar" :src="req.to_avatar" alt="" class="w-full h-full object-cover" />
-            <Icon v-else icon="mdi:account-clock" class="text-xl text-accent-muted" />
+        <h2 class="text-sm font-medium text-base-content/60 uppercase tracking-wider">已发送</h2>
+        <div v-for="req in pendingSent" :key="req.id" class="card card-bordered bg-base-200">
+          <div class="card-body flex-row items-center gap-3 p-3">
+            <div class="avatar placeholder shrink-0">
+              <div class="w-10 rounded-full bg-base-100 text-primary flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                <img v-if="req.to_avatar" :src="req.to_avatar" alt="" class="w-full h-full object-cover" />
+                <Icon v-else icon="mdi:account-clock" class="text-xl text-base-content/50" />
+              </div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-base-content truncate">{{ req.to_name }}</div>
+              <div class="text-xs text-base-content/60">等待对方同意</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm shrink-0" @click="onCancelSentRequest(req.id)">撤回</button>
           </div>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-white truncate">{{ req.to_name }}</div>
-            <div class="text-xs text-accent-muted">等待对方同意</div>
-          </div>
-          <button
-            type="button"
-            class="px-3 py-1.5 rounded-lg border border-chat-border text-accent-muted hover:text-white text-sm shrink-0"
-            @click="onCancelSentRequest(req.id)"
-          >
-            撤回
-          </button>
         </div>
       </section>
 
-      <!-- 好友列表 -->
       <section class="space-y-2">
-        <h2 class="text-sm font-medium text-accent-muted uppercase tracking-wider">我的好友</h2>
+        <h2 class="text-sm font-medium text-base-content/60 uppercase tracking-wider">我的好友</h2>
         <div
           v-for="f in friends"
           :key="f.id"
-          class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors cursor-pointer group"
+          class="card card-bordered bg-base-200 hover:border-primary/40 transition-colors cursor-pointer group"
           @click="startDirectMessage(f)"
         >
-          <div class="w-10 h-10 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 overflow-hidden">
-            <img v-if="f.avatar" :src="f.avatar" alt="" class="w-full h-full object-cover" />
-            <Icon v-else icon="mdi:account" class="text-xl text-accent" />
+          <div class="card-body flex-row items-center gap-3 p-3">
+          <div class="avatar placeholder shrink-0">
+            <div class="w-10 rounded-full bg-base-100 text-primary flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+              <img v-if="f.avatar" :src="f.avatar" alt="" class="w-full h-full object-cover" />
+              <Icon v-else icon="mdi:account" class="text-xl" />
+            </div>
           </div>
           <div class="flex-1 min-w-0">
-            <div class="font-medium text-white truncate">{{ f.name }}</div>
-            <div class="text-sm text-accent-muted truncate">{{ f.lastMsg || '点击发起私聊' }}</div>
+            <div class="font-medium text-base-content truncate">{{ f.name }}</div>
+            <div class="text-sm text-base-content/60 truncate">{{ f.lastMsg || '点击发起私聊' }}</div>
           </div>
-          <button
-            type="button"
-            class="p-1.5 rounded-lg text-accent-muted hover:text-white hover:bg-white/10 opacity-70 group-hover:opacity-100 transition-opacity"
-            title="发消息"
-            @click.stop="startDirectMessage(f)"
-          >
+          <button type="button" class="btn btn-ghost btn-square btn-sm opacity-70 group-hover:opacity-100" title="发消息" @click.stop="startDirectMessage(f)">
             <Icon icon="mdi:message-text" class="text-lg" />
           </button>
-          <button
-            type="button"
-            class="p-1.5 rounded-lg text-accent-muted hover:text-red-400 hover:bg-white/10 opacity-70 group-hover:opacity-100 transition-opacity"
-            title="删除好友"
-            @click.stop="onRemoveFriend(f)"
-          >
+          <button type="button" class="btn btn-ghost btn-square btn-sm text-error opacity-70 group-hover:opacity-100" title="删除好友" @click.stop="onRemoveFriend(f)">
             <Icon icon="mdi:account-minus" class="text-lg" />
           </button>
+          </div>
         </div>
-        <p v-if="!friends.length && !pendingReceived.length && !pendingSent.length" class="text-center text-accent-muted py-8">
+        <p v-if="!friends.length && !pendingReceived.length && !pendingSent.length" class="text-center text-base-content/60 py-8">
           暂无好友，点击右上角「+」添加好友或等待他人通过你的请求。
         </p>
       </section>
       </div>
     </template>
+
+    <!-- Toast 提示 -->
+    <Toast ref="toastRef" />
+    
+    <!-- 确认对话框 -->
+    <ConfirmDialog
+      v-model:visible="confirmDialogVisible"
+      :title="confirmDialogTitle"
+      :message="confirmDialogMessage"
+      @confirm="confirmDialogResolve"
+      @cancel="confirmDialogReject"
+    />
   </div>
 </template>
 
@@ -188,6 +145,8 @@ import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 import MessageList from '../components/MessageList.vue'
 import MessageInput from '../components/MessageInput.vue'
+import Toast from '../components/Toast.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useChatStore } from '../stores/chat'
 import { useFriendsStore } from '../stores/friends'
 
@@ -214,6 +173,30 @@ const addFriendInput = ref('')
 const addFriendLoading = ref(false)
 const addFriendError = ref('')
 const addFriendSuccess = ref(false)
+
+// Toast 和确认对话框
+const toastRef = ref(null)
+const confirmDialogVisible = ref(false)
+const confirmDialogTitle = ref('确认')
+const confirmDialogMessage = ref('')
+let confirmDialogResolve = null
+let confirmDialogReject = null
+
+function showToast(message, duration = 3000) {
+  if (toastRef.value) {
+    toastRef.value.show(message, duration)
+  }
+}
+
+function showConfirm(title, message) {
+  return new Promise((resolve) => {
+    confirmDialogTitle.value = title
+    confirmDialogMessage.value = message
+    confirmDialogVisible.value = true
+    confirmDialogResolve = () => resolve(true)
+    confirmDialogReject = () => resolve(false)
+  })
+}
 
 async function loadAll() {
   await Promise.all([fetchFriends(), fetchPendingReceived(), fetchPendingSent()])
@@ -269,7 +252,7 @@ async function onSendRequest() {
 
 async function onAcceptRequest(requestId) {
   const res = await acceptRequest(requestId)
-  if (!res.ok) alert(res.message || '操作失败')
+  if (!res.ok) showToast(res.message || '操作失败')
 }
 
 async function onRejectRequest(requestId) {
@@ -281,8 +264,9 @@ async function onCancelSentRequest(requestId) {
 }
 
 async function onRemoveFriend(friend) {
-  if (!confirm(`确定要删除好友「${friend.name}」吗？`)) return
+  const confirmed = await showConfirm('确认删除', `确定要删除好友「${friend.name}」吗？`)
+  if (!confirmed) return
   const res = await removeFriend(friend.id)
-  if (!res.ok) alert(res.message || '操作失败')
+  if (!res.ok) showToast(res.message || '操作失败')
 }
 </script>

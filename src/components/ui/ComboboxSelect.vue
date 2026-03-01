@@ -42,12 +42,12 @@ function displayValue(item) {
       <div class="relative">
         <ComboboxInput
           :display-value="displayValue"
-          class="w-full rounded-lg bg-chat-bg border border-chat-border py-2 pl-3 pr-10 text-left text-white placeholder-accent-muted focus:border-accent outline-none"
+          class="w-full rounded-lg bg-base-100 border border-base-300 py-2 pl-3 pr-10 text-left text-base-content placeholder-accent-muted focus:border-accent outline-none"
           :placeholder="placeholder"
           @change="onInputChange"
         />
         <ComboboxButton class="absolute inset-y-0 right-0 flex items-center pr-2">
-          <Icon icon="mdi:chevron-down" class="h-5 w-5 text-accent-muted" aria-hidden="true" />
+          <Icon icon="mdi:chevron-down" class="h-5 w-5 text-base-content" aria-hidden="true" />
         </ComboboxButton>
         <Transition
           leave-active-class="transition ease-in duration-100"
@@ -55,7 +55,7 @@ function displayValue(item) {
           leave-to-class="opacity-0"
         >
           <ComboboxOptions
-            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-chat-panel border border-chat-border py-1 shadow-lg focus:outline-none"
+            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-base-200 border border-base-300 py-1 shadow-lg focus:outline-none"
           >
             <ComboboxOption
               v-for="opt in filteredOptions"
@@ -67,7 +67,7 @@ function displayValue(item) {
               <li
                 :class="[
                   'relative cursor-pointer select-none py-2 pl-3 pr-9',
-                  active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
+                  active ? 'bg-base-200 text-base-content' : 'text-[#a6adc8]',
                   selected && 'bg-accent/20 text-accent',
                 ]"
               >

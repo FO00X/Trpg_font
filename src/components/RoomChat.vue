@@ -1,20 +1,33 @@
 <template>
   <div class="flex flex-col h-full">
+    <!-- 内联提示（替代 Toast） -->
+    <div
+      v-if="alertMessage"
+      role="alert"
+      class="alert gap-2 py-2 px-4 text-sm shrink-0 rounded-none border-0 border-b border-base-300/50"
+      :class="alertClass"
+    >
+      <Icon :icon="alertIcon" class="text-lg shrink-0" />
+      <span>{{ alertMessage }}</span>
+      <button type="button" class="btn btn-ghost btn-xs btn-square ml-auto" aria-label="关闭" @click="alertMessage = ''">
+        <Icon icon="mdi:close" class="text-lg" />
+      </button>
+    </div>
     <!-- 消息列表 -->
     <div ref="listEl" class="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-2">
       <template v-for="m in messages" :key="m.id">
-        <!-- 骰娘 / 系统 / 暗骰 / 请求检定 消息：居中提示样式 -->
+        <!-- 系统通知：掷骰、暗骰、技能检定等，不作为说话人展示 -->
         <div
           v-if="m.type === 'system' || m.type === 'hidden_roll' || m.type === 'hidden_skill' || m.type === 'check_request'"
-          class="flex justify-center my-1 text-[11px] text-accent-muted"
+          class="flex justify-center my-1 text-[11px] text-base-content"
         >
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-chat-panel/60 border border-dashed border-accent-muted/40">
-            <Icon icon="mdi:dice-multiple" class="text-sm" />
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-base-200/50 border border-accent-muted/30">
+            <Icon icon="mdi:information-outline" class="text-sm" />
             <span>{{ getMessageContent(m) }}</span>
           </div>
         </div>
 
-        <!-- 普通聊天消息 -->
+        <!-- 普通聊天消息（小说式：角色说话 / KP 环境描写） -->
         <div
           v-else
           :class="[
@@ -23,65 +36,63 @@
           ]"
         >
           <div
-            class="w-8 h-8 rounded-full bg-sidebar-active flex items-center justify-center shrink-0 text-accent text-xs font-medium"
+            class="w-8 h-8 rounded-full bg-base-100-active flex items-center justify-center shrink-0 text-accent text-xs font-medium"
           >
             {{ m.userName.slice(0, 1).toUpperCase() }}
           </div>
           <div :class="['max-w-[75%] flex flex-col', m.isSelf ? 'items-end' : 'items-start']">
-            <div class="flex items-baseline gap-2 mb-0.5">
+            <div class="flex items-baseline gap-2 mb-1">
               <span
-                class="px-2 py-0.5 rounded text-[11px] font-medium"
+                class="px-2 py-0.5 rounded-md text-[10px] font-bold"
                 :class="getSpeakerBadge(m).class"
               >
                 {{ getSpeakerBadge(m).text }}
               </span>
-              <span class="text-xs font-medium text-white">{{ getSpeakerName(m) }}</span>
-              <span class="text-[11px] text-accent-muted">{{ formatTime(m.time) }}</span>
+              <span class="text-xs font-bold text-base-content">{{ getSpeakerName(m) }}</span>
+              <span class="text-[10px] text-base-content/40">{{ formatTime(m.time) }}</span>
             </div>
+            <!-- KP：环境描写/叙事风格；PL：角色对话（他人消息加「」） -->
             <div
               :class="[
-                'px-3 py-2 rounded-2xl text-sm break-words whitespace-pre-wrap',
-                m.isSelf
-                  ? 'bg-accent text-chat-bg rounded-br-md'
-                  : 'bg-chat-panel border border-chat-border rounded-bl-md',
+                'px-4 py-2.5 text-sm break-words whitespace-pre-wrap shadow-sm leading-relaxed',
+                m.speakerRole === 'kp'
+                  ? 'rounded-2xl bg-base-200 text-base-content/80 border-l-4 border-primary rounded-tl-sm'
+                  : m.isSelf
+                    ? 'rounded-3xl rounded-br-sm bg-primary text-primary-content shadow-primary/20'
+                    : 'rounded-3xl rounded-bl-sm bg-base-100 border border-base-200',
               ]"
             >
-              {{ getMessageContent(m) }}
+              <template v-if="m.speakerRole !== 'kp' && !m.isSelf">
+                <span class="text-base-content">「</span>{{ getMessageContent(m) }}<span class="text-base-content">」</span>
+              </template>
+              <template v-else>
+                {{ getMessageContent(m) }}
+              </template>
             </div>
           </div>
         </div>
       </template>
-      <div v-if="!messages.length && !loading" class="text-center text-xs text-accent-muted py-6">
+      <div v-if="!messages.length && !loading" class="text-center text-xs text-base-content py-6">
         暂无消息，开始在房间里说点什么吧～
       </div>
       <LoadingSpinner v-if="loading" :block="false" size="sm" message="加载中…" className="justify-center py-4" />
     </div>
 
-    <!-- 输入区 + 功能按钮 / 面板 -->
-    <div class="border-t border-chat-border px-3 py-2 flex flex-col gap-1">
-      <div class="flex items-center gap-2 text-[11px] text-accent-muted">
-        <div class="relative">
-          <button
-            type="button"
-            class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5"
-            @click="activeTool = activeTool === 'dice' ? null : 'dice'"
-          >
-            <Icon icon="mdi:dice-multiple" class="text-base" />
-            <span>掷骰</span>
-          </button>
-        </div>
+    <div class="border-t border-base-200/50 bg-base-100 px-3 py-2 flex flex-col gap-2 pb-safe">
+      <div class="flex items-center gap-2 text-xs text-base-content/60 px-1 overflow-x-auto scroll-thin">
         <button
-          v-if="isOwner"
           type="button"
-          class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5"
-          @click="activeTool = activeTool === 'request' ? null : 'request'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all active:scale-95 whitespace-nowrap"
+          :class="activeTool === 'dice' ? 'bg-primary/10 text-primary font-medium' : 'bg-base-200 hover:bg-base-300'"
+          @click="activeTool = activeTool === 'dice' ? null : 'dice'"
         >
-          <Icon icon="mdi:account-question-outline" class="text-base" />
-          <span>请求检定</span>
+          <Icon icon="mdi:dice-multiple" class="text-base" />
+          <span>掷骰</span>
         </button>
         <button
           type="button"
-          class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all active:scale-95 whitespace-nowrap"
+          :class="activeTool === 'stat' ? 'bg-primary/10 text-primary font-medium' : 'bg-base-200 hover:bg-base-300'"
           @click="activeTool = activeTool === 'stat' ? null : 'stat'"
         >
           <Icon icon="mdi:pencil-plus-outline" class="text-base" />
@@ -89,7 +100,7 @@
         </button>
         <button
           type="button"
-          class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-base-200 hover:bg-base-300 transition-all active:scale-95 whitespace-nowrap"
           @click="skillCheck"
         >
           <Icon icon="mdi:account-search-outline" class="text-base" />
@@ -97,154 +108,40 @@
         </button>
       </div>
 
-      <!-- 房主专用：请求检定面板 -->
       <!-- 掷骰面板 -->
       <div
         v-if="activeTool === 'dice'"
-        class="mt-1 px-3 py-2 rounded-lg bg-chat-panel border border-chat-border text-[11px] text-accent-muted space-y-2"
+        class="px-4 py-3 rounded-2xl bg-base-200 shadow-sm border border-base-300/50 space-y-3"
       >
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="shrink-0">骰子：</span>
-          <div class="flex flex-wrap gap-1">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="text-xs font-bold text-base-content/50 shrink-0">骰子</span>
+          <div class="flex flex-wrap gap-2">
             <button
               v-for="d in diceOptions"
               :key="d"
               type="button"
-              class="px-2 py-0.5 rounded-md border border-chat-border text-[11px]"
-              :class="selectedDice === d ? 'bg-accent/20 text-accent border-accent/60' : 'text-accent-muted hover:text-white hover:bg-white/5'"
+              class="px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
+              :class="selectedDice === d ? 'bg-primary text-primary-content shadow-sm shadow-primary/30' : 'bg-base-100 text-base-content/70 hover:bg-base-300'"
               @click="selectedDice = d"
             >
               {{ d }}
             </button>
           </div>
         </div>
-        <div class="flex justify-end gap-2 pt-1">
+        <div class="flex justify-end gap-2 pt-2 border-t border-base-300/50">
           <button
             type="button"
-            class="px-3 py-1 rounded-lg border border-chat-border text-[11px] text-accent-muted hover:text-white hover:bg-white/5"
+            class="px-4 py-1.5 rounded-xl text-xs font-medium bg-base-100 text-base-content/60 hover:bg-base-300 active:scale-95 transition-all"
             @click="activeTool = null"
           >
             取消
           </button>
           <button
             type="button"
-            class="px-3 py-1 rounded-lg bg-accent text-chat-bg text-[11px] hover:opacity-90"
+            class="px-5 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-content shadow-sm shadow-primary/20 active:scale-95 transition-all"
             @click="rollDice(selectedDice)"
           >
-            掷骰
-          </button>
-        </div>
-      </div>
-
-      <!-- 房主专用：请求检定面板 -->
-      <div
-        v-if="isOwner && activeTool === 'request'"
-        class="mt-1 px-3 py-2 rounded-lg bg-chat-panel border border-chat-border text-[11px] text-accent-muted space-y-2"
-      >
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="shrink-0">目标玩家：</span>
-          <select
-            v-model="requestTargetUserId"
-            class="min-w-[140px] max-w-[220px] px-2 py-1 rounded bg-chat-bg border border-chat-border text-xs text-white outline-none"
-          >
-            <option value="">请选择角色</option>
-            <option
-              v-for="m in roomMembers"
-              :key="m.userId + '-' + m.characterId"
-              :value="m.userId"
-            >
-              {{ m.characterName || '未命名角色' }}
-            </option>
-          </select>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="shrink-0">类型：</span>
-          <div class="inline-flex rounded-lg bg-chat-bg border border-chat-border overflow-hidden">
-            <button
-              type="button"
-              class="px-2 py-1 text-xs"
-              :class="requestKind === 'skill' ? 'bg-accent/20 text-accent' : 'text-accent-muted hover:text-white hover:bg-white/5'"
-              @click="requestKind = 'skill'"
-            >
-              技能
-            </button>
-            <button
-              type="button"
-              class="px-2 py-1 text-xs border-l border-chat-border"
-              :class="requestKind === 'sanity' ? 'bg-accent/20 text-accent' : 'text-accent-muted hover:text-white hover:bg-white/5'"
-              @click="requestKind = 'sanity'"
-            >
-              理智
-            </button>
-            <button
-              type="button"
-              class="px-2 py-1 text-xs border-l border-chat-border"
-              :class="requestKind === 'madness' ? 'bg-accent/20 text-accent' : 'text-accent-muted hover:text-white hover:bg-white/5'"
-              @click="requestKind = 'madness'"
-            >
-              疯狂症状
-            </button>
-          </div>
-        </div>
-
-        <div
-          v-if="requestKind === 'skill'"
-          class="flex flex-wrap items-center gap-2"
-        >
-          <span class="shrink-0">技能：</span>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="px-2 py-1 rounded-lg border border-chat-border text-[11px] text-accent-muted hover:text-white hover:bg-white/5"
-              @click="openSkillPickerForRequest"
-            >
-              选择技能
-            </button>
-          </div>
-          <span class="shrink-0">修正：</span>
-          <input
-            v-model.number="requestSkillModifier"
-            type="number"
-            class="w-16 px-2 py-1 rounded bg-chat-bg border border-chat-border text-xs text-white outline-none"
-          />
-        </div>
-
-        <div
-          v-if="requestKind === 'sanity'"
-          class="flex flex-wrap items-center gap-2"
-        >
-          <span class="shrink-0">理智损失：</span>
-          <span class="shrink-0">成功：</span>
-          <input
-            v-model="requestSanSuccessExpr"
-            type="text"
-            placeholder="0"
-            class="w-20 px-2 py-1 rounded bg-chat-bg border border-chat-border text-xs text-white outline-none"
-          />
-          <span class="shrink-0">失败：</span>
-          <input
-            v-model="requestSanFailExpr"
-            type="text"
-            placeholder="1"
-            class="w-20 px-2 py-1 rounded bg-chat-bg border border-chat-border text-xs text-white outline-none"
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 pt-1">
-          <button
-            type="button"
-            class="px-3 py-1 rounded-lg border border-chat-border text-[11px] text-accent-muted hover:text-white hover:bg-white/5"
-            @click="activeTool = null"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1 rounded-lg bg-accent text-chat-bg text-[11px] hover:opacity-90"
-            @click="sendCheckRequest"
-          >
-            发送请求
+            确认掷骰
           </button>
         </div>
       </div>
@@ -252,22 +149,20 @@
       <!-- 更新属性面板 -->
       <div
         v-if="activeTool === 'stat'"
-        class="mt-1 px-3 py-2 rounded-lg bg-chat-panel border border-chat-border text-[11px] text-accent-muted space-y-2"
+        class="px-4 py-3 rounded-2xl bg-base-200 shadow-sm border border-base-300/50 space-y-3"
       >
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="shrink-0">属性：</span>
+        <div class="flex flex-wrap items-center gap-3">
           <select
             v-model="statAttr"
-            class="px-2 py-1 rounded bg-chat-bg border border-chat-border text-xs text-white outline-none"
+            class="select select-sm select-bordered rounded-xl bg-base-100 text-xs font-medium outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="hp">HP</option>
             <option value="mp">MP</option>
             <option value="san">SAN</option>
           </select>
-          <span class="shrink-0">变动：</span>
           <select
             v-model="statOp"
-            class="px-2 py-1 rounded bg-chat-bg border border-chat-border text-xs text-white outline-none"
+            class="select select-sm select-bordered rounded-xl bg-base-100 text-xs font-medium outline-none focus:ring-2 focus:ring-primary/50 w-16 px-2"
           >
             <option value="-">-</option>
             <option value="+">+</option>
@@ -275,96 +170,73 @@
           <input
             v-model="statExpr"
             type="text"
-            placeholder="例如 1 或 1d6"
-            class="w-24 px-2 py-1 rounded bg-chat-bg border border-chat-border text-xs text-white outline-none"
+            placeholder="如 1 或 1d6"
+            class="input input-sm input-bordered rounded-xl bg-base-100 text-xs w-28 outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>
-        <div class="flex justify-end gap-2 pt-1">
+        <div class="flex justify-end gap-2 pt-2 border-t border-base-300/50">
           <button
             type="button"
-            class="px-3 py-1 rounded-lg border border-chat-border text-[11px] text-accent-muted hover:text-white hover:bg-white/5"
+            class="px-4 py-1.5 rounded-xl text-xs font-medium bg-base-100 text-base-content/60 hover:bg-base-300 active:scale-95 transition-all"
             @click="activeTool = null"
           >
             取消
           </button>
           <button
             type="button"
-            class="px-3 py-1 rounded-lg bg-accent text-chat-bg text-[11px] hover:opacity-90"
+            class="px-5 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-content shadow-sm shadow-primary/20 active:scale-95 transition-all"
             @click="applyStatChangeFromPanel"
           >
-            执行
+            执行更新
           </button>
         </div>
       </div>
+      
       <div class="flex items-end gap-2">
         <textarea
           v-model="input"
           rows="1"
-          placeholder="请输入内容..."
-          class="flex-1 min-h-[40px] max-h-32 px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-sm text-[#cdd6f4] placeholder:text-accent-muted resize-none outline-none"
+          placeholder="请输入内容... (输入 / 可使用指令)"
+          class="flex-1 min-h-[44px] max-h-32 px-4 py-3 rounded-2xl bg-base-200 border-none text-sm text-base-content placeholder:text-base-content/40 resize-none outline-none focus:ring-2 focus:ring-primary/30 transition-all shadow-inner"
           @keydown="onKeydown"
         />
         <button
           type="button"
-          class="px-3 py-2 rounded-xl bg-accent text-chat-bg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="h-[44px] p-3 rounded-full bg-primary text-primary-content flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 shadow-sm shadow-primary/30"
           :disabled="sending || !input.trim()"
           @click="send"
         >
-          <Icon icon="mdi:send" class="text-lg" />
+          <Icon v-if="sending" icon="mdi:loading" class="text-xl animate-spin" />
+          <Icon v-else icon="mdi:send" class="text-xl" />
         </button>
       </div>
     </div>
 
     <!-- 技能选择弹窗 -->
-    <div
-      v-if="skillPickerOpen"
-      class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60"
-    >
-      <div
-        class="w-full max-w-md rounded-xl bg-sidebar border border-chat-border shadow-xl max-h-[80vh] flex flex-col"
-      >
-        <div class="px-4 py-3 border-b border-chat-border flex items-center justify-between">
-          <h2 class="text-sm font-medium text-accent-muted">
-            {{ skillPickerMode === 'self' ? '选择技能进行检定' : '选择要请求的技能' }}
-          </h2>
-          <button
-            type="button"
-            class="p-1.5 rounded-lg text-accent-muted hover:text-white hover:bg-white/5"
-            @click="skillPickerOpen = false"
-          >
-            <Icon icon="mdi:close" class="text-base" />
-          </button>
-        </div>
-        <div class="flex-1 min-h-0 overflow-y-auto scroll-thin p-3 space-y-1">
-          <div
-            v-for="item in skillPickerSkills"
-            :key="item.displayName"
-            class="flex items-center justify-between px-3 py-1.5 rounded-lg bg-chat-bg border border-chat-border hover:border-accent/60 hover:bg-accent/10 cursor-pointer text-xs text-[#a6adc8]"
-            @click="onSelectSkillFromPicker(item)"
-          >
-            <span class="truncate">{{ item.displayName }}</span>
-          </div>
-        </div>
-        <div class="px-4 py-2 border-t border-chat-border flex justify-end">
-          <button
-            type="button"
-            class="px-3 py-1.5 rounded-lg border border-chat-border text-xs text-accent-muted hover:text-white hover:bg-white/5"
-            @click="skillPickerOpen = false"
-          >
-            关闭
-          </button>
+    <BottomSheet v-model:open="skillPickerOpen" :title="skillPickerMode === 'self' ? '选择技能进行检定' : '选择要请求的技能'">
+      <div class="flex-1 min-h-0 space-y-2">
+        <div
+          v-for="item in skillPickerSkills"
+          :key="item.displayName"
+          class="flex items-center justify-between px-4 py-3 rounded-lg bg-base-200 border border-base-300 hover:border-primary/60 hover:bg-primary/10 cursor-pointer active:scale-95 transition-all text-sm text-base-content"
+          @click="onSelectSkillFromPicker(item)"
+        >
+          <span class="truncate">{{ item.displayName }}</span>
+          <Icon icon="mdi:chevron-right" class="text-xl text-base-content/50" />
         </div>
       </div>
-    </div>
+    </BottomSheet>
 
-    <!-- 被请求方本地骰子动画弹窗 -->
+    <!-- 被请求方本地骰子动画弹窗：先掷骰按钮 → 动画 → 结果 → 确定，无取消/关闭 -->
     <DiceRollModal
       :open="checkModalOpen"
       :batch="checkModalBatch"
       :max-rolls="1"
+      :request-mode="true"
       @close="checkModalOpen = false"
       @confirm="handleCheckConfirm"
     />
+
   </div>
 </template>
 
@@ -373,10 +245,12 @@ import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 import DiceRollModal from './DiceRollModal.vue'
+import BottomSheet from './BottomSheet.vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useCharactersStore } from '../stores/characters'
+import { IMMEDIATE_INSANITY_TABLE } from '../data/madnessTable'
 
 const props = defineProps({
   roomId: {
@@ -429,7 +303,111 @@ const checkModalOpen = ref(false)
 const checkModalBatch = ref([])
 const checkRequest = ref(null)
 
+// 内联 Alert 提示（替代 Toast）
+const alertMessage = ref('')
+const alertType = ref('warning') // 'error' | 'warning' | 'info'
+let alertTimer = null
+const alertClass = computed(() => {
+  if (alertType.value === 'error') return 'alert-error'
+  if (alertType.value === 'info') return 'alert-info'
+  return 'alert-warning'
+})
+const alertIcon = computed(() => {
+  if (alertType.value === 'error') return 'mdi:alert-circle-outline'
+  if (alertType.value === 'info') return 'mdi:information-outline'
+  return 'mdi:alert-outline'
+})
+function showToast(message, duration = 3000) {
+  alertType.value = 'warning'
+  alertMessage.value = message
+  if (alertTimer) clearTimeout(alertTimer)
+  alertTimer = setTimeout(() => {
+    alertMessage.value = ''
+    alertTimer = null
+  }, duration)
+}
+function showAlert(message, type = 'warning', duration = 3000) {
+  alertType.value = type
+  alertMessage.value = message
+  if (alertTimer) clearTimeout(alertTimer)
+  alertTimer = setTimeout(() => {
+    alertMessage.value = ''
+    alertTimer = null
+  }, duration)
+}
+
 const channelId = computed(() => `room:${props.roomId}`)
+
+// ==================== 工具函数 ====================
+
+/**
+ * 获取角色卡信息（带缓存和自动获取）
+ */
+async function getCharacterSheet(charId) {
+  if (!charId) return null
+  const { getById, fetchCharacter, normalizeCharacter } = charactersStore
+  let raw = getById(charId)
+  if (!raw) {
+    await fetchCharacter(charId)
+    raw = getById(charId)
+  }
+  return raw ? normalizeCharacter(raw) : null
+}
+
+/**
+ * 获取当前房间绑定的角色卡
+ */
+async function getCurrentRoomCharacter() {
+  const { getRoomCharacter } = gameRoomsStore
+  const charId = getRoomCharacter(props.roomId)
+  if (!charId) return null
+  return await getCharacterSheet(charId)
+}
+
+/**
+ * 获取发言者名称（用于消息显示）
+ */
+async function getSpeakerNameForMessage() {
+  if (isOwner.value) {
+    return 'KP'
+  }
+  const sheet = await getCurrentRoomCharacter()
+  if (sheet) {
+    return sheet.name?.trim() || '未命名角色'
+  }
+  const me = auth.user?.value
+  return me?.username || me?.email?.split?.('@')[0] || '我'
+}
+
+/**
+ * 解析掷骰表达式并执行
+ */
+function parseAndRollDice(expr) {
+  const m = expr.trim().match(/^(\d*)d(\d+)$/i)
+  if (!m) return null
+  
+  const count = m[1] ? Math.max(1, parseInt(m[1], 10)) : 1
+  const sides = Math.max(1, parseInt(m[2], 10))
+  
+  if (count > 100 || sides > 1000) return null
+  
+  const rolls = []
+  let sum = 0
+  for (let i = 0; i < count; i++) {
+    const v = Math.floor(Math.random() * sides) + 1
+    rolls.push(v)
+    sum += v
+  }
+  
+  return {
+    count,
+    sides,
+    rolls,
+    sum,
+    expr: `${count}d${sides}`,
+    detail: count > 1 ? ` = ${rolls.join(' + ')} = ${sum}` : ` = ${sum}`
+  }
+}
 
 function normalizeRow(row) {
   const userId = row.user_id || 'system'
@@ -488,7 +466,7 @@ function getSpeakerName(msg) {
 
 function getSpeakerBadge(msg) {
   if (msg.type === 'system' || msg.type === 'hidden_roll' || msg.type === 'hidden_skill' || msg.type === 'check_request')
-    return { text: '骰娘', class: 'bg-accent-muted/20 text-accent-muted' }
+    return { text: '骰娘', class: 'bg-accent-muted/20 text-base-content' }
   if (msg.speakerRole === 'kp') return { text: 'KP', class: 'bg-blue-500/20 text-blue-400' }
   if (msg.speakerRole === 'npc') return { text: 'NPC', class: 'bg-purple-500/20 text-purple-400' }
   return { text: 'PL', class: 'bg-green-500/20 text-green-400' }
@@ -525,9 +503,12 @@ async function loadMessages() {
 async function openSkillPickerForRequest() {
   // 先校验是否选择了目标玩家
   if (!requestTargetUserId.value) {
-    alert('请先选择要请求检定的目标玩家！');
+    showToast('请先选择要请求检定的目标玩家！');
     return;
   }
+  
+  // 先设置模式为"请求检定"，这样 getCurrentSkillListForPicker 才能正确获取目标玩家的技能列表
+  skillPickerMode.value = 'request';
   
   // 获取目标玩家的技能列表
   const res = await getCurrentSkillListForPicker();
@@ -576,7 +557,7 @@ async function send() {
   if (!text || sending.value) return
   const me = auth.user?.value
   if (!me?.id) {
-    alert('请先登录')
+    showToast('请先登录')
     return
   }
 
@@ -596,18 +577,12 @@ async function send() {
 
     if (isOwner.value) {
       const { getRoomCharacter } = gameRoomsStore
-      const { getById, fetchCharacter, normalizeCharacter } = charactersStore
       const charId = getRoomCharacter(props.roomId)
       if (!charId) {
         speakerRole = 'kp'
       } else {
-        let raw = getById(charId)
-        if (!raw) {
-          await fetchCharacter(charId)
-          raw = getById(charId)
-        }
-        if (raw) {
-          const sheet = normalizeCharacter(raw)
+        const sheet = await getCharacterSheet(charId)
+        if (sheet) {
           speakerRole = 'npc'
           speakerNpcName = sheet.name?.trim() || null
         } else {
@@ -726,7 +701,7 @@ async function applyStatChangeFromPanel() {
   const op = statOp.value === '+' ? '+' : '-'
   const expr = (statExpr.value || '').trim()
   if (!expr) {
-    alert('请填写变动表达式，例如 1 或 1d6。')
+    showToast('请填写变动表达式，例如 1 或 1d6。')
     return
   }
 
@@ -738,25 +713,12 @@ async function applyStatChangeFromPanel() {
   const metaAttr = attrMap[attrKey]
   if (!metaAttr) return
 
-  const { getRoomCharacter } = gameRoomsStore
-  const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-  const charId = getRoomCharacter(props.roomId)
-  if (!charId) {
-    alert('请先在房间右上角选择角色卡，再更新属性。')
+  const sheet = await getCurrentRoomCharacter()
+  if (!sheet) {
+    showToast('请先在房间右上角选择角色卡，再更新属性。')
     return
   }
 
-  let raw = getById(charId)
-  if (!raw) {
-    await fetchCharacter(charId)
-    raw = getById(charId)
-  }
-  if (!raw) {
-    alert('未找到该角色卡信息，请稍后重试。')
-    return
-  }
-
-  const sheet = normalizeCharacter(raw)
   const field = metaAttr.field
   const oldValue = Number(sheet[field] ?? 0) || 0
   const rollInfo = rollAmount(expr)
@@ -780,43 +742,22 @@ async function applyStatChangeFromPanel() {
 }
 
 async function rollDice(diceType = '1d100') {
-  const chosen = diceType
-  const sides = parseInt(chosen.slice(2), 10) || 100
-  const value = Math.floor(Math.random() * sides) + 1
-  const me = auth.user?.value
-
-  let name = ''
-  if (isOwner.value) {
-    name = 'KP'
-  } else {
-    const { getRoomCharacter } = gameRoomsStore
-    const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-    const charId = getRoomCharacter(props.roomId)
-    if (charId) {
-      let raw = getById(charId)
-      if (!raw) {
-        await fetchCharacter(charId)
-        raw = getById(charId)
-      }
-      if (raw) {
-        const sheet = normalizeCharacter(raw)
-        name = sheet.name?.trim() || '未命名角色'
-      }
-    }
-    if (!name) {
-      name = me?.username || me?.email?.split?.('@')[0] || '我'
-    }
+  const rollResult = parseAndRollDice(diceType)
+  if (!rollResult) {
+    showToast('掷骰格式错误')
+    return
   }
-
-  const text = `【掷骰】${name} 掷出 ${chosen} = ${value}`
-  await sendSystemMessage(text);
-  selectedDice.value = '1d100';
+  
+  const name = await getSpeakerNameForMessage()
+  const text = `【掷骰】${name} 掷出 ${rollResult.expr}${rollResult.detail}`
+  await sendSystemMessage(text)
+  selectedDice.value = '1d100'
 }
 
 // 辅助：获取当前房间绑定角色的技能列表（用于弹窗选择）
 async function getCurrentSkillListForPicker() {
   const { getRoomCharacter } = gameRoomsStore
-  const { getById, fetchCharacter, normalizeCharacter, skillDisplayName } = charactersStore
+  const { skillDisplayName } = charactersStore
 
   let charId = null
 
@@ -825,44 +766,38 @@ async function getCurrentSkillListForPicker() {
     const member = roomMembers.value.find((m) => m.userId === requestTargetUserId.value)
     charId = member?.characterId || null
     if (!charId) {
-      alert('该玩家在本房间尚未绑定角色卡，无法进行技能检定。')
+      showToast('该玩家在本房间尚未绑定角色卡，无法进行技能检定。')
       return null
     }
   } else {
     // 自身技能检定时，仍然使用右上角绑定的角色卡
     charId = getRoomCharacter(props.roomId)
     if (!charId) {
-      alert('请先在房间右上角选择角色卡，再进行技能检定。')
+      showToast('请先在房间右上角选择角色卡，再进行技能检定。')
       return null
     }
   }
 
-  let raw = getById(charId)
-  if (!raw) {
-    await fetchCharacter(charId)
-    raw = getById(charId)
-  }
-  if (!raw) {
-    alert('未找到该角色卡信息，请稍后重试。')
+  const sheet = await getCharacterSheet(charId)
+  if (!sheet) {
+    showToast('未找到该角色卡信息，请稍后重试。')
     return null
   }
-
-  const sheet = normalizeCharacter(raw)
   const skills = Array.isArray(sheet.skills) ? sheet.skills : []
   if (!skills.length) {
-    alert('该角色没有技能数据，请先在角色卡中填写技能。')
+    showToast('该角色没有技能数据，请先在角色卡中填写技能。')
     return null
   }
 
   const list = skills
     .map((s) => ({
       raw: s,
-      displayName: charactersStore.skillDisplayName(s),
+      displayName: skillDisplayName(s),
     }))
     .filter((x) => x.displayName)
 
   if (!list.length) {
-    alert('当前角色没有可用的技能名称。')
+    showToast('当前角色没有可用的技能名称。')
     return null
   }
 
@@ -894,22 +829,22 @@ async function onSelectSkillFromPicker(item) {
 // 房主侧：请求某位玩家进行技能 / 理智 / 疯狂症状判定
 async function sendCheckRequest() {
   if (!isOwner.value) {
-    alert('只有房主可以发起请求检定。');
+    showToast('只有房主可以发起请求检定。');
     return;
   }
   const me = auth.user?.value;
   if (!me?.id) {
-    alert('请先登录');
+    showToast('请先登录');
     return;
   }
   const targetUserId = requestTargetUserId.value;
   if (!targetUserId) {
-    alert('请选择要请求的玩家。');
+    showToast('请选择要请求的玩家。');
     return;
   }
   const member = roomMembers.value.find((m) => m.userId === targetUserId);
   if (!member) {
-    alert('未找到该玩家，请稍后重试。');
+    showToast('未找到该玩家，请稍后重试。');
     return;
   }
 
@@ -917,7 +852,7 @@ async function sendCheckRequest() {
   if (kind === 'skill') {
     const name = requestSkillName.value.trim();
     if (!name) {
-      alert('请选择技能。');
+      showToast('请选择技能。');
       return;
     }
   }
@@ -925,7 +860,7 @@ async function sendCheckRequest() {
     const succ = requestSanSuccessExpr.value.trim();
     const fail = requestSanFailExpr.value.trim();
     if (!succ || !fail) {
-      alert('请填写成功/失败时的理智损失，例如：成功 0，失败 1d4。');
+      showToast('请填写成功/失败时的理智损失，例如：成功 0，失败 1d4。');
       return;
     }
   }
@@ -963,36 +898,24 @@ async function sendCheckRequest() {
     requestSanSuccessExpr.value = '';
     requestSanFailExpr.value = '';
   } catch (e) {
-    alert('发送请求失败，请稍后重试。');
+    showToast('发送请求失败，请稍后重试。');
   }
 }
 
-// 输入指令：.ra xxx / .ra xxx+10 走同一套核心逻辑，hidden 表示暗中检定
+/**
+ * 输入指令：.ra xxx / .ra xxx+10 走同一套核心逻辑，hidden 表示暗中检定
+ */
 async function skillCheckByName(keyword, modifier = 0, hidden = false) {
-  // 使用当前房间绑定的角色卡进行技能检定
-  const { getRoomCharacter } = gameRoomsStore
-  const { getById, fetchCharacter, normalizeCharacter, skillSuccess, skillDisplayName } = charactersStore
-
-  const charId = getRoomCharacter(props.roomId)
-  if (!charId) {
-    alert('请先在房间右上角选择角色卡，再进行技能检定。')
+  const sheet = await getCurrentRoomCharacter()
+  if (!sheet) {
+    showToast('请先在房间右上角选择角色卡，再进行技能检定。')
     return
   }
 
-  let raw = getById(charId)
-  if (!raw) {
-    await fetchCharacter(charId)
-    raw = getById(charId)
-  }
-  if (!raw) {
-    alert('未找到该角色卡信息，请稍后重试。')
-    return
-  }
-
-  const sheet = normalizeCharacter(raw)
+  const { skillSuccess, skillDisplayName } = charactersStore
   const skills = Array.isArray(sheet.skills) ? sheet.skills : []
   if (!skills.length) {
-    alert('该角色没有技能数据，请先在角色卡中填写技能。')
+    showToast('该角色没有技能数据，请先在角色卡中填写技能。')
     return
   }
 
@@ -1005,7 +928,7 @@ async function skillCheckByName(keyword, modifier = 0, hidden = false) {
     chosen = skills.find((s) => skillDisplayName(s).includes(keyword))
   }
   if (!chosen) {
-    alert('未在当前角色技能中找到对应技能，请检查名称。')
+    showToast('未在当前角色技能中找到对应技能，请检查名称。')
     return
   }
 
@@ -1033,337 +956,210 @@ async function skillCheckByName(keyword, modifier = 0, hidden = false) {
   }
 }
 
+// ==================== 指令处理函数 ====================
+
+/**
+ * 处理掷骰指令：.r / .r d10 / .r 3d6
+ */
+async function handleRollCommand(text) {
+  const expr = text.slice(2).trim() // 去掉 .r
+  const diceExpr = expr || '1d100'
+  
+  const rollResult = parseAndRollDice(diceExpr)
+  if (!rollResult) {
+    showToast('掷骰指令格式错误，请使用 ".r d100" 或 ".r 3d6" 之类格式。')
+    return true
+  }
+  
+  const name = await getSpeakerNameForMessage()
+  const textMsg = `【掷骰】${name} 掷出 ${rollResult.expr}${rollResult.detail}`
+  await sendSystemMessage(textMsg)
+  return true
+}
+
+/**
+ * 处理暗骰指令：.rh / .rh d10 / .rh 3d6 （结果仅房主可见）
+ */
+async function handleHiddenRollCommand(text) {
+  const expr = text.slice(3).trim() // 去掉 .rh
+  const diceExpr = expr || '1d100'
+  
+  const rollResult = parseAndRollDice(diceExpr)
+  if (!rollResult) {
+    showToast('掷骰指令格式错误，请使用 ".rh d100" 或 ".rh 3d6" 之类格式。')
+    return true
+  }
+  
+  const name = await getSpeakerNameForMessage()
+  const textMsg = `【暗骰】${name} 掷出 ${rollResult.expr}${rollResult.detail}`
+  await sendHiddenMessage(textMsg, 'hidden_roll')
+  return true
+}
+
+/**
+ * 处理理智检定指令：.sc 成功损失/失败损失  例如 .sc 0/1 .sc 1/1d4 .sc 1d10/1d100
+ */
+async function handleSanityCheckCommand(text) {
+  const body = text.slice(3).trim()
+  if (!body) {
+    showToast('用法：.sc <成功时失去理智>/<失败时失去理智>，例如 .sc 0/1 或 .sc 1/1d4')
+    return true
+  }
+  const parts = body.split('/')
+  if (parts.length !== 2) {
+    showToast('用法错误：请使用 ".sc 0/1"、".sc 1/1d4" 或 ".sc 1d10/1d100" 这样的格式。')
+    return true
+  }
+
+  const successExpr = parts[0].trim()
+  const failExpr = parts[1].trim()
+
+  const sheet = await getCurrentRoomCharacter()
+  if (!sheet) {
+    showToast('请先在房间右上角选择角色卡，再进行理智检定。')
+    return true
+  }
+
+  const san = Number(sheet.sanCurrent ?? 0) || 0
+  const d100 = randomD100()
+  const isSuccess = d100 <= san
+  const lossInfo = isSuccess ? rollAmount(successExpr) : rollAmount(failExpr)
+  const loss = lossInfo.total
+
+  let result = isSuccess ? '成功' : '失败'
+  if (d100 === 1) result = '大成功'
+  else if (d100 === 100) result = '大失败'
+
+  const sheetName = sheet.name?.trim() || '未命名角色'
+  const textMsg =
+    `【理智检定】「${sheetName}」进行理智检定（当前SAN ${san}）：` + `1d100 = ${d100}，${result}，失去 ${loss} 点SAN`
+  await sendSystemMessage(textMsg)
+  return true
+}
+
+/**
+ * 处理更新属性指令：.st <属性>±<表达式>，例如 .st HP-1d6 / .st SAN+1
+ */
+async function handleStatCommand(text) {
+  const body = text.slice(3).trim()
+  if (!body) {
+    showToast('用法：.st <属性>±<表达式>，例如 .st HP-1d6 或 .st SAN+1')
+    return true
+  }
+  const m = body.match(/^(\S+)\s*([+-])\s*(\S+)$/)
+  if (!m) {
+    showToast('属性指令格式错误，请使用 ".st HP-1d6" 或 ".st SAN+1" 这样的格式。')
+    return true
+  }
+  const attrRaw = m[1]
+  const op = m[2]
+  const expr = m[3]
+
+  const attrKey = attrRaw.toLowerCase()
+  const attrMap = {
+    hp: { field: 'hpCurrent', label: 'HP' },
+    mp: { field: 'mpCurrent', label: 'MP' },
+    san: { field: 'sanCurrent', label: 'SAN' },
+  }
+  const metaAttr = attrMap[attrKey]
+  if (!metaAttr) {
+    showToast('暂只支持 HP / MP / SAN 三种属性，例如 .st HP-1d6')
+    return true
+  }
+
+  const sheet = await getCurrentRoomCharacter()
+  if (!sheet) {
+    showToast('请先在房间右上角选择角色卡，再更新属性。')
+    return true
+  }
+
+  const field = metaAttr.field
+  const oldValue = Number(sheet[field] ?? 0) || 0
+  const rollInfo = rollAmount(expr)
+  const delta = rollInfo.total
+  const signedDelta = op === '+' ? delta : -delta
+  const newValue = Math.max(0, oldValue + signedDelta)
+
+  const sheetName = sheet.name?.trim() || '未命名角色'
+  const detailText =
+    expr && expr.toLowerCase().includes('d')
+      ? `（表达式 ${expr}，实际 ${rollInfo.detail}）`
+      : expr
+      ? `（表达式 ${expr}）`
+      : ''
+
+  const textMsg =
+    `【属性变化】「${sheetName}」的 ${metaAttr.label}：` +
+    `${oldValue} ${op} ${delta} → ${newValue}${detailText ? '，' + detailText : ''}`
+  await sendSystemMessage(textMsg)
+  return true
+}
+
+/**
+ * 处理技能检定指令：.ra 侦查 / .ra 侦查+10
+ */
+async function handleSkillCheckCommand(text) {
+  const body = text.slice(3).trim()
+  if (!body) {
+    return true
+  }
+
+  const m = body.match(/^(.+?)([+-]\d+)?$/)
+  if (!m) {
+    showToast('技能检定指令格式错误，请使用 ".ra 侦查" 或 ".ra 侦查+10"。')
+    return true
+  }
+  const name = m[1].trim()
+  const modifier = m[2] ? parseInt(m[2], 10) : 0
+
+  await skillCheckByName(name, modifier, false)
+  return true
+}
+
+/**
+ * 处理暗中技能检定指令：.rah 侦查 / .rah 侦查+10
+ */
+async function handleHiddenSkillCheckCommand(text) {
+  const body = text.slice(4).trim()
+  if (!body) {
+    return true
+  }
+
+  const m = body.match(/^(.+?)([+-]\d+)?$/)
+  if (!m) {
+    showToast('技能检定指令格式错误，请使用 ".rah 侦查" 或 ".rah 侦查+10"。')
+    return true
+  }
+  const name = m[1].trim()
+  const modifier = m[2] ? parseInt(m[2], 10) : 0
+
+  await skillCheckByName(name, modifier, true)
+  return true
+}
+
+/**
+ * 主指令处理函数
+ */
 async function handleCommand(raw) {
   const text = raw.trim()
 
   if (text.startsWith('.r ') || text === '.r') {
-    const expr = text.slice(2).trim() // 去掉 .r
-    const diceExpr = expr || '1d100'
-
-    const m = diceExpr.trim().match(/^(\d*)d(\d+)$/i)
-    if (!m) {
-      alert('掷骰指令格式错误，请使用 ".r d100" 或 ".r 3d6" 之类格式。')
-      return true
-    }
-    const count = m[1] ? Math.max(1, parseInt(m[1], 10)) : 1
-    const sides = Math.max(1, parseInt(m[2], 10))
-
-    if (count > 100 || sides > 1000) {
-      alert('掷骰数量或面数过大，请不要超过 100 颗或 1000 面。')
-      return true
-    }
-
-    const rolls = []
-    let sum = 0
-    for (let i = 0; i < count; i++) {
-      const v = Math.floor(Math.random() * sides) + 1
-      rolls.push(v)
-      sum += v
-    }
-
-    const me = auth.user?.value
-    let name = ''
-    if (isOwner.value) {
-      name = 'KP'
-    } else {
-      const { getRoomCharacter } = gameRoomsStore
-      const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-      const charId = getRoomCharacter(props.roomId)
-      if (charId) {
-        let rawChar = getById(charId)
-        if (!rawChar) {
-          await fetchCharacter(charId)
-          rawChar = getById(charId)
-        }
-        if (rawChar) {
-          const sheet = normalizeCharacter(rawChar)
-          name = sheet.name?.trim() || '未命名角色'
-        }
-      }
-      if (!name) {
-        name = me?.username || me?.email?.split?.('@')[0] || '我'
-      }
-    }
-
-    const exprText = `${count}d${sides}`
-    const detail = count > 1 ? ` = ${rolls.join(' + ')} = ${sum}` : ` = ${sum}`
-    const textMsg = `【掷骰】${name} 掷出 ${exprText}${detail}`
-    await sendSystemMessage(textMsg)
-    return true
+    return await handleRollCommand(text)
   }
-
-  // 掷骰指令：.r / .r d10 / .r 3d6
-  if (text.startsWith('.r ') || text === '.r') {
-    const expr = text.slice(2).trim() // 去掉 .r
-    const diceExpr = expr || '1d100'
-
-    const m = diceExpr.trim().match(/^(\d*)d(\d+)$/i)
-    if (!m) {
-      alert('掷骰指令格式错误，请使用 ".r d100" 或 ".r 3d6" 之类格式。')
-      return true
-    }
-    const count = m[1] ? Math.max(1, parseInt(m[1], 10)) : 1
-    const sides = Math.max(1, parseInt(m[2], 10))
-
-    if (count > 100 || sides > 1000) {
-      alert('掷骰数量或面数过大，请不要超过 100 颗或 1000 面。')
-      return true
-    }
-
-    const rolls = []
-    let sum = 0
-    for (let i = 0; i < count; i++) {
-      const v = Math.floor(Math.random() * sides) + 1
-      rolls.push(v)
-      sum += v
-    }
-
-    const me = auth.user?.value
-    let name = ''
-    if (isOwner.value) {
-      name = 'KP'
-    } else {
-      const { getRoomCharacter } = gameRoomsStore
-      const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-      const charId = getRoomCharacter(props.roomId)
-      if (charId) {
-        let rawChar = getById(charId)
-        if (!rawChar) {
-          await fetchCharacter(charId)
-          rawChar = getById(charId)
-        }
-        if (rawChar) {
-          const sheet = normalizeCharacter(rawChar)
-          name = sheet.name?.trim() || '未命名角色'
-        }
-      }
-      if (!name) {
-        name = me?.username || me?.email?.split?.('@')[0] || '我'
-      }
-    }
-
-    const exprText = `${count}d${sides}`
-    const detail = count > 1 ? ` = ${rolls.join(' + ')} = ${sum}` : ` = ${sum}`
-    const textMsg = `【掷骰】${name} 掷出 ${exprText}${detail}`
-    await sendSystemMessage(textMsg)
-    return true
-  }
-
-  // 暗骰指令：.rh / .rh d10 / .rh 3d6 （结果仅房主可见）
   if (text.startsWith('.rh ') || text === '.rh') {
-    const expr = text.slice(3).trim() // 去掉 .rh
-    const diceExpr = expr || '1d100'
-
-    const m = diceExpr.trim().match(/^(\d*)d(\d+)$/i)
-    if (!m) {
-      alert('掷骰指令格式错误，请使用 ".rh d100" 或 ".rh 3d6" 之类格式。')
-      return true
-    }
-    const count = m[1] ? Math.max(1, parseInt(m[1], 10)) : 1
-    const sides = Math.max(1, parseInt(m[2], 10))
-
-    if (count > 100 || sides > 1000) {
-      alert('掷骰数量或面数过大，请不要超过 100 颗或 1000 面。')
-      return true
-    }
-
-    const rolls = []
-    let sum = 0
-    for (let i = 0; i < count; i++) {
-      const v = Math.floor(Math.random() * sides) + 1
-      rolls.push(v)
-      sum += v
-    }
-
-    const me = auth.user?.value
-    let name = ''
-    if (isOwner.value) {
-      name = 'KP'
-    } else {
-      const { getRoomCharacter } = gameRoomsStore
-      const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-      const charId = getRoomCharacter(props.roomId)
-      if (charId) {
-        let rawChar = getById(charId)
-        if (!rawChar) {
-          await fetchCharacter(charId)
-          rawChar = getById(charId)
-        }
-        if (rawChar) {
-          const sheet = normalizeCharacter(rawChar)
-          name = sheet.name?.trim() || '未命名角色'
-        }
-      }
-      if (!name) {
-        name = me?.username || me?.email?.split?.('@')[0] || '我'
-      }
-    }
-
-    const exprText = `${count}d${sides}`
-    const detail = count > 1 ? ` = ${rolls.join(' + ')} = ${sum}` : ` = ${sum}`
-    const textMsg = `【暗骰】${name} 掷出 ${exprText}${detail}`
-    await sendHiddenMessage(textMsg, 'hidden_roll')
-    return true
+    return await handleHiddenRollCommand(text)
   }
-
-  // 理智检定指令：.sc 成功损失/失败损失  例如 .sc 0/1 .sc 1/1d4 .sc 1d10/1d100
   if (text.startsWith('.sc ')) {
-    const body = text.slice(3).trim()
-    if (!body) {
-      alert('用法：.sc <成功时失去理智>/<失败时失去理智>，例如 .sc 0/1 或 .sc 1/1d4')
-      return true
-    }
-    const parts = body.split('/')
-    if (parts.length !== 2) {
-      alert('用法错误：请使用 ".sc 0/1"、".sc 1/1d4" 或 ".sc 1d10/1d100" 这样的格式。')
-      return true
-    }
-
-    const successExpr = parts[0].trim()
-    const failExpr = parts[1].trim()
-
-    const { getRoomCharacter } = gameRoomsStore
-    const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-    const charId = getRoomCharacter(props.roomId)
-    if (!charId) {
-      alert('请先在房间右上角选择角色卡，再进行理智检定。')
-      return true
-    }
-
-    let raw = getById(charId)
-    if (!raw) {
-      await fetchCharacter(charId)
-      raw = getById(charId)
-    }
-    if (!raw) {
-      alert('未找到该角色卡信息，请稍后重试。')
-      return true
-    }
-
-    const sheet = normalizeCharacter(raw)
-    const san = Number(sheet.sanCurrent ?? 0) || 0
-    const d100 = randomD100()
-    const isSuccess = d100 <= san
-    const lossInfo = isSuccess ? rollAmount(successExpr) : rollAmount(failExpr)
-    const loss = lossInfo.total
-
-    let result = isSuccess ? '成功' : '失败'
-    if (d100 === 1) result = '大成功'
-    else if (d100 === 100) result = '大失败'
-
-    const sheetName = sheet.name?.trim() || '未命名角色'
-    const textMsg =
-      `【理智检定】「${sheetName}」进行理智检定（当前SAN ${san}，成功失去 ${successExpr}，失败失去 ${failExpr}）：` +
-      `1d100 = ${d100}，${result}，实际失去 ${loss} 点SAN`
-    await sendSystemMessage(textMsg)
-    return true
+    return await handleSanityCheckCommand(text)
   }
-
-  // 更新属性指令：.st <属性>±<表达式>，例如 .st HP-1d6 / .st SAN+1
   if (text.startsWith('.st ')) {
-    const body = text.slice(3).trim()
-    if (!body) {
-      alert('用法：.st <属性>±<表达式>，例如 .st HP-1d6 或 .st SAN+1')
-      return true
-    }
-    const m = body.match(/^(\S+)\s*([+-])\s*(\S+)$/)
-    if (!m) {
-      alert('属性指令格式错误，请使用 ".st HP-1d6" 或 ".st SAN+1" 这样的格式。')
-      return true
-    }
-    const attrRaw = m[1]
-    const op = m[2]
-    const expr = m[3]
-
-    const attrKey = attrRaw.toLowerCase()
-    const attrMap = {
-      hp: { field: 'hpCurrent', label: 'HP' },
-      mp: { field: 'mpCurrent', label: 'MP' },
-      san: { field: 'sanCurrent', label: 'SAN' },
-    }
-    const metaAttr = attrMap[attrKey]
-    if (!metaAttr) {
-      alert('暂只支持 HP / MP / SAN 三种属性，例如 .st HP-1d6')
-      return true
-    }
-
-    const { getRoomCharacter } = gameRoomsStore
-    const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-    const charId = getRoomCharacter(props.roomId)
-    if (!charId) {
-      alert('请先在房间右上角选择角色卡，再更新属性。')
-      return true
-    }
-
-    let raw = getById(charId)
-    if (!raw) {
-      await fetchCharacter(charId)
-      raw = getById(charId)
-    }
-    if (!raw) {
-      alert('未找到该角色卡信息，请稍后重试。')
-      return true
-    }
-
-    const sheet = normalizeCharacter(raw)
-    const field = metaAttr.field
-    const oldValue = Number(sheet[field] ?? 0) || 0
-    const rollInfo = rollAmount(expr)
-    const delta = rollInfo.total
-    const signedDelta = op === '+' ? delta : -delta
-    const newValue = Math.max(0, oldValue + signedDelta)
-
-    const sheetName = sheet.name?.trim() || '未命名角色'
-    const detailText =
-      expr && expr.toLowerCase().includes('d')
-        ? `（表达式 ${expr}，实际 ${rollInfo.detail}）`
-        : expr
-        ? `（表达式 ${expr}）`
-        : ''
-
-    const textMsg =
-      `【属性变化】「${sheetName}」的 ${metaAttr.label}：` +
-      `${oldValue} ${op} ${delta} → ${newValue}${detailText ? '，' + detailText : ''}`
-    await sendSystemMessage(textMsg)
-    return true
+    return await handleStatCommand(text)
   }
-
-  // 技能检定指令：.ra 侦查 / .ra 侦查+10
   if (text.startsWith('.ra ')) {
-    const body = text.slice(3).trim()
-    if (!body) {
-      return true
-    }
-
-    const m = body.match(/^(.+?)([+-]\d+)?$/)
-    if (!m) {
-      alert('技能检定指令格式错误，请使用 ".ra 侦查" 或 ".ra 侦查+10"。')
-      return true
-    }
-    const name = m[1].trim()
-    const modifier = m[2] ? parseInt(m[2], 10) : 0
-
-    await skillCheckByName(name, modifier, false)
-    return true
+    return await handleSkillCheckCommand(text)
   }
-
-  // 暗中技能检定指令：.rah 侦查 / .rah 侦查+10
   if (text.startsWith('.rah ')) {
-    const body = text.slice(4).trim()
-    if (!body) {
-      return true
-    }
-
-    const m = body.match(/^(.+?)([+-]\d+)?$/)
-    if (!m) {
-      alert('技能检定指令格式错误，请使用 ".rah 侦查" 或 ".rah 侦查+10"。')
-      return true
-    }
-    const name = m[1].trim()
-    const modifier = m[2] ? parseInt(m[2], 10) : 0
-
-    await skillCheckByName(name, modifier, true)
-    return true
+    return await handleHiddenSkillCheckCommand(text)
   }
 
   return false
@@ -1417,19 +1213,13 @@ async function handleCheckConfirm(payload) {
 }
 
 async function handleLocalSkillCheck(meta, value) {
-  const { getRoomCharacter } = gameRoomsStore
-  const { getById, fetchCharacter, normalizeCharacter, skillDisplayName, skillSuccess } = charactersStore
-  const charId = getRoomCharacter(props.roomId)
+  const { skillDisplayName, skillSuccess } = charactersStore
+  // 请求检定必须通过目标角色判定
+  const charId = meta.targetCharacterId
   if (!charId) return
 
-  let raw = getById(charId)
-  if (!raw) {
-    await fetchCharacter(charId)
-    raw = getById(charId)
-  }
-  if (!raw) return
-
-  const sheet = normalizeCharacter(raw)
+  const sheet = await getCharacterSheet(charId)
+  if (!sheet) return
   const skills = Array.isArray(sheet.skills) ? sheet.skills : []
   const keyword = meta.skillName || ''
   if (!keyword) return
@@ -1471,19 +1261,12 @@ async function handleLocalSkillCheck(meta, value) {
 }
 
 async function handleLocalSanCheck(meta, value) {
-  const { getRoomCharacter } = gameRoomsStore
-  const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-  const charId = getRoomCharacter(props.roomId)
+  // 请求检定必须通过目标角色判定
+  const charId = meta.targetCharacterId
   if (!charId) return
 
-  let raw = getById(charId)
-  if (!raw) {
-    await fetchCharacter(charId)
-    raw = getById(charId)
-  }
-  if (!raw) return
-
-  const sheet = normalizeCharacter(raw)
+  const sheet = await getCharacterSheet(charId)
+  if (!sheet) return
   const san = Number(sheet.sanCurrent ?? 0) || 0
   const successExpr = meta.sanSuccessExpr || '0'
   const failExpr = meta.sanFailExpr || '1'
@@ -1498,41 +1281,22 @@ async function handleLocalSanCheck(meta, value) {
 
   const sheetName = sheet.name?.trim() || '未命名角色'
   const text =
-    `【理智检定】「${sheetName}」进行理智检定（当前SAN ${san}，成功失去 ${successExpr}，失败失去 ${failExpr}）：` +
-    `1d100 = ${value}，${result}，实际失去 ${loss} 点SAN`
+    `【理智检定】「${sheetName}」进行理智检定（当前SAN ${san}）：` + `1d100 = ${value}，${result}，失去 ${loss} 点SAN`
   await sendSystemMessage(text)
 }
 
 async function handleLocalMadness(meta, value) {
-  const { getRoomCharacter } = gameRoomsStore
-  const { getById, fetchCharacter, normalizeCharacter } = charactersStore
-  const charId = getRoomCharacter(props.roomId)
+  // 请求检定必须通过目标角色判定
+  const charId = meta.targetCharacterId
   if (!charId) return
 
-  let raw = getById(charId)
-  if (!raw) {
-    await fetchCharacter(charId)
-    raw = getById(charId)
-  }
-  if (!raw) return
-
-  const sheet = normalizeCharacter(raw)
+  const sheet = await getCharacterSheet(charId)
+  if (!sheet) return
   const sheetName = sheet.name?.trim() || '未命名角色'
 
-  const table = [
-    '失语或言语混乱',
-    '恐惧发作，极度惊恐地逃离现场',
-    '强迫症状或重复某个动作',
-    '短暂性失忆，只记得部分事实',
-    '歇斯底里的大笑或大哭',
-    '僵直或发呆，一段时间内无法行动',
-    '妄想自己遭到追杀或监视',
-    '对某个无害事物产生强烈恐惧',
-    '攻击性骤增，冲动性地攻击他人或物品',
-    '自言自语，沉浸在幻觉或幻听中',
-  ]
-  const idx = Math.min(Math.max(value, 1), 10) - 1
-  const symptom = table[idx] || '出现了一种难以言喻的疯狂症状'
+  const id = Math.min(Math.max(Math.floor(Number(value)), 1), 10)
+  const entry = IMMEDIATE_INSANITY_TABLE.find((item) => item.id === id)
+  const symptom = entry ? entry.title : '出现了一种难以言喻的疯狂症状'
   const text = `【疯狂症状】「${sheetName}」抽取到：${symptom}（D10 = ${value}）`
   await sendSystemMessage(text)
 }
@@ -1560,19 +1324,10 @@ onMounted(async () => {
       const res = await gameRoomsStore.fetchRoomCharacterApplications(props.roomId)
       if (res.ok) {
         const list = (res.list || []).filter((x) => x.status === 'accepted')
-        const { getById, fetchCharacter, normalizeCharacter } = charactersStore
         const members = []
         for (const item of list) {
-          let rawChar = getById(item.characterId)
-          if (!rawChar) {
-            await fetchCharacter(item.characterId)
-            rawChar = getById(item.characterId)
-          }
-          let charName = ''
-          if (rawChar) {
-            const sheet = normalizeCharacter(rawChar)
-            charName = sheet.name?.trim() || '未命名角色'
-          }
+          const sheet = await getCharacterSheet(item.characterId)
+          const charName = sheet?.name?.trim() || '未命名角色'
           members.push({
             userId: item.userId,
             characterId: item.characterId,

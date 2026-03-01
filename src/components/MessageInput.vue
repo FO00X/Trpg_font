@@ -1,20 +1,20 @@
 <template>
-  <div class="p-3 sm:p-4 border-t border-chat-border bg-chat-panel shrink-0 min-w-0">
-    <p v-if="isCurrentChannelReadOnly()" class="text-xs text-accent-muted mb-2">
+  <div class="p-3 sm:p-4 border-t border-base-300  shrink-0 min-w-0">
+    <p v-if="isCurrentChannelReadOnly()" class="text-xs text-base-content mb-2">
       当前子频道仅可查看，不可发言。
     </p>
     <div class="flex items-end gap-2 min-w-0">
       <!-- KP 发言角色切换（仅当前频道为子频道且当前用户为该模组 KP 时显示） -->
       <div v-if="isCurrentChannelKP && !isCurrentChannelReadOnly()" class="shrink-0 flex flex-col gap-1 min-w-0">
-        <span class="text-[11px] text-accent-muted px-1 truncate">发言身份</span>
+        <span class="text-[11px] text-base-content px-1 truncate">发言身份</span>
         <Menu as="div" class="relative min-w-0">
           <MenuButton
             type="button"
-            class="h-10 w-[3.5rem] sm:w-auto sm:min-w-[4rem] sm:max-w-[6rem] px-2 sm:px-2.5 pr-7 sm:pr-8 rounded-lg bg-chat-bg border border-chat-border text-sm text-[#cdd6f4] focus:border-accent/50 outline-none cursor-pointer text-left truncate"
+            class="h-10 w-[3.5rem] sm:w-auto sm:min-w-[4rem] sm:max-w-[6rem] px-2 sm:px-2.5 pr-7 sm:pr-8 rounded-lg bg-base-100 border border-base-300 text-sm text-base-content focus:border-accent/50 outline-none cursor-pointer text-left truncate"
             :title="speakerRoleFullLabel"
           >
             <span class="truncate block">{{ speakerRoleDisplayLabel }}</span>
-            <Icon icon="mdi:chevron-down" class="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-accent-muted pointer-events-none shrink-0" />
+            <Icon icon="mdi:chevron-down" class="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content pointer-events-none shrink-0" />
           </MenuButton>
           <transition
             enter-active-class="transition duration-100 ease-out"
@@ -25,11 +25,11 @@
             leave-to-class="opacity-0 scale-95"
           >
             <MenuItems
-              class="absolute left-0 bottom-full mb-1 w-40 max-h-48 overflow-y-auto rounded-lg bg-sidebar border border-chat-border shadow-xl py-0.5 z-[100] focus:outline-none scroll-thin"
+              class="absolute left-0 bottom-full mb-1 w-40 max-h-48 overflow-y-auto rounded-lg bg-base-100 border border-base-300 shadow-xl py-0.5 z-[100] focus:outline-none scroll-thin"
             >
               <button
                 type="button"
-                :class="['w-full px-2.5 py-2 text-left text-sm', speakerRole === 'kp' ? 'bg-accent/20 text-accent' : 'text-[#cdd6f4] hover:bg-white/5']"
+                :class="['w-full px-2.5 py-2 text-left text-sm', speakerRole === 'kp' ? 'bg-accent/20 text-accent' : 'text-base-content hover:bg-base-content/10']"
                 @click="speakerRole = 'kp'"
               >
                 KP
@@ -38,7 +38,7 @@
                 v-for="npc in currentModuleNPCs"
                 :key="npc.id"
                 type="button"
-                :class="['w-full px-2.5 py-2 text-left text-sm truncate', speakerRole === npc.id ? 'bg-accent/20 text-accent' : 'text-[#cdd6f4] hover:bg-white/5']"
+                :class="['w-full px-2.5 py-2 text-left text-sm truncate', speakerRole === npc.id ? 'bg-accent/20 text-accent' : 'text-base-content hover:bg-base-content/10']"
                 :title="npc.name || '未命名'"
                 @click="speakerRole = npc.id"
               >
@@ -49,7 +49,7 @@
         </Menu>
       </div>
       <div
-        class="flex-1 flex gap-1 min-w-0 rounded-xl bg-chat-bg border border-chat-border focus-within:border-accent/50 transition-colors"
+        class="flex-1 flex gap-1 min-w-0 rounded-xl bg-base-100 border border-base-300 focus-within:border-accent/50 transition-colors"
         :class="[
           { 'opacity-60': isCurrentChannelReadOnly() },
           isSingleLine ? 'items-center' : 'items-end',
@@ -62,7 +62,7 @@
           rows="1"
           :disabled="isCurrentChannelReadOnly()"
           :class="[
-            'message-input-textarea flex-1 min-w-0 min-h-[40px] py-2.5 px-3 bg-transparent resize-none outline-none text-[#cdd6f4] placeholder:text-accent-muted text-sm disabled:cursor-not-allowed overflow-y-auto transition-[max-height] duration-200',
+            'message-input-textarea flex-1 min-w-0 min-h-[40px] py-2.5 px-3 bg-transparent resize-none outline-none text-base-content placeholder:text-base-content text-sm disabled:cursor-not-allowed overflow-y-auto transition-[max-height] duration-200',
             inputExpanded ? 'max-h-[70vh]' : 'max-h-24',
           ]"
           @keydown="onKeydown"
@@ -70,7 +70,7 @@
         />
         <button
           type="button"
-          class="p-2 text-accent-muted hover:text-accent hover:bg-white/5 rounded-lg transition-colors shrink-0"
+          class="p-2 text-base-content hover:text-accent hover:bg-base-content/10 rounded-lg transition-colors shrink-0"
           :class="isSingleLine ? '' : 'pb-1'"
           :title="inputExpanded ? '收起输入框' : '展开输入框'"
           :disabled="isCurrentChannelReadOnly()"
@@ -81,7 +81,7 @@
       </div>
       <button
         type="button"
-        class="p-2 sm:p-2.5 rounded-xl bg-accent text-chat-bg hover:opacity-90 transition-opacity shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="p-2 sm:p-2.5 rounded-xl bg-primary text-primary-content hover:opacity-90 transition-opacity shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
         title="发送"
         :disabled="isCurrentChannelReadOnly()"
         @click="submit"

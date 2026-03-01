@@ -9,7 +9,7 @@ const props = defineProps({
 })
 
 const activeCls = 'px-3 py-1.5 rounded-lg border text-sm bg-accent/20 border-accent text-accent'
-const inactiveCls = 'px-3 py-1.5 rounded-lg border text-sm bg-chat-bg border-chat-border text-accent-muted'
+const inactiveCls = 'px-3 py-1.5 rounded-lg border text-sm bg-base-100 border-base-300 text-base-content'
 
 const hasAnyStatus = computed(() => {
   const s = props.sheet

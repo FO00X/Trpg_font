@@ -3,20 +3,8 @@
     <PageHeader title="创建房间" icon="mdi:dice-multiple" :show-back="false" back-label="返回大厅" @back="goBack">
       <template #actions>
         <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border"
-            @click="goBack"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="px-4 py-2 rounded-lg bg-accent text-chat-bg hover:opacity-90 font-medium"
-            @click="confirmCreateRoom"
-          >
-            创建
-          </button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="goBack">取消</button>
+          <button type="button" class="btn btn-primary btn-sm" @click="confirmCreateRoom">创建</button>
         </div>
       </template>
     </PageHeader>
@@ -36,6 +24,9 @@
         </template>
       </GameRoomForm>
     </div>
+
+    <!-- Toast 提示 -->
+    <Toast ref="toastRef" />
   </div>
 </template>
 
@@ -45,10 +36,19 @@ import { useRouter } from 'vue-router'
 import PageHeader from '../components/PageHeader.vue'
 import ModuleSelect from '../components/ModuleSelect.vue'
 import GameRoomForm from '../components/GameRoomForm.vue'
+import Toast from '../components/Toast.vue'
 import { useGameRoomsStore } from '../stores/gameRooms'
 
 const router = useRouter()
 const { availableTags, availableTagGroups, fetchTags, addRoom } = useGameRoomsStore()
+
+// Toast
+const toastRef = ref(null)
+function showToast(message, duration = 3000) {
+  if (toastRef.value) {
+    toastRef.value.show(message, duration)
+  }
+}
 
 onMounted(() => {
   fetchTags()
@@ -67,7 +67,7 @@ async function confirmCreateRoom() {
   const v = roomForm.value || {}
   const name = (v.name || '').trim()
   if (!name) {
-    alert('请填写房间名称')
+    showToast('请填写房间名称')
     return
   }
 
@@ -86,11 +86,11 @@ async function confirmCreateRoom() {
     if (room) {
       goBack()
     } else {
-      alert('创建房间失败，请稍后重试')
+      showToast('创建房间失败，请稍后重试')
     }
   } catch (e) {
     console.error('创建房间出错:', e)
-    alert('创建房间出错，请稍后重试')
+    showToast('创建房间出错，请稍后重试')
   }
 }
 

@@ -13,9 +13,9 @@ const { form, creditDerived } = inject('characterForm')
       <div class="space-y-4">
         <div>
           <label :class="labelCls">信用评价</label>
-          <div class="mt-1 rounded-lg border border-chat-border bg-chat-bg px-3 py-2 text-white">
-            <span class="font-medium text-accent">{{ creditDerived.creditRating }}</span>
-            <p v-if="creditDerived.lifeStyleDesc" class="mt-2 text-sm text-[#a6adc8] whitespace-pre-line leading-relaxed">{{ creditDerived.lifeStyleDesc }}</p>
+          <div class="mt-1 rounded-lg px-3 py-2 text-base-content">
+            <span class="font-medium text-primary">当前经济水平为：{{ creditDerived.creditRating }}</span>
+            <p v-if="creditDerived.lifeStyleDesc" class="mt-2 text-sm text-base-content/60 whitespace-pre-line leading-relaxed">{{ creditDerived.lifeStyleDesc }}</p>
           </div>
         </div>
         <div><label :class="labelCls">随身携带物品/装备</label><textarea v-model="form.possessions.other" rows="2" :class="inputCls" placeholder="请输入随身携带物品/装备，可补充描述" /></div>

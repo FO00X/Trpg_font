@@ -6,7 +6,7 @@
         <input
           v-model="inputValue"
           type="text"
-          class="w-full px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-[#cdd6f4] placeholder:text-accent-muted focus:border-accent/50 outline-none text-sm pr-10"
+          class="w-full px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content placeholder:text-base-content focus:border-accent/50 outline-none text-sm pr-10"
           :placeholder="placeholder"
           @input="onInput"
           @focus="showDropdown = true"
@@ -14,7 +14,7 @@
         />
         <button
           type="button"
-          class="absolute inset-y-0 right-0 flex items-center pr-2 text-accent-muted hover:text-white"
+          class="absolute inset-y-0 right-0 flex items-center pr-2 text-base-content hover:text-base-content"
           @mousedown.prevent="showDropdown = !showDropdown"
         >
           <Icon icon="mdi:chevron-down" class="h-5 w-5" />
@@ -29,7 +29,7 @@
         >
           <div
             v-if="showDropdown && filteredModules.length > 0"
-            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-chat-panel border border-chat-border py-1 shadow-lg"
+            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-base-200 border border-base-300 py-1 shadow-lg"
           >
             <button
               v-for="mod in filteredModules"
@@ -37,7 +37,7 @@
               type="button"
               :class="[
                 'w-full relative cursor-pointer select-none py-2 pl-3 pr-9 flex items-center gap-2 text-left',
-                modelValue === mod.name ? 'bg-accent/20 text-accent' : 'text-[#a6adc8] hover:bg-sidebar-hover hover:text-white',
+                modelValue === mod.name ? 'bg-accent/20 text-accent' : 'text-[#a6adc8] hover:bg-base-200 hover:text-base-content',
               ]"
               @mousedown.prevent
               @click="selectModule(mod.name, mod.icon)"
@@ -58,7 +58,7 @@
       <!-- 图标选择按钮 -->
       <button
         type="button"
-        class="w-10 h-10 rounded-lg bg-chat-bg border border-chat-border flex items-center justify-center hover:border-accent/50 transition-colors shrink-0"
+        class="w-10 h-10 rounded-lg bg-base-100 border border-base-300 flex items-center justify-center hover:border-accent/50 transition-colors shrink-0"
         title="选择图标"
         @click="iconPickerOpen = true"
       >
@@ -70,14 +70,14 @@
     <Dialog :open="iconPickerOpen" @close="iconPickerOpen = false" class="relative z-50">
       <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
       <div class="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel class="mx-auto w-full max-w-md rounded-xl bg-chat-panel border border-chat-border shadow-xl">
+        <DialogPanel class="mx-auto w-full max-w-md rounded-xl bg-base-200 border border-base-300 shadow-xl">
           <DialogTitle class="sr-only">选择图标</DialogTitle>
           <div class="p-4">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-white">选择图标</h3>
+              <h3 class="text-lg font-semibold text-base-content">选择图标</h3>
               <button
                 type="button"
-                class="p-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/5"
+                class="p-2 rounded-lg text-base-content hover:text-base-content hover:bg-base-content/10"
                 @click="iconPickerOpen = false"
               >
                 <Icon icon="mdi:close" class="text-xl" />
@@ -92,7 +92,7 @@
                   'p-2 rounded-lg border transition-colors',
                   currentIcon === icon
                     ? 'bg-accent/20 border-accent text-accent'
-                    : 'bg-chat-bg border-chat-border text-accent-muted hover:border-accent/50 hover:text-accent',
+                    : 'bg-base-100 border-base-300 text-base-content hover:border-accent/50 hover:text-accent',
                 ]"
                 :title="icon"
                 @click="selectIcon(icon)"

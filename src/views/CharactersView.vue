@@ -5,6 +5,8 @@ import { Icon } from '@iconify/vue'
 import { useCharactersStore } from '../stores/characters'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import PageHeader from '../components/PageHeader.vue'
+import Toast from '../components/Toast.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useCharacterCardModal } from '../composables/useCharacterCardModal'
 
 const router = useRouter()
@@ -26,6 +28,36 @@ const reviewSelectedRoomId = ref(null)
 
 // 角色卡在各房间的审核汇总状态：{ [characterId]: 'pending' | 'accepted' | 'rejected' }
 const reviewStatusByCharacterId = ref({})
+
+// Toast 和确认对话框
+const toastRef = ref(null)
+const confirmDialogVisible = ref(false)
+const confirmDialogTitle = ref('确认')
+const confirmDialogMessage = ref('')
+let confirmDialogResolve = null
+let confirmDialogReject = null
+
+function showToast(message, duration = 3000) {
+  if (toastRef.value) {
+    toastRef.value.show(message, duration)
+  }
+}
+
+function showConfirm(title, message) {
+  return new Promise((resolve) => {
+    confirmDialogTitle.value = title
+    confirmDialogMessage.value = message
+    confirmDialogVisible.value = true
+    confirmDialogResolve = () => {
+      resolve(true)
+      confirmDialogVisible.value = false
+    }
+    confirmDialogReject = () => {
+      resolve(false)
+      confirmDialogVisible.value = false
+    }
+  })
+}
 
 function formatUpdated(isoString) {
   if (!isoString) return ''
@@ -79,10 +111,10 @@ async function onPortraitFileChange(e) {
         delete draft.updated_at
         draft.portrait = res.url
         const ok = await update(id, draft)
-        if (!ok) alert('头像已上传，但保存到角色卡失败，请到编辑页保存一次')
+        if (!ok) showToast('头像已上传，但保存到角色卡失败，请到编辑页保存一次')
       }
     } else {
-      alert(res.message || '上传失败')
+      showToast(res.message || '上传失败')
     }
   } finally {
     portraitUploading.value = false
@@ -91,12 +123,13 @@ async function onPortraitFileChange(e) {
 
 async function deleteCharacter(c) {
   if (isCharacterLocked(c)) {
-    alert('该角色卡正在审核中或已通过，不能删除。')
+    showToast('该角色卡正在审核中或已通过，不能删除。')
     return
   }
-  if (!confirm(`确定要删除角色「${c.name || '未命名'}」吗？此操作不可恢复。`)) return
+  const confirmed = await showConfirm('确认删除', `确定要删除角色「${c.name || '未命名'}」吗？此操作不可恢复。`)
+  if (!confirmed) return
   const ok = await remove(c.id)
-  if (!ok) alert('删除失败，请稍后重试')
+  if (!ok) showToast('删除失败，请稍后重试')
   closeMenu()
 }
 
@@ -172,12 +205,6 @@ function characterStatusLabel(status) {
   return ''
 }
 
-function characterStatusClass(status) {
-  if (status === 'pending') return 'bg-amber-500/20 text-amber-300'
-  if (status === 'accepted') return 'bg-green-500/20 text-green-300'
-  if (status === 'rejected') return 'bg-red-500/20 text-red-300'
-  return ''
-}
 
 function onCardClick(c) {
   if (openMenuId.value === c.id) {
@@ -201,11 +228,7 @@ onUnmounted(() => {
   <div class="flex flex-col h-full">
     <PageHeader title="角色卡" icon="mdi:card-account-details">
       <template #actions>
-        <button
-          type="button"
-          class="p-2 rounded-full bg-white/10 text-white/80 hover:text-white hover:bg-white/30 transition-colors"
-          @click="createNew"
-        >
+        <button type="button" class="btn btn-primary btn-circle btn-sm" @click="createNew">
           <Icon icon="mdi:plus" class="text-xl" />
         </button>
       </template>
@@ -217,190 +240,115 @@ onUnmounted(() => {
       class="hidden"
       @change="onPortraitFileChange"
     />
-    <div class="flex-1 overflow-y-auto scroll-thin p-4">
-      <div class="max-w-2xl mx-auto space-y-2">
+    <div class="flex-1 overflow-y-auto scroll-thin px-4 py-2">
+      <div class="max-w-2xl mx-auto space-y-3 pb-4">
         <div
           v-for="c in characters"
           :key="c.id"
-          class="flex items-center gap-3 p-3 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors cursor-pointer"
+          class="bg-base-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow cursor-pointer active:scale-95 touch-target p-4 flex items-center gap-4"
           @click="onCardClick(c)"
         >
-          <div class="w-10 h-10 rounded-lg bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0">
+          <div class="w-14 h-14 rounded-2xl bg-base-200 flex items-center justify-center overflow-hidden shrink-0">
             <img v-if="c.portrait" :src="c.portrait" alt="" class="w-full h-full object-cover" />
-            <Icon v-else icon="mdi:dice-multiple" class="text-xl text-accent" />
+            <Icon v-else icon="mdi:account" class="text-3xl text-base-content/40" />
           </div>
-          <div class="flex-1 min-w-0 min-h-0">
-            <div class="flex items-center gap-2">
+          
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <h3 class="font-bold text-base-content truncate text-base">{{ c.name || '未命名' }}</h3>
               <span
                 v-if="characterReviewStatus(c)"
-                class="px-2 py-0.5 rounded text-[11px] font-medium"
-                :class="characterStatusClass(characterReviewStatus(c))"
+                class="px-2 py-0.5 rounded-md text-[10px] font-medium shrink-0"
+                :class="{
+                  'bg-warning/10 text-warning': characterReviewStatus(c) === 'pending',
+                  'bg-success/10 text-success': characterReviewStatus(c) === 'accepted',
+                  'bg-error/10 text-error': characterReviewStatus(c) === 'rejected',
+                }"
               >
                 {{ characterStatusLabel(characterReviewStatus(c)) }}
               </span>
-              <div class="font-medium text-white truncate">
-                {{ c.name || '未命名' }}
-              </div>
             </div>
-            <div class="text-sm text-accent-muted truncate">
-              {{ c.campaign ? `${c.campaign} · ` : '' }}{{ formatUpdated(c.updated_at) }}
+            <div class="text-sm text-base-content/50 truncate flex items-center gap-2">
+              <span v-if="c.campaign" class="max-w-[120px] truncate">{{ c.campaign }}</span>
+              <span v-if="c.campaign" class="text-base-content/30">•</span>
+              <span>{{ formatUpdated(c.updated_at) }}</span>
             </div>
           </div>
-          <div class="relative shrink-0">
-            <button
-              type="button"
-              class="p-1.5 rounded-lg text-accent-muted hover:text-white hover:bg-white/10 transition-colors"
-              aria-label="菜单"
-              @click="toggleMenu($event, c.id)"
-            >
+          
+          <div class="dropdown dropdown-end shrink-0">
+            <button type="button" tabindex="0" class="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-base-200 active:scale-95 transition-all text-base-content/60" aria-label="菜单" @click="toggleMenu($event, c.id)">
               <Icon icon="mdi:dots-vertical" class="text-xl" />
             </button>
-            <div
-              v-show="openMenuId === c.id"
-              class="absolute right-0 top-full mt-1 py-1 min-w-[120px] rounded-lg bg-chat-panel border border-chat-border shadow-lg z-10"
-              @click.stop
-            >
-              <button
-                type="button"
-                class="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2"
-                @click="viewCharacter(c); closeMenu()"
-              >
-                <Icon icon="mdi:eye-outline" class="text-lg shrink-0" />
-                查看
-              </button>
-              <button
-                type="button"
-                class="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="isCharacterLocked(c)"
-                @click="editCharacter(c); closeMenu()"
-              >
-                <Icon icon="mdi:pencil-outline" class="text-lg shrink-0" />
-                编辑
-              </button>
-              <button
-                type="button"
-                class="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="portraitUploading"
-                @click="openPortraitUpload(c)"
-              >
-                <Icon :icon="portraitUploading ? 'mdi:loading' : 'mdi:image-edit-outline'" class="text-lg shrink-0" :class="{ 'animate-spin': portraitUploading }" />
-                修改头像
-              </button>
-              <button
-                type="button"
-                class="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2"
-                @click="openSubmitReview(c); closeMenu()"
-              >
-                <Icon icon="mdi:send-check-outline" class="text-lg shrink-0" />
-                提交审核
-              </button>
-              <button
-                type="button"
-                class="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                @click="deleteCharacter(c)"
-              >
-                <Icon icon="mdi:delete-outline" class="text-lg shrink-0" />
-                删除
-              </button>
-            </div>
+            <ul v-show="openMenuId === c.id" tabindex="0" class="dropdown-content menu menu-sm p-2 mt-2 w-36 bg-base-100 rounded-2xl shadow-xl z-20 space-y-1" @click.stop>
+              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" @click="viewCharacter(c); closeMenu()"><Icon icon="mdi:eye-outline" class="text-lg text-base-content/70" />查看</button></li>
+              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" :disabled="isCharacterLocked(c)" @click="editCharacter(c); closeMenu()"><Icon icon="mdi:pencil-outline" class="text-lg text-base-content/70" />编辑</button></li>
+              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" :disabled="portraitUploading" @click="openPortraitUpload(c)"><Icon :icon="portraitUploading ? 'mdi:loading' : 'mdi:image-edit-outline'" class="text-lg text-base-content/70" :class="{ 'animate-spin': portraitUploading }" />头像</button></li>
+              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" @click="openSubmitReview(c); closeMenu()"><Icon icon="mdi:send-check-outline" class="text-lg text-primary" />提交</button></li>
+              <div class="divider my-0"></div>
+              <li><button type="button" class="py-2 rounded-xl text-error active:scale-95 transition-all" @click="deleteCharacter(c)"><Icon icon="mdi:delete-outline" class="text-lg" />删除</button></li>
+            </ul>
           </div>
         </div>
-        <p v-if="!characters.length" class="text-center text-accent-muted py-8">暂无角色卡，点击上方「创建角色」开始创建。</p>
+        <div v-if="!characters.length" class="flex flex-col items-center justify-center py-20 text-base-content/40">
+          <Icon icon="mdi:card-account-details-outline" class="text-6xl mb-4 opacity-50" />
+          <p>暂无角色卡</p>
+          <p class="text-sm mt-1">点击右上角「+」开始创建</p>
+        </div>
       </div>
     </div>
 
     <!-- 提交审核：选择已加入的房间 -->
-    <div
-      v-if="reviewDialogOpen"
-      class="fixed inset-0 z-40 flex items-center justify-center"
-    >
-      <div
-        class="absolute inset-0 bg-black/60"
-        @click="reviewDialogOpen = false"
-      />
-      <div class="relative z-50 w-full max-w-md mx-4 rounded-xl bg-sidebar border border-chat-border shadow-xl">
-        <div class="px-4 py-3 border-b border-chat-border flex items-center justify-between">
-          <div class="flex flex-col">
-            <h2 class="text-sm font-semibold text-white">
-              提交角色卡审核
-            </h2>
-            <p class="text-xs text-accent-muted mt-0.5">
-              请选择要提交的房间，交给对应房间的 KP 审核
-            </p>
+    <dialog :open="reviewDialogOpen" class="modal" @click="reviewDialogOpen = false">
+      <div class="modal-box max-w-md" @click.stop>
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <h2 class="font-semibold text-base-content">提交角色卡审核</h2>
+            <p class="text-xs text-base-content/60 mt-0.5">请选择要提交的房间，交给对应房间的 KP 审核</p>
           </div>
-          <button
-            type="button"
-            class="p-1.5 rounded-lg text-accent-muted hover:text-white hover:bg-white/5"
-            @click="reviewDialogOpen = false"
-          >
+          <button type="button" class="btn btn-ghost btn-square btn-sm" @click="reviewDialogOpen = false">
             <Icon icon="mdi:close" class="text-lg" />
           </button>
         </div>
-        <div class="max-h-[320px] overflow-y-auto scroll-thin px-4 py-3 space-y-2">
-          <div
-            v-if="reviewLoading"
-            class="py-8 text-center text-xs text-accent-muted"
-          >
-            加载已加入的房间中…
-          </div>
-          <div
-            v-else-if="reviewRooms.length === 0"
-            class="py-8 text-center text-xs text-accent-muted"
-          >
-            暂无已加入的房间，请先加入房间后再提交角色卡审核。
-          </div>
-          <div
-            v-else
-            class="space-y-1"
-          >
+        <div class="max-h-[320px] overflow-y-auto scroll-thin py-3 space-y-2">
+          <div v-if="reviewLoading" class="py-8 text-center text-sm text-base-content/50">加载已加入的房间中…</div>
+          <div v-else-if="reviewRooms.length === 0" class="py-8 text-center text-sm text-base-content/50">暂无已加入的房间，请先加入房间后再提交角色卡审核。</div>
+          <div v-else class="space-y-1">
             <button
               v-for="r in reviewRooms"
               :key="r.id"
               type="button"
               class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-left text-sm transition-colors"
-              :class="reviewSelectedRoomId === r.id ? 'border-accent bg-accent/10 text-white' : 'border-chat-border text-accent-muted hover:border-accent/60 hover:bg-accent/5 hover:text-white'"
+              :class="reviewSelectedRoomId === r.id ? 'btn btn-primary btn-outline' : 'border-base-300 bg-base-200 hover:border-primary/50'"
               @click="reviewSelectedRoomId = r.id"
             >
-              <Icon icon="mdi:dice-multiple" class="text-base shrink-0 text-accent" />
+              <Icon icon="mdi:dice-multiple" class="text-base shrink-0 text-primary" />
               <div class="flex-1 min-w-0">
-                <div class="truncate">{{ r.title || '未命名房间' }}</div>
-                <div class="text-[11px] text-accent-muted truncate">
-                  {{ r.module || '未设置模组' }}
-                </div>
+                <div class="truncate text-base-content">{{ r.title || '未命名房间' }}</div>
+                <div class="text-[11px] text-base-content/50 truncate">{{ r.module || '未设置模组' }}</div>
               </div>
             </button>
           </div>
-          <p
-            v-if="reviewError"
-            class="text-xs text-red-400 mt-2"
-          >
-            {{ reviewError }}
-          </p>
-          <p
-            v-if="reviewSuccess"
-            class="text-xs text-green-400 mt-2"
-          >
-            {{ reviewSuccess }}
-          </p>
+          <div v-if="reviewError" class="alert alert-error text-xs mt-2">{{ reviewError }}</div>
+          <div v-if="reviewSuccess" class="alert alert-success text-xs mt-2">{{ reviewSuccess }}</div>
         </div>
-        <div class="px-4 py-3 border-t border-chat-border flex justify-end gap-2">
-          <button
-            type="button"
-            class="px-3 py-1.5 rounded-lg border border-chat-border text-xs text-accent-muted hover:bg-white/5"
-            @click="reviewDialogOpen = false"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1.5 rounded-lg bg-accent text-xs text-white font-medium disabled:opacity-50"
-            :disabled="!reviewSelectedRoomId"
-            @click="confirmSubmitReview"
-          >
-            提交审核
-          </button>
+        <div class="modal-action">
+          <button type="button" class="btn btn-ghost btn-sm" @click="reviewDialogOpen = false">取消</button>
+          <button type="button" class="btn btn-primary btn-sm" :disabled="!reviewSelectedRoomId" @click="confirmSubmitReview">提交审核</button>
         </div>
       </div>
-    </div>
+      <form method="dialog" class="modal-backdrop"><button type="button" @click="reviewDialogOpen = false">close</button></form>
+    </dialog>
   </div>
+
+  <!-- Toast 提示 -->
+  <Toast ref="toastRef" />
+  
+  <!-- 确认对话框 -->
+  <ConfirmDialog
+    v-model:visible="confirmDialogVisible"
+    :title="confirmDialogTitle"
+    :message="confirmDialogMessage"
+    @confirm="confirmDialogResolve"
+    @cancel="confirmDialogReject"
+  />
 </template>

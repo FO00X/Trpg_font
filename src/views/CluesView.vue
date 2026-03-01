@@ -43,20 +43,15 @@ function back() {
   <div class="flex flex-col h-full">
     <PageHeader title="线索" icon="mdi:lightbulb-on-outline" :show-back="true" back-label="返回房间" @back="back">
       <template #actions>
-        <button
-          type="button"
-          class="p-2 rounded-lg text-accent hover:bg-white/10"
-          title="新建线索"
-          @click="openNew"
-        >
+        <button type="button" class="btn btn-ghost btn-square btn-sm" title="新建线索" @click="openNew">
           <Icon icon="mdi:plus" class="text-xl" />
         </button>
       </template>
     </PageHeader>
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
       <LoadingSpinner v-if="loading" message="加载中…" />
-      <div v-else-if="error" class="text-red-400">{{ error }}</div>
-      <div v-else-if="!cluesStore.getList(roomId).length" class="text-accent-muted text-center py-8">
+      <div v-else-if="error" class="alert alert-error">{{ error }}</div>
+      <div v-else-if="!cluesStore.getList(roomId).length" class="text-base-content/60 text-center py-8">
         暂无线索，点击右上角 + 新建
       </div>
       <div v-else class="max-w-2xl mx-auto space-y-3">
@@ -64,22 +59,24 @@ function back() {
           v-for="c in cluesStore.getList(roomId)"
           :key="c.id"
           type="button"
-          class="w-full flex items-start gap-3 p-4 rounded-xl bg-chat-panel border border-chat-border hover:border-accent/30 transition-colors text-left"
+          class="card card-bordered bg-base-200 hover:border-primary/40 transition-colors text-left w-full"
           @click="openClue(c)"
         >
-          <div class="w-12 h-12 rounded-lg bg-sidebar-active flex items-center justify-center shrink-0">
-            <Icon icon="mdi:lightbulb-on" class="text-xl text-accent" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-white truncate mb-1">{{ c.title || '无标题' }}</div>
-            <div v-if="c.content" class="text-sm text-accent-muted line-clamp-2 mb-1">{{ c.content }}</div>
-            <div v-if="c.images?.length" class="flex items-center gap-1 text-xs text-accent-muted mb-1">
-              <Icon icon="mdi:image-outline" class="text-sm" />
-              <span>{{ c.images.length }} 张图片</span>
+          <div class="card-body flex-row items-start gap-3 p-4">
+            <div class="w-12 h-12 rounded-lg bg-base-300 flex items-center justify-center shrink-0">
+              <Icon icon="mdi:lightbulb-on" class="text-xl text-primary" />
             </div>
-            <div class="text-xs text-accent-muted">{{ formatDate(c.created_at) }}</div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-base-content truncate mb-1">{{ c.title || '无标题' }}</div>
+              <div v-if="c.content" class="text-sm text-base-content/60 line-clamp-2 mb-1">{{ c.content }}</div>
+              <div v-if="c.images?.length" class="flex items-center gap-1 text-xs text-base-content/50 mb-1">
+                <Icon icon="mdi:image-outline" class="text-sm" />
+                <span>{{ c.images.length }} 张图片</span>
+              </div>
+              <div class="text-xs text-base-content/50">{{ formatDate(c.created_at) }}</div>
+            </div>
+            <Icon icon="mdi:chevron-right" class="text-base-content/50 shrink-0 mt-1" />
           </div>
-          <Icon icon="mdi:chevron-right" class="text-accent-muted shrink-0 mt-1" />
         </button>
       </div>
     </div>

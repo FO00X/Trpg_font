@@ -3,12 +3,12 @@
     v-if="isSystem"
     class="flex justify-center"
   >
-    <span class="text-xs text-accent-muted bg-chat-panel px-3 py-1 rounded-full">
+    <span class="text-xs text-base-content bg-base-200 px-3 py-1 rounded-full">
       {{ message.content }}
     </span>
   </div>
   <div v-else :class="['flex gap-3', isSelf ? 'flex-row-reverse' : 'flex-row']">
-    <div class="w-9 h-9 rounded-full bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0 text-accent">
+    <div class="w-9 h-9 rounded-full bg-base-100-active flex items-center justify-center overflow-hidden shrink-0 text-accent">
       <img v-if="senderAvatar" :src="senderAvatar" alt="" class="w-full h-full object-cover" />
       <Icon v-else icon="mdi:account" class="text-lg" />
     </div>
@@ -22,14 +22,14 @@
           {{ speakerBadge.text }}
         </span>
         <span class="text-sm font-medium text-accent">{{ speakerName }}</span>
-        <span class="text-xs text-accent-muted">{{ timeStr }}</span>
+        <span class="text-xs text-base-content">{{ timeStr }}</span>
       </div>
       <div
         :class="[
           'mt-0.5 px-3 py-2 rounded-2xl text-sm break-words',
           isSelf
-            ? 'bg-accent text-chat-bg rounded-br-md'
-            : 'bg-chat-panel border border-chat-border rounded-bl-md',
+            ? 'bg-accent text-base-100 rounded-br-md'
+            : 'bg-base-200 border border-base-300 rounded-bl-md',
         ]"
       >
         {{ message.content }}
@@ -79,7 +79,7 @@ const speakerName = computed(() => {
 
 const speakerBadge = computed(() => {
   const msg = props.message
-  if (msg.type === 'system') return { text: '骰娘', class: 'bg-accent-muted/20 text-accent-muted' }
+  if (msg.type === 'system') return { text: '骰娘', class: 'bg-accent-muted/20 text-base-content' }
   if (msg.speakerRole === 'kp') return { text: 'KP', class: 'bg-blue-500/20 text-blue-400' }
   if (msg.speakerRole === 'npc') return { text: 'NPC', class: 'bg-purple-500/20 text-purple-400' }
   return { text: 'PL', class: 'bg-green-500/20 text-green-400' }

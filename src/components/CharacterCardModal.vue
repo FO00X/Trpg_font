@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { Icon } from '@iconify/vue'
-import { Dialog, DialogOverlay, DialogPanel } from '@headlessui/vue'
+import BottomSheet from './BottomSheet.vue'
 import { useCharactersStore } from '../stores/characters'
 import { SHEET_TABS, labelCls, sectionCls, sectionTitleCls } from '../composables/useCharacterForm'
 import { CHAR_LABELS, STORY_LABELS, STORY_KEYS } from '../data/characterConstants'
@@ -162,245 +162,240 @@ function setTab(id) {
 </script>
 
 <template>
-  <Dialog :open="open" class="relative z-50" @close="emit('close')">
-    <DialogOverlay class="fixed inset-0 bg-black/60" />
-    <div class="fixed inset-0 flex items-center justify-center p-4">
-      <DialogPanel class="relative w-full max-w-2xl max-h-[90vh] rounded-xl bg-chat-panel border border-chat-border shadow-xl overflow-hidden flex flex-col focus:outline-none">
-        <button type="button" class="absolute top-1 right-2 z-10 p-2 rounded-lg text-accent-muted hover:text-white hover:bg-white/10" aria-label="关闭" @click="emit('close')">
-          <Icon icon="mdi:close" class="text-xl" />
-        </button>
-
-        <template v-if="sheet">
-          <!-- 头部：正方形头像 + 姓名等基础信息 -->
-          <div class="shrink-0 px-4 pr-12 pt-6 pb-4 border-b border-chat-border">
-            <div class="flex gap-4">
-              <div class="w-20 h-20 rounded-lg bg-sidebar-active flex items-center justify-center overflow-hidden shrink-0 text-2xl font-bold text-accent">
-                <img v-if="sheet.portrait" :src="sheet.portrait" alt="" class="w-full h-full object-cover" />
-                <span v-else>{{ (sheet.name || '未命名').slice(0, 1) }}</span>
-              </div>
-              <div class="flex-1 min-w-0 space-y-1">
-                <div class="font-semibold text-lg text-white">{{ sheet.name || '未命名' }}</div>
-                <div class="text-sm text-accent-muted">职业 {{ sheet.occupation || '-' }}</div>
-                <div class="text-sm text-accent-muted">{{ sheet.age ?? '-' }}岁 {{ sheet.gender || '-' }}</div>
-                <div class="text-sm text-accent-muted flex gap-4">
-        <div>现居地 {{ sheet.currentResidence || '-' }}</div>
-        <div>出生地 {{ sheet.birthplace || '-' }}</div>
+  <BottomSheet :open="open" @update:open="val => { if (!val) emit('close') }" title="">
+    <template #header>
+      <h3 class="text-lg font-semibold text-base-content opacity-0">角色卡</h3>
+      <button type="button" class="btn btn-ghost btn-sm btn-square active:scale-95 transition-all" @click="emit('close')">
+        <Icon icon="mdi:close" class="text-xl" />
+      </button>
+    </template>
+    
+    <template v-if="sheet">
+      <!-- 头部：正方形头像 + 姓名等基础信息 -->
+      <div class="shrink-0 pb-4 border-b border-base-300 mt-[-10px]">
+        <div class="flex gap-4">
+          <div class="w-20 h-20 rounded-lg bg-base-100-active flex items-center justify-center overflow-hidden shrink-0 text-2xl font-bold text-accent">
+            <img v-if="sheet.portrait" :src="sheet.portrait" alt="" class="w-full h-full object-cover" />
+            <span v-else>{{ (sheet.name || '未命名').slice(0, 1) }}</span>
+          </div>
+          <div class="flex-1 min-w-0 space-y-1">
+            <div class="font-semibold text-lg text-base-content">{{ sheet.name || '未命名' }}</div>
+            <div class="text-sm text-base-content/60">职业 {{ sheet.occupation || '-' }}</div>
+            <div class="text-sm text-base-content/60">{{ sheet.age ?? '-' }}岁 {{ sheet.gender || '-' }}</div>
+            <div class="text-sm text-base-content/60 flex gap-4">
+              <div>现居地 {{ sheet.currentResidence || '-' }}</div>
+              <div>出生地 {{ sheet.birthplace || '-' }}</div>
+            </div>
+          </div>
+        </div>
+        <!-- 生命 / 魔法 / 理智 -->
+        <div class="mt-4">
+          <HpMpSanBar
+            :hp-current="sheet.hpCurrent"
+            :hp-max="derived.hpMax"
+            :mp-current="sheet.mpCurrent"
+            :mp-max="derived.mpMax"
+            :san-current="sheet.sanCurrent"
+          />
+        </div>
+        <!-- 人物状态标签（仅当至少有一项为 true 时展示） -->
+        <div v-if="sheet.seriousWound || sheet.unconscious || sheet.dead || sheet.temporaryInsanity || sheet.permanentInsanity || sheet.indefiniteInsanity" class="mt-3">
+          <StatusBadges :sheet="sheet" variant="view" />
+        </div>
       </div>
+
+      <!-- Tab 导航 -->
+      <nav class="shrink-0 flex border-b border-base-300 overflow-x-auto mx-[-1rem] px-4 scroll-thin">
+        <button
+          v-for="t in visibleTabs"
+          :key="t.id"
+          type="button"
+          class="flex items-center gap-2 px-4 py-3 text-sm whitespace-nowrap border-b-2 transition-all active:scale-95 touch-target"
+          :class="currentTabId === t.id ? 'border-accent text-accent' : 'border-transparent text-base-content hover:text-base-content'"
+          @click="setTab(t.id)"
+        >
+          <Icon :icon="t.icon" class="text-lg shrink-0" />
+        </button>
+      </nav>
+
+      <!-- Tab 内容 -->
+      <div class="py-4">
+        <!-- 基础信息 -->
+        <div v-show="currentTabId === 'basic'" class="space-y-6">
+          <section :class="sectionCls">
+            <div class="grid grid-cols-3 gap-3">
+              <template v-for="k in ['str','dex','siz','app','con','int','pow','edu','luc']" :key="k">
+                <div>
+                  <label class="block text-xs text-base-content truncate mb-1">{{ CHAR_LABELS[k] }}</label>
+                  <div class="w-full px-2 py-1 text-base-content text-sm">{{ sheet[k] ?? 0 }}</div>
+                </div>
+              </template>
+            </div>
+          </section>
+        </div>
+
+        <!-- 能力体系（仅自己可见） -->
+        <div v-show="currentTabId === 'ability' && isOwn" class="space-y-6">
+          <section :class="sectionCls" class="relative">
+            <nav class="flex flex-wrap gap-1 border-b border-base-300 pb-2 mb-3">
+              <button
+                v-for="({ group }) in skillsByGroup"
+                :key="group"
+                type="button"
+                :class="[
+                  'px-3 py-1.5 rounded-t-lg text-sm font-medium transition-all active:scale-95 touch-target',
+                  abilityGroupTab === group
+                    ? 'bg-base-100 border border-base-300 border-b-0 -mb-px text-accent'
+                    : 'text-base-content hover:text-base-content border border-transparent',
+                ]"
+                @click="abilityGroupTab = group"
+              >
+                {{ group }}
+              </button>
+            </nav>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
+              <div
+                v-for="s in currentAbilityGroupSkills"
+                :key="s.id"
+                class="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-base-200 border border-base-300 cursor-pointer active:scale-95 transition-all"
+                @click="showSkillTooltip(s, $event)"
+              >
+                <span class="text-base-content/70 truncate min-w-0">{{ skillDisplayName(s) }}</span>
+                <span class="text-base-content font-mono tabular-nums shrink-0">{{ skillSuccess(s, sheet) }}</span>
               </div>
             </div>
-            <!-- 生命 / 魔法 / 理智 -->
-            <div class="mt-4">
-              <HpMpSanBar
-                :hp-current="sheet.hpCurrent"
-                :hp-max="derived.hpMax"
-                :mp-current="sheet.mpCurrent"
-                :mp-max="derived.mpMax"
-                :san-current="sheet.sanCurrent"
-              />
-            </div>
-            <!-- 人物状态标签（仅当至少有一项为 true 时展示） -->
-            <div v-if="sheet.seriousWound || sheet.unconscious || sheet.dead || sheet.temporaryInsanity || sheet.permanentInsanity || sheet.indefiniteInsanity" class="mt-3">
-              <StatusBadges :sheet="sheet" variant="view" />
-            </div>
-          </div>
-
-          <!-- Tab 导航 -->
-          <nav class="shrink-0 flex border-b border-chat-border overflow-x-auto">
-            <button
-              v-for="t in visibleTabs"
-              :key="t.id"
-              type="button"
-              class="flex items-center gap-2 px-4 py-3 text-sm whitespace-nowrap border-b-2 transition-colors"
-              :class="currentTabId === t.id ? 'border-accent text-accent' : 'border-transparent text-accent-muted hover:text-white'"
-              @click="setTab(t.id)"
-            >
-              <Icon :icon="t.icon" class="text-lg shrink-0" />
-            </button>
-          </nav>
-
-          <!-- Tab 内容 -->
-          <div class="flex-1 overflow-y-auto scroll-thin min-h-0">
-            <!-- 基础信息 -->
-            <div v-show="currentTabId === 'basic'" class="space-y-6">
-              <section :class="sectionCls">
-                <div class="grid grid-cols-3 gap-3">
-                  <template v-for="k in ['str','dex','siz','app','con','int','pow','edu','luc']" :key="k">
-                    <div>
-                      <label class="block text-xs text-accent-muted truncate mb-1">{{ CHAR_LABELS[k] }}</label>
-                      <div class="w-full px-2 py-1.5 rounded bg-chat-bg border border-chat-border text-white text-sm">{{ sheet[k] ?? 0 }}</div>
-                    </div>
-                  </template>
+            <!-- 技能详情气泡：点击技能后显示在上方 -->
+            <Teleport to="body">
+              <template v-if="skillTooltip">
+                <div class="fixed inset-0 z-[60]" aria-hidden="true" @click="hideSkillTooltip" />
+                <div
+                  class="fixed z-[61] min-w-[180px] rounded-lg border border-base-300 bg-base-200 shadow-xl p-3 text-sm"
+                  :style="{ left: `${skillTooltip.left}px`, top: `${skillTooltip.top}px`, transform: 'translate(-50%, -100%) translateY(-8px)' }"
+                  @click.stop
+                >
+                  <div class="font-medium text-base-content mb-2 border-b border-base-300 pb-2">{{ skillDisplayName(skillTooltip.skill) }}</div>
+                  <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-base-content">
+                    <span>基础</span><span class="text-base-content font-mono tabular-nums text-right">{{ getSkillBase(skillTooltip.skill, sheet) }}</span>
+                    <span>本职</span><span class="text-base-content font-mono tabular-nums text-right">{{ skillTooltip.skill?.career ?? 0 }}</span>
+                    <span>兴趣</span><span class="text-base-content font-mono tabular-nums text-right">{{ skillTooltip.skill?.interest ?? 0 }}</span>
+                    <span>成长</span><span class="text-base-content font-mono tabular-nums text-right">{{ skillTooltip.skill?.growth ?? 0 }}</span>
+                  </div>
+                  <div class="mt-2 pt-2 border-t border-base-300 flex justify-between items-center">
+                    <span class="text-base-content">成功率</span>
+                    <span class="text-accent font-mono tabular-nums">{{ skillSuccess(skillTooltip.skill, sheet) }}</span>
+                  </div>
                 </div>
-              </section>
+              </template>
+            </Teleport>
+          </section>
+          <section :class="sectionCls">
+            <div class="flex flex-wrap items-center gap-4 mb-3">
+              <span class="text-sm"><span class="text-base-content">DB</span> <span class="text-base-content tabular-nums ml-0.5">{{ derived.damageBonus >= 0 ? '+' : '' }}{{ derived.damageBonus }}</span></span>
+              <span class="text-sm"><span class="text-base-content">体格</span> <span class="text-base-content tabular-nums ml-0.5">{{ derived.build >= 0 ? '+' : '' }}{{ derived.build }}</span></span>
+              <span class="text-sm"><span class="text-base-content">护甲</span> <span class="text-base-content tabular-nums ml-0.5">{{ sheet.combat?.armor || '-' }}</span></span>
+              <span class="text-sm"><span class="text-base-content">移动</span> <span class="text-base-content tabular-nums ml-0.5">{{ derived.move }}</span></span>
             </div>
-
-            <!-- 能力体系（仅自己可见） -->
-            <div v-show="currentTabId === 'ability' && isOwn" class="space-y-6">
-              <section :class="sectionCls" class="relative">
-                <nav class="flex flex-wrap gap-1 border-b border-chat-border pb-2 mb-3">
-                  <button
-                    v-for="({ group }) in skillsByGroup"
-                    :key="group"
-                    type="button"
-                    :class="[
-                      'px-3 py-1.5 rounded-t-lg text-sm font-medium transition-colors',
-                      abilityGroupTab === group
-                        ? 'bg-chat-bg border border-chat-border border-b-0 -mb-px text-accent'
-                        : 'text-accent-muted hover:text-white border border-transparent',
-                    ]"
-                    @click="abilityGroupTab = group"
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm border-collapse">
+                <thead class="bg-base-100/95"><tr class="text-left text-base-content border-b border-base-300"><th class="p-2">武器名称</th><th class="p-2">技能</th><th class="p-2">成功率</th></tr></thead>
+                <tbody>
+                  <tr
+                    v-for="(w, idx) in (sheet?.weapons || [])"
+                    :key="idx"
+                    class="border-b border-base-300/50 cursor-pointer active:bg-base-100/50 transition-all"
+                    @click="showWeaponTooltip(w, $event)"
                   >
-                    {{ group }}
-                  </button>
-                </nav>
-                <div class="grid grid-cols-3 gap-x-6 gap-y-3 text-sm">
-                  <div
-                    v-for="s in currentAbilityGroupSkills"
-                    :key="s.id"
-                    class="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg bg-chat-bg/60 border border-chat-border/50 cursor-pointer hover:border-accent/40 transition-colors"
-                    @click="showSkillTooltip(s, $event)"
-                  >
-                    <span class="text-accent-muted truncate min-w-0">{{ skillDisplayName(s) }}</span>
-                    <span class="text-white font-mono tabular-nums shrink-0">{{ skillSuccess(s, sheet) }}</span>
+                    <td class="p-2">{{ w.name || '-' }}</td>
+                    <td class="p-2">{{ w.skill || '-' }}</td>
+                    <td class="p-2">{{ w.success ?? '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- 武器详情气泡：点击行后显示 -->
+            <Teleport to="body">
+              <template v-if="weaponTooltip">
+                <div class="fixed inset-0 z-[60]" aria-hidden="true" @click="hideWeaponTooltip" />
+                <div
+                  class="fixed z-[61] min-w-[200px] rounded-lg border border-base-300 bg-base-200 shadow-xl p-3 text-sm"
+                  :style="{ left: `${weaponTooltip.left}px`, top: `${weaponTooltip.top}px`, transform: 'translate(-50%, -100%) translateY(-8px)' }"
+                  @click.stop
+                >
+                  <div class="font-medium text-base-content mb-2 border-b border-base-300 pb-2">{{ weaponTooltip.weapon?.name || '武器' }}</div>
+                  <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-base-content">
+                    <span>伤害</span><span class="text-base-content text-right">{{ weaponTooltip.weapon?.damage || '-' }}</span>
+                    <span>射程</span><span class="text-base-content text-right">{{ weaponTooltip.weapon?.range || '-' }}</span>
+                    <span>贯穿</span><span class="text-base-content text-right">{{ penetrateLabel(weaponTooltip.weapon?.penetrate) }}</span>
+                    <span>次数</span><span class="text-base-content text-right">{{ weaponTooltip.weapon?.attacks ?? '-' }}</span>
+                    <span>装弹量</span><span class="text-base-content text-right">{{ weaponTooltip.weapon?.ammo ?? '-' }}</span>
+                    <span>故障</span><span class="text-base-content text-right">{{ weaponTooltip.weapon?.malfunction ?? '-' }}</span>
                   </div>
                 </div>
-                <!-- 技能详情气泡：点击技能后显示在上方 -->
-                <Teleport to="body">
-                  <template v-if="skillTooltip">
-                    <div class="fixed inset-0 z-[60]" aria-hidden="true" @click="hideSkillTooltip" />
-                    <div
-                      class="fixed z-[61] min-w-[180px] rounded-lg border border-chat-border bg-chat-panel shadow-xl p-3 text-sm"
-                      :style="{ left: `${skillTooltip.left}px`, top: `${skillTooltip.top}px`, transform: 'translate(-50%, -100%) translateY(-8px)' }"
-                      @click.stop
-                    >
-                      <div class="font-medium text-white mb-2 border-b border-chat-border pb-2">{{ skillDisplayName(skillTooltip.skill) }}</div>
-                      <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-accent-muted">
-                        <span>基础</span><span class="text-white font-mono tabular-nums text-right">{{ getSkillBase(skillTooltip.skill, sheet) }}</span>
-                        <span>本职</span><span class="text-white font-mono tabular-nums text-right">{{ skillTooltip.skill?.career ?? 0 }}</span>
-                        <span>兴趣</span><span class="text-white font-mono tabular-nums text-right">{{ skillTooltip.skill?.interest ?? 0 }}</span>
-                        <span>成长</span><span class="text-white font-mono tabular-nums text-right">{{ skillTooltip.skill?.growth ?? 0 }}</span>
-                      </div>
-                      <div class="mt-2 pt-2 border-t border-chat-border flex justify-between items-center">
-                        <span class="text-accent-muted">成功率</span>
-                        <span class="text-accent font-mono tabular-nums">{{ skillSuccess(skillTooltip.skill, sheet) }}</span>
-                      </div>
-                    </div>
-                  </template>
-                </Teleport>
-              </section>
-              <section :class="sectionCls">
-                <div class="flex items-center gap-5 flex-nowrap mb-3">
-                  <span class="text-sm"><span class="text-accent-muted">伤害加值（DB）</span> <span class="text-white tabular-nums ml-0.5">{{ derived.damageBonus >= 0 ? '+' : '' }}{{ derived.damageBonus }}</span></span>
-                  <span class="text-accent-muted/40">·</span>
-                  <span class="text-sm"><span class="text-accent-muted">体格</span> <span class="text-white tabular-nums ml-0.5">{{ derived.build >= 0 ? '+' : '' }}{{ derived.build }}</span></span>
-                  <span class="text-accent-muted/40">·</span>
-                  <span class="text-sm"><span class="text-accent-muted">护甲</span> <span class="text-white tabular-nums ml-0.5">{{ sheet.combat?.armor || '-' }}</span></span>
-                  <span class="text-accent-muted/40">·</span>
-                  <span class="text-sm"><span class="text-accent-muted">移动力</span> <span class="text-white tabular-nums ml-0.5">{{ derived.move }}</span></span>
-                </div>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm border-collapse">
-                    <thead class="bg-chat-bg/95"><tr class="text-left text-accent-muted border-b border-chat-border"><th class="p-1.5">武器名称</th><th class="p-1.5">使用技能</th><th class="p-1.5">成功率</th></tr></thead>
-                    <tbody>
-                      <tr
-                        v-for="(w, idx) in (sheet?.weapons || [])"
-                        :key="idx"
-                        class="border-b border-chat-border/50 cursor-pointer hover:bg-chat-bg/50 transition-colors"
-                        @click="showWeaponTooltip(w, $event)"
-                      >
-                        <td class="p-1.5">{{ w.name || '-' }}</td>
-                        <td class="p-1.5">{{ w.skill || '-' }}</td>
-                        <td class="p-1.5">{{ w.success ?? '-' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <!-- 武器详情气泡：点击行后显示 -->
-                <Teleport to="body">
-                  <template v-if="weaponTooltip">
-                    <div class="fixed inset-0 z-[60]" aria-hidden="true" @click="hideWeaponTooltip" />
-                    <div
-                      class="fixed z-[61] min-w-[200px] rounded-lg border border-chat-border bg-chat-panel shadow-xl p-3 text-sm"
-                      :style="{ left: `${weaponTooltip.left}px`, top: `${weaponTooltip.top}px`, transform: 'translate(-50%, -100%) translateY(-8px)' }"
-                      @click.stop
-                    >
-                      <div class="font-medium text-white mb-2 border-b border-chat-border pb-2">{{ weaponTooltip.weapon?.name || '武器' }}</div>
-                      <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-accent-muted">
-                        <span>伤害</span><span class="text-white text-right">{{ weaponTooltip.weapon?.damage || '-' }}</span>
-                        <span>射程</span><span class="text-white text-right">{{ weaponTooltip.weapon?.range || '-' }}</span>
-                        <span>贯穿</span><span class="text-white text-right">{{ penetrateLabel(weaponTooltip.weapon?.penetrate) }}</span>
-                        <span>次数</span><span class="text-white text-right">{{ weaponTooltip.weapon?.attacks ?? '-' }}</span>
-                        <span>装弹量</span><span class="text-white text-right">{{ weaponTooltip.weapon?.ammo ?? '-' }}</span>
-                        <span>故障</span><span class="text-white text-right">{{ weaponTooltip.weapon?.malfunction ?? '-' }}</span>
-                      </div>
-                    </div>
-                  </template>
-                </Teleport>
-              </section>
-            </div>
+              </template>
+            </Teleport>
+          </section>
+        </div>
 
-            <!-- 资产背景 -->
-            <div v-show="currentTabId === 'assets'" class="space-y-6">
-              <section :class="sectionCls">
-                <div class="space-y-4">
-                  <div>
-                    <label :class="labelCls">信用评价</label>
-                    <div class="mt-1 px-3 py-2 rounded-lg bg-chat-bg border border-chat-border">
-                      <span class="font-medium text-accent">{{ creditDerived.creditRating }}</span>
-                      <p v-if="creditDerived.lifeStyleDesc" class="mt-2 text-sm text-[#a6adc8] whitespace-pre-line leading-relaxed">{{ creditDerived.lifeStyleDesc }}</p>
-                    </div>
-                  </div>
-                  <div><label :class="labelCls">随身携带物品/装备</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white text-sm whitespace-pre-wrap">{{ sheet.possessions?.other || '-' }}</div></div>
+        <!-- 资产背景 -->
+        <div v-show="currentTabId === 'assets'" class="space-y-6">
+          <section :class="sectionCls">
+            <div class="space-y-4">
+              <div>
+                <label :class="labelCls">信用评价</label>
+                <div class="mt-1 px-3 py-2 rounded-lg bg-base-100 border border-base-300">
+                  <span class="font-medium text-accent">{{ creditDerived.creditRating }}</span>
+                  <p v-if="creditDerived.lifeStyleDesc" class="mt-2 text-sm text-base-content/60 whitespace-pre-line leading-relaxed">{{ creditDerived.lifeStyleDesc }}</p>
                 </div>
-              </section>
-              <section :class="sectionCls">
-                <div class="space-y-3">
-                  <div v-for="key in STORY_KEYS" :key="key">
-                    <label :class="labelCls">{{ STORY_LABELS[key] }}</label>
-                    <div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white text-sm whitespace-pre-wrap">{{ sheet.story?.[key] || '-' }}</div>
-                  </div>
-                </div>
-              </section>
+              </div>
+              <div><label :class="labelCls">随身携带物品/装备</label><div class="px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content text-sm whitespace-pre-wrap">{{ sheet.possessions?.other || '-' }}</div></div>
             </div>
+          </section>
+          <section :class="sectionCls">
+            <div class="space-y-3">
+              <div v-for="key in STORY_KEYS" :key="key">
+                <label :class="labelCls">{{ STORY_LABELS[key] }}</label>
+                <div class="px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content text-sm whitespace-pre-wrap">{{ sheet.story?.[key] || '-' }}</div>
+              </div>
+            </div>
+          </section>
+        </div>
 
-            <!-- 剧情社交 -->
-            <div v-show="currentTabId === 'social'" class="space-y-6">
-              <section :class="sectionCls">
-                <h2 :class="sectionTitleCls">克苏鲁神话（Cthulhu Mythos）</h2>
-                <div class="space-y-4">
-                  <div><label :class="labelCls">魔法物品与典籍</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white text-sm whitespace-pre-wrap">{{ sheet.mythos?.magicItems || '-' }}</div></div>
-                  <div><label :class="labelCls">法术</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white text-sm whitespace-pre-wrap">{{ sheet.mythos?.spells || '-' }}</div></div>
-                  <div><label :class="labelCls">第三类接触（经历/能力描述）</label><div class="px-3 py-2 rounded-lg bg-chat-bg border border-chat-border text-white text-sm whitespace-pre-wrap">{{ sheet.mythos?.thirdContact || '-' }}</div></div>
-                </div>
-              </section>
-              <section :class="sectionCls">
-                <h2 :class="sectionTitleCls">人际关系（Companions）</h2>
-                <div class="space-y-2">
-                  <div v-for="(comp, idx) in (sheet.companions || [])" :key="idx" class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center text-sm">
-                    <span class="text-white">{{ comp.name || '-' }}</span>
-                    <span class="text-accent-muted">{{ comp.relation || '-' }}</span>
-                    <span class="text-accent-muted">{{ comp.player || '-' }}</span>
-                  </div>
-                  <p v-if="!(sheet.companions?.length)" class="text-sm text-accent-muted py-2">暂无</p>
-                </div>
-              </section>
-              <section :class="sectionCls">
-                <h2 :class="sectionTitleCls">经历过的模组（Experienced Scenarios）</h2>
-                <div class="space-y-2">
-                  <div v-for="(sc, idx) in (sheet.scenarios || [])" :key="idx" class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center text-sm">
-                    <span class="text-white">{{ sc.name || '-' }}</span>
-                    <span class="text-accent-muted sm:col-span-2">{{ sc.experience || '-' }}</span>
-                  </div>
-                  <p v-if="!(sheet.scenarios?.length)" class="text-sm text-accent-muted py-2">暂无</p>
-                </div>
-              </section>
+        <!-- 剧情社交 -->
+        <div v-show="currentTabId === 'social'" class="space-y-6">
+          <section :class="sectionCls">
+            <h2 :class="sectionTitleCls">克苏鲁神话（Cthulhu Mythos）</h2>
+            <div class="space-y-4">
+              <div><label :class="labelCls">魔法物品与典籍</label><div class="px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content text-sm whitespace-pre-wrap">{{ sheet.mythos?.magicItems || '-' }}</div></div>
+              <div><label :class="labelCls">法术</label><div class="px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content text-sm whitespace-pre-wrap">{{ sheet.mythos?.spells || '-' }}</div></div>
+              <div><label :class="labelCls">第三类接触（经历/能力描述）</label><div class="px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content text-sm whitespace-pre-wrap">{{ sheet.mythos?.thirdContact || '-' }}</div></div>
             </div>
-          </div>
-        </template>
-        <template v-else>
-          <div class="p-8 text-center text-accent-muted">未找到角色数据</div>
-        </template>
-      </DialogPanel>
-    </div>
-  </Dialog>
+          </section>
+          <section :class="sectionCls">
+            <h2 :class="sectionTitleCls">人际关系（Companions）</h2>
+            <div class="space-y-2">
+              <div v-for="(comp, idx) in (sheet.companions || [])" :key="idx" class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center text-sm">
+                <span class="text-base-content">{{ comp.name || '-' }}</span>
+                <span class="text-base-content">{{ comp.relation || '-' }}</span>
+                <span class="text-base-content">{{ comp.player || '-' }}</span>
+              </div>
+              <p v-if="!(sheet.companions?.length)" class="text-sm text-base-content py-2">暂无</p>
+            </div>
+          </section>
+          <section :class="sectionCls">
+            <h2 :class="sectionTitleCls">经历过的模组（Experienced Scenarios）</h2>
+            <div class="space-y-2">
+              <div v-for="(sc, idx) in (sheet.scenarios || [])" :key="idx" class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center text-sm">
+                <span class="text-base-content">{{ sc.name || '-' }}</span>
+                <span class="text-base-content sm:col-span-2">{{ sc.experience || '-' }}</span>
+              </div>
+              <p v-if="!(sheet.scenarios?.length)" class="text-sm text-base-content py-2">暂无</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </template>
+    <template v-else>
+      <div class="p-8 text-center text-base-content">未找到角色数据</div>
+    </template>
+  </BottomSheet>
 </template>

@@ -22,11 +22,11 @@ const displayText = () => selectedOption()?.[props.optionLabel] ?? props.placeho
     <Listbox :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
       <div class="relative">
         <ListboxButton
-          class="relative w-full cursor-pointer rounded-lg bg-chat-bg border border-chat-border py-2 pl-3 pr-10 text-left text-white focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          class="relative w-full cursor-pointer rounded-lg bg-base-100 border border-base-300 py-2 pl-3 pr-10 text-left text-base-content focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         >
           <span class="block truncate">{{ displayText() }}</span>
           <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-            <Icon icon="mdi:chevron-down" class="h-5 w-5 text-accent-muted" aria-hidden="true" />
+            <Icon icon="mdi:chevron-down" class="h-5 w-5 text-base-content" aria-hidden="true" />
           </span>
         </ListboxButton>
         <Transition
@@ -35,7 +35,7 @@ const displayText = () => selectedOption()?.[props.optionLabel] ?? props.placeho
           leave-to-class="opacity-0"
         >
           <ListboxOptions
-            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-chat-panel border border-chat-border py-1 shadow-lg focus:outline-none"
+            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-base-200 border border-base-300 py-1 shadow-lg focus:outline-none"
           >
             <ListboxOption
               v-for="opt in options"
@@ -47,7 +47,7 @@ const displayText = () => selectedOption()?.[props.optionLabel] ?? props.placeho
               <li
                 :class="[
                   'relative cursor-pointer select-none py-2 pl-3 pr-9',
-                  active ? 'bg-sidebar-hover text-white' : 'text-[#a6adc8]',
+                  active ? 'bg-base-200 text-base-content' : 'text-[#a6adc8]',
                   selected && 'bg-accent/20 text-accent',
                 ]"
               >

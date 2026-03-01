@@ -7,6 +7,14 @@
     <title>FOXTrpg</title>
   </head>
   <body>
+    <script>
+      (function() {
+        var key = 'trpg-theme';
+        var stored = localStorage.getItem(key);
+        var theme = (stored === 'dark' || stored === 'abyss' || stored === 'rose' || stored === 'light') ? stored : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

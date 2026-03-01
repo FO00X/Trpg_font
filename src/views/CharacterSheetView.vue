@@ -9,8 +9,8 @@
     >
       <template #actions>
         <div class="flex items-center gap-2">
-          <button type="button" class="px-4 py-2 rounded-lg text-accent-muted hover:text-white border border-chat-border" @click="goBack">取消</button>
-          <button type="button" class="px-4 py-2 rounded-lg bg-accent text-chat-bg font-medium hover:opacity-90" @click="save">保存</button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="goBack">取消</button>
+          <button type="button" class="btn btn-primary btn-sm" @click="save">保存</button>
         </div>
       </template>
     </PageHeader>
@@ -20,29 +20,29 @@
         <template v-if="sheetTab === 'basic'">
           <BasicInfoSection />
           <div class="flex flex-col items-end gap-2">
-            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
-            <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
+            <div v-if="validationErrors.length" class="alert alert-warning text-sm w-full py-2">{{ validationErrors.join('；') }}</div>
+            <div v-if="saveError" class="alert alert-error text-sm w-full py-2">{{ saveError }}</div>
           </div>
         </template>
         <template v-else-if="sheetTab === 'ability'">
           <AbilitySection />
           <div class="flex flex-col items-end gap-2">
-            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
-            <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
+            <div v-if="validationErrors.length" class="alert alert-warning text-sm w-full py-2">{{ validationErrors.join('；') }}</div>
+            <div v-if="saveError" class="alert alert-error text-sm w-full py-2">{{ saveError }}</div>
           </div>
         </template>
         <template v-else-if="sheetTab === 'assets'">
           <AssetsSection />
           <div class="flex flex-col items-end gap-2">
-            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
-            <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
+            <div v-if="validationErrors.length" class="alert alert-warning text-sm w-full py-2">{{ validationErrors.join('；') }}</div>
+            <div v-if="saveError" class="alert alert-error text-sm w-full py-2">{{ saveError }}</div>
           </div>
         </template>
         <template v-else-if="sheetTab === 'social'">
           <SocialSection />
           <div class="flex flex-col items-end gap-2">
-            <p v-if="validationErrors.length" class="text-sm text-red-400 w-full">{{ validationErrors.join('；') }}</p>
-            <p v-if="saveError" class="text-sm text-red-400 w-full">{{ saveError }}</p>
+            <div v-if="validationErrors.length" class="alert alert-warning text-sm w-full py-2">{{ validationErrors.join('；') }}</div>
+            <div v-if="saveError" class="alert alert-error text-sm w-full py-2">{{ saveError }}</div>
           </div>
         </template>
       </div>
@@ -60,24 +60,36 @@
     />
 
     <!-- 底部导航 -->
-    <nav class="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around h-14 px-2 border-t border-chat-border bg-chat-panel/95 backdrop-blur">
+    <div class="border-t border-base-300 bg-base-100 flex shrink-0">
       <button
         v-for="t in SHEET_TABS"
         :key="t.id"
         type="button"
-        class="flex flex-col items-center justify-center gap-0.5 flex-1 h-full min-w-0 py-1 text-xs transition-colors rounded-lg"
-        :class="sheetTab === t.id ? 'text-accent' : 'text-accent-muted hover:text-white'"
+        class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors"
+        :class="sheetTab === t.id ? 'text-accent bg-base-200/60' : 'text-base-content hover:text-accent'"
         @click="sheetTab = t.id"
       >
-        <Icon :icon="t.icon" class="text-xl shrink-0" />
-        <span class="truncate w-full text-center">{{ t.label }}</span>
+        <Icon :icon="t.icon" class="text-lg shrink-0" />
+        <span>{{ t.label }}</span>
       </button>
-    </nav>
+    </div>
+
+    <!-- Toast 提示 -->
+    <Toast ref="toastRef" />
+    
+    <!-- 确认对话框 -->
+    <ConfirmDialog
+      v-model:visible="confirmDialogVisible"
+      :title="confirmDialogTitle"
+      :message="confirmDialogMessage"
+      @confirm="confirmDialogResolve"
+      @cancel="confirmDialogReject"
+    />
   </div>
 </template>
 
 <script setup>
-import { provide } from 'vue'
+import { provide, ref } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useCharacterForm, SHEET_TABS } from '../composables/useCharacterForm'
 import PageHeader from '../components/PageHeader.vue'
@@ -86,8 +98,34 @@ import AbilitySection from '../components/character/AbilitySection.vue'
 import AssetsSection from '../components/character/AssetsSection.vue'
 import SocialSection from '../components/character/SocialSection.vue'
 import DiceRollModal from '../components/DiceRollModal.vue'
+import Toast from '../components/Toast.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
-const ctx = useCharacterForm()
+// Toast 和确认对话框
+const toastRef = ref(null)
+const confirmDialogVisible = ref(false)
+const confirmDialogTitle = ref('确认')
+const confirmDialogMessage = ref('')
+let confirmDialogResolve = null
+let confirmDialogReject = null
+
+function showConfirm(title, message) {
+  return new Promise((resolve) => {
+    confirmDialogTitle.value = title
+    confirmDialogMessage.value = message
+    confirmDialogVisible.value = true
+    confirmDialogResolve = () => {
+      resolve(true)
+      confirmDialogVisible.value = false
+    }
+    confirmDialogReject = () => {
+      resolve(false)
+      confirmDialogVisible.value = false
+    }
+  })
+}
+
+const ctx = useCharacterForm({ confirmFn: showConfirm })
 provide('characterForm', ctx)
 
 const { form, isNew, sheetTab, save, goBack, validationErrors, saveError, diceRollOpen, diceRollBatch, diceRollMaxRolls, diceRollInitialResults, onDiceRollResults, onDiceRollConfirm, closeDiceRoll } = ctx

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
-import { Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
+import BottomSheet from './BottomSheet.vue'
 import { rollNotation } from '../utils/dice'
 
 const props = defineProps({
@@ -12,10 +12,12 @@ const props = defineProps({
   maxRolls: { type: Number, default: 1 },
   /** 上次投掷结果（关闭后再打开时沿用，不重新掷） */
   initialAllResults: { type: Array, default: () => [] },
+  /** 请求检定模式：先显示掷骰按钮，点击后再动画+结果+确定，无取消/关闭 */
+  requestMode: { type: Boolean, default: false },
 })
 const emit = defineEmits(['close', 'confirm', 'results'])
 
-const phase = ref('rolling') // 'rolling' | 'result'
+const phase = ref('idle') // 'idle' | 'rolling' | 'result'（requestMode 下从 idle 开始）
 const results = ref([])    // 当前这一次掷骰结果
 const allResults = ref([]) // 多组时：每组为 [{ key, label, raw, display }, ...]
 const currentResultIndex = ref(0)
@@ -56,7 +58,12 @@ function runRoll() {
 watch(() => props.open, (isOpen) => {
   if (isOpen && props.batch.length) {
     const hasInitial = props.initialAllResults && props.initialAllResults.length > 0
-    if (hasInitial) {
+    if (props.requestMode) {
+      // 请求检定模式：先显示掷骰按钮，不自动掷
+      allResults.value = []
+      currentResultIndex.value = 0
+      phase.value = 'idle'
+    } else if (hasInitial) {
       allResults.value = props.initialAllResults.map((group) => group.map((r) => ({ ...r })))
       currentResultIndex.value = 0
       phase.value = 'result'
@@ -103,103 +110,81 @@ function handleConfirm() {
 function handleClose() {
   emit('close')
 }
+
+function startRoll() {
+  if (props.requestMode && phase.value === 'idle') {
+    runRoll()
+  }
+}
 </script>
 
 <template>
-  <Dialog :open="open" @close="handleClose" class="relative z-[10000]">
-    <DialogOverlay class="dice-modal-overlay fixed inset-0 bg-black/60 backdrop-blur-sm" />
-    <div class="fixed inset-0 flex items-center justify-center p-4">
-      <DialogPanel class="dice-modal-panel w-full max-w-md rounded-2xl bg-chat-panel border border-chat-border shadow-xl overflow-hidden focus:outline-none">
-        <DialogTitle class="sr-only">投掷骰子</DialogTitle>
-        <div class="p-5">
-          <div class="flex items-center justify-center gap-2 mb-4">
-            <Icon icon="mdi:dice-multiple" class="text-3xl text-accent dice-icon" />
-            <h3 class="text-lg font-semibold text-white">投掷骰子</h3>
-          </div>
+  <BottomSheet
+    :open="open"
+    @update:open="(val) => { if (!val && !requestMode) handleClose() }"
+  >
+    <template #header>
+      <div class="flex items-center gap-2">
+        <Icon icon="mdi:dice-multiple" class="text-2xl text-primary dice-icon" />
+        <h3 class="text-lg font-semibold text-base-content">投掷骰子</h3>
+      </div>
+      <button v-if="!requestMode" type="button" class="btn btn-ghost btn-sm btn-square active:scale-95 transition-all" @click="handleClose">
+        <Icon icon="mdi:close" class="text-xl" />
+      </button>
+      <div v-else class="w-8"></div>
+    </template>
 
-          <!-- 加载动画固定高度；结果区随内容高度 -->
-          <div class="dice-modal-content">
-            <Transition name="dice-phase" mode="out-in">
-              <!-- 加载中：固定高度 -->
-              <div v-if="phase === 'rolling'" key="rolling" class="dice-rolling-placeholder flex flex-col items-center justify-center gap-4 min-h-[200px] py-8">
-                <Icon icon="mdi:dice-multiple" class="dice-loading-icon text-5xl text-accent" />
-                <div class="flex items-center gap-1.5 text-accent-muted">
-                  <span class="loading-dot" />
-                  <span class="loading-dot" />
-                  <span class="loading-dot" />
-                </div>
-                <span class="text-sm text-accent-muted">加载中</span>
-              </div>
-              <!-- 结果列表：不设最小高度，弹窗随内容 -->
-              <div v-else-if="phase === 'result'" key="result" class="space-y-3">
-              <!-- 多组时：切换当前查看的组 + 再掷一次 -->
-              <div v-if="maxRolls > 1 && allResults.length" class="flex items-center gap-2">
-                <div class="flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    class="p-1.5 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 disabled:opacity-30"
-                    :disabled="currentResultIndex <= 0"
-                    title="上一组"
-                    @click="prevGroup"
-                  >
-                    <Icon icon="mdi:chevron-left" class="text-xl" />
-                  </button>
-                  <span class="text-sm text-accent-muted min-w-[4rem] text-center">
-                    第 {{ currentResultIndex + 1 }}/{{ allResults.length }} 组
-                  </span>
-                  <button
-                    type="button"
-                    class="p-1.5 rounded-lg text-accent-muted hover:text-white hover:bg-white/5 disabled:opacity-30"
-                    :disabled="currentResultIndex >= allResults.length - 1"
-                    title="下一组"
-                    @click="nextGroup"
-                  >
-                    <Icon icon="mdi:chevron-right" class="text-xl" />
-                  </button>
-                </div>
-                <button
-                  v-if="canRollMore"
-                  type="button"
-                  class="ml-auto shrink-0 px-3 py-2 rounded-xl border border-accent/50 text-accent hover:bg-accent/10 transition-colors text-sm whitespace-nowrap"
-                  @click="rollAgain"
-                >
-                  重骰 ({{ allResults.length }}/{{ maxRolls }})
-                </button>
-              </div>
-              <TransitionGroup name="result-item" tag="div" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <div
-                  v-for="(r, i) in displayResults"
-                  :key="r.key"
-                  class="result-card flex items-center justify-between rounded-lg bg-chat-bg border border-chat-border px-3 py-2"
-                  :style="{ animationDelay: `${i * 0.06}s` }"
-                >
-                  <span class="text-sm text-accent-muted">{{ r.label }}</span>
-                  <span class="font-mono font-semibold text-accent">{{ r.display }}</span>
-                </div>
-              </TransitionGroup>
-              <div class="flex flex-nowrap items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  class="shrink-0 px-5 py-2.5 rounded-xl border border-chat-border text-accent-muted hover:text-white transition-colors"
-                  @click="handleClose"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  class="shrink-0 px-5 py-2.5 rounded-xl bg-accent text-chat-bg font-medium hover:opacity-90 transition-opacity"
-                  @click="handleConfirm"
-                >
-                  确定
-                </button>
-              </div>
+    <div class="dice-modal-content">
+      <Transition name="dice-phase" mode="out-in">
+        <!-- 请求模式：先显示掷骰按钮 -->
+        <div v-if="requestMode && phase === 'idle'" key="idle" class="flex flex-col items-center justify-center gap-6 min-h-[200px] py-8">
+          <p class="text-sm text-base-content/60">KP 请求你进行检定</p>
+          <button type="button" class="btn btn-primary btn-lg gap-2 active:scale-95 transition-all" @click="startRoll">
+            <Icon icon="mdi:dice-multiple" class="text-2xl" />
+            掷骰
+          </button>
+        </div>
+        <!-- 加载中：固定高度 -->
+        <div v-else-if="phase === 'rolling'" key="rolling" class="dice-rolling-placeholder flex flex-col items-center justify-center gap-4 min-h-[200px] py-8">
+          <Icon icon="mdi:dice-multiple" class="dice-loading-icon text-5xl text-primary" />
+          <div class="flex items-center gap-1.5 text-base-content/50">
+            <span class="loading-dot" />
+            <span class="loading-dot" />
+            <span class="loading-dot" />
+          </div>
+          <span class="text-sm text-base-content/50">加载中</span>
+        </div>
+        <!-- 结果列表：不设最小高度，弹窗随内容 -->
+        <div v-else key="result" class="space-y-3">
+          <!-- 多组时：切换当前查看的组 + 再掷一次 -->
+          <div v-if="maxRolls > 1 && allResults.length" class="flex items-center gap-2">
+            <div class="flex items-center justify-center gap-2">
+              <button type="button" class="btn btn-ghost btn-square btn-sm active:scale-95 transition-all" :disabled="currentResultIndex <= 0" title="上一组" @click="prevGroup">
+                <Icon icon="mdi:chevron-left" class="text-xl" />
+              </button>
+              <span class="text-sm text-base-content/60 min-w-[4rem] text-center">第 {{ currentResultIndex + 1 }}/{{ allResults.length }} 组</span>
+              <button type="button" class="btn btn-ghost btn-square btn-sm active:scale-95 transition-all" :disabled="currentResultIndex >= allResults.length - 1" title="下一组" @click="nextGroup">
+                <Icon icon="mdi:chevron-right" class="text-xl" />
+              </button>
             </div>
-          </Transition>
+            <button v-if="canRollMore" type="button" class="btn btn-outline btn-primary btn-sm ml-auto whitespace-nowrap active:scale-95 transition-all" @click="rollAgain">
+              重骰 ({{ allResults.length }}/{{ maxRolls }})
+            </button>
+          </div>
+          <TransitionGroup name="result-item" tag="div" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div v-for="(r, i) in displayResults" :key="r.key" class="result-card flex items-center justify-between rounded-lg bg-base-200 border border-base-300 px-3 py-2" :style="{ animationDelay: `${i * 0.06}s` }">
+              <span class="text-sm text-base-content/60">{{ r.label }}</span>
+              <span class="font-mono font-semibold text-primary">{{ r.display }}</span>
+            </div>
+          </TransitionGroup>
+          <div class="flex flex-nowrap items-center justify-end gap-2 pt-4">
+            <button v-if="!requestMode" type="button" class="btn btn-ghost btn-sm flex-1 active:scale-95 transition-all" @click="handleClose">取消</button>
+            <button type="button" class="btn btn-primary btn-sm flex-1 active:scale-95 transition-all" @click="handleConfirm">确定</button>
           </div>
         </div>
-      </DialogPanel>
+      </Transition>
     </div>
-  </Dialog>
+  </BottomSheet>
 </template>
 
 <style scoped>
