@@ -1,8 +1,8 @@
 <template>
   <div class="flex flex-col h-full bg-base-100">
-    <PageHeader title="AI管理" icon="mdi:robot-outline" />
+    <PageHeader v-if="standalone" title="AI管理" icon="mdi:robot-outline" />
 
-    <div class="flex-1 overflow-y-auto scroll-thin p-6">
+    <div :class="standalone ? 'flex-1 overflow-y-auto scroll-thin p-6' : 'min-h-0'">
       <div class="max-w-2xl mx-auto">
         <div class="bg-base-200/50 rounded-3xl p-6 md:p-8 space-y-6">
           <div>
@@ -121,6 +121,10 @@ import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
+
+defineProps({
+  standalone: { type: Boolean, default: true },
+})
 
 const auth = useAuthStore()
 const loading = ref(true)

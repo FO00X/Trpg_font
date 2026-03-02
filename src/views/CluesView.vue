@@ -25,25 +25,9 @@
     </div>
     
     <div v-else class="flex-1 min-h-0 flex flex-col md:flex-row">
-      <!-- 移动端顶部导航 (仅在查看正文时显示) -->
-      <div v-if="isMobile && mobileView === 'content'" class="flex items-center justify-between shrink-0 px-4 py-3 border-b border-base-200 bg-base-100/95 backdrop-blur z-10 md:hidden">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-square -ml-2"
-          @click="backToList"
-        >
-          <Icon icon="mdi:arrow-left" class="text-xl" />
-        </button>
-        <span class="text-base font-semibold text-base-content truncate flex-1 text-center px-2">
-          {{ selectedClue ? (selectedClue.title || '无标题') : '线索详情' }}
-        </span>
-        <div class="w-8"></div>
-      </div>
-
       <!-- 线索列表 -->
       <div
         class="w-full md:w-64 lg:w-72 shrink-0 flex flex-col min-h-0 bg-base-200/30 border-r border-base-200"
-        :class="{ 'hidden md:flex': isMobile && mobileView === 'content' }"
       >
         <ul class="flex-1 overflow-y-auto scroll-thin p-3 space-y-1 min-h-0">
           <li v-for="c in clueList" :key="c.id" class="group">
@@ -76,10 +60,9 @@
         </ul>
       </div>
 
-      <!-- 右侧：当前线索正文 -->
+      <!-- 右侧：当前线索正文（桌面端）；移动端点击线索会跳转到 ClueEditView -->
       <div
-        class="flex-1 min-w-0 flex flex-col overflow-hidden min-h-0 bg-base-100 relative"
-        :class="{ 'hidden md:flex': isMobile && mobileView === 'list' }"
+        class="flex-1 min-w-0 flex flex-col overflow-hidden min-h-0 bg-base-100 relative hidden md:flex"
       >
         <template v-if="selectedClue">
           <div class="shrink-0 px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -114,19 +97,19 @@
                   附加图片
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  <a
-                    v-for="(url, idx) in selectedClue.images"
-                    :key="idx"
-                    :href="url"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="group relative aspect-square rounded-2xl overflow-hidden bg-base-200 transition-all hover:shadow-lg hover:shadow-base-300 block active:scale-95"
-                  >
-                    <img :src="url" :alt="`图片 ${idx + 1}`" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                    <div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                      <Icon icon="mdi:open-in-new" class="text-white opacity-0 group-hover:opacity-100 text-2xl drop-shadow-md transition-all scale-75 group-hover:scale-100" />
-                    </div>
-                  </a>
+                  <div
+                  v-for="(url, idx) in selectedClue.images"
+                  :key="idx"
+  class="hover-3d group relative aspect-square rounded-2xl overflow-hidden bg-base-200"
+>
+  <figure class="max-w-100 rounded-2xl">
+    <img :src="url" :alt="`图片 ${idx + 1}`" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+  </figure>
+  <div></div><div></div><div></div><div></div>
+  <div></div><div></div><div></div><div></div>
+</div>
+
+                
                 </div>
               </div>
             </div>
@@ -135,8 +118,7 @@
         
         <div v-else class="flex-1 flex flex-col items-center justify-center text-base-content/40 px-4">
           <Icon icon="mdi:file-search-outline" class="text-6xl mb-4 opacity-20" />
-          <span class="max-md:hidden text-lg font-medium">请从左侧选择线索查看</span>
-          <span class="md:hidden text-lg font-medium">点击上方线索查看内容</span>
+          <span class="text-lg font-medium">请从左侧选择线索查看</span>
         </div>
       </div>
     </div>
@@ -160,7 +142,6 @@ const cluesStore = useCluesStore()
 const loading = ref(true)
 const error = ref('')
 const selectedClueId = ref(null)
-const mobileView = ref('list') // 'list' | 'content'
 const isMobile = ref(false)
 
 const clueList = computed(() => cluesStore.getList(roomId.value))
@@ -188,8 +169,11 @@ onMounted(async () => {
 })
 
 function selectClue(clue) {
+  if (isMobile.value) {
+    router.push({ name: 'clue-edit', params: { roomId: roomId.value, clueId: clue.id } })
+    return
+  }
   selectedClueId.value = clue.id
-  if (isMobile.value) mobileView.value = 'content'
 }
 
 function openNew() {
@@ -202,9 +186,5 @@ function openEdit(clue) {
 
 function back() {
   router.push({ name: 'game-room', params: { id: roomId.value } })
-}
-
-function backToList() {
-  mobileView.value = 'list'
 }
 </script>

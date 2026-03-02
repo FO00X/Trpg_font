@@ -48,17 +48,6 @@
       </div>
     </div>
 
-    <!-- 掷骰动画弹窗 -->
-    <DiceRollModal
-      :open="diceRollOpen"
-      :batch="diceRollBatch"
-      :max-rolls="diceRollMaxRolls"
-      :initial-all-results="diceRollInitialResults"
-      @results="onDiceRollResults"
-      @confirm="onDiceRollConfirm"
-      @close="closeDiceRoll"
-    />
-
     <!-- 底部导航 -->
     <div class="border-t border-base-300 bg-base-100 flex shrink-0">
       <button
@@ -86,7 +75,6 @@ import BasicInfoSection from '../components/character/BasicInfoSection.vue'
 import AbilitySection from '../components/character/AbilitySection.vue'
 import AssetsSection from '../components/character/AssetsSection.vue'
 import SocialSection from '../components/character/SocialSection.vue'
-import DiceRollModal from '../components/DiceRollModal.vue'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 
 const { confirm } = useConfirmDialog()
@@ -94,6 +82,6 @@ const confirmFn = (title, message) => confirm({ title, message })
 const ctx = useCharacterForm({ confirmFn })
 provide('characterForm', ctx)
 
-const { form, isNew, sheetTab, save, goBack, validationErrors, saveError, diceRollOpen, diceRollBatch, diceRollMaxRolls, diceRollInitialResults, onDiceRollResults, onDiceRollConfirm, closeDiceRoll } = ctx
+const { form, isNew, sheetTab, save, goBack, validationErrors, saveError } = ctx
 </script>
 

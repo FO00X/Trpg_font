@@ -98,16 +98,18 @@ const routes = [
     meta: { title: '编辑线索', requiresAuth: true },
   },
   {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('../views/AdminView.vue'),
+    meta: { title: '管理后台（管理员）', requiresAuth: true },
+  },
+  {
     path: '/admin/users',
-    name: 'admin-users',
-    component: () => import('../views/AdminUsersView.vue'),
-    meta: { title: '用户列表（管理员）', requiresAuth: true },
+    redirect: { path: '/admin' },
   },
   {
     path: '/admin/ai',
-    name: 'admin-ai',
-    component: () => import('../views/AdminAIView.vue'),
-    meta: { title: 'AI管理（管理员）', requiresAuth: true },
+    redirect: { path: '/admin' },
   },
   {
     path: '/:pathMatch(.*)*',

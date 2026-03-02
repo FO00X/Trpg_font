@@ -5,6 +5,8 @@ import { generateName } from '../utils/randomName'
 import { SKILL_GROUP_ORDER, getSkillGroupLabel } from '../data/skillGroups'
 import { OCCUPATION_GROUPS } from '../data/occupationGroups'
 import { getOccupationMeta, evalCareerFormula, evalInterestFormula } from '../data/occupationMeta'
+import { useDice3D } from './useDice3D'
+import { parseNotation } from '../utils/dice'
 
 export const SHEET_TABS = [
   { id: 'basic', label: '基础信息', icon: 'mdi:account' },
@@ -14,33 +16,11 @@ export const SHEET_TABS = [
 ]
 
 export const genderOptions = [{ value: '男', label: '男' }, { value: '女', label: '女' }]
-export const occupationOptions = [
-  '医生', '律师', '侦探', '记者', '教授', '学生', '作家', '艺术家', '古董商', '工程师',
-  '军人', '警察', '司机', '佣人', '农民', '猎人', '流浪汉', '罪犯', '图书馆管理员',
-  '神职人员', '神秘学家', '探险家', '飞行员', '水手', '演员', '舞蹈家', '音乐家', '摄影师',
-]
 
 export const inputCls = 'w-full px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content placeholder-accent-muted focus:border-accent outline-none'
 export const labelCls = 'block text-sm text-base-content/60 mb-1'
 export const sectionCls = 'rounded-xl bg-base-100 border border-base-200 p-4'
 export const sectionTitleCls = 'text-sm font-semibold text-base-content uppercase tracking-wider mb-3'
-
-const ROLL_CACHE_STORAGE_KEY = 'foxtrpg-roll-cache'
-function loadRollCacheFromStorage() {
-  try {
-    const raw = localStorage.getItem(ROLL_CACHE_STORAGE_KEY)
-    if (!raw) return {}
-    const data = JSON.parse(raw)
-    return data && typeof data === 'object' ? data : {}
-  } catch {
-    return {}
-  }
-}
-function saveRollCacheToStorage(all) {
-  try {
-    localStorage.setItem(ROLL_CACHE_STORAGE_KEY, JSON.stringify(all))
-  } catch (_) {}
-}
 
 export function useCharacterForm(options = {}) {
   const { confirmFn } = options
@@ -181,8 +161,7 @@ export function useCharacterForm(options = {}) {
   )
 
   /** 按卡片区分：每张卡的幸运/全属性掷骰结果独立，不跨卡 */
-  const rollCacheByCard = ref({})
-  const currentRollCacheKey = computed(() => (isNew.value ? 'new' : (id.value || 'new')))
+  const { roll: roll3D, isInitialized: isDice3DInitialized } = useDice3D()
 
   function onBeforeUnload(e) {
     if (isDirty.value) e.preventDefault()
@@ -190,15 +169,9 @@ export function useCharacterForm(options = {}) {
   onMounted(() => {
     window.addEventListener('beforeunload', onBeforeUnload)
     if (isNew.value) {
-      rollCacheByCard.value = { ...rollCacheByCard.value, new: { luck: [], full: [] } }
       isDirty.value = false
     }
     if (!isNew.value && id.value) {
-      const stored = loadRollCacheFromStorage()
-      const cardCache = stored[id.value]
-      if (cardCache && (cardCache.luck?.length || cardCache.full?.length)) {
-        rollCacheByCard.value = { ...rollCacheByCard.value, [id.value]: { luck: cardCache.luck || [], full: cardCache.full || [] } }
-      }
       let c = getById(id.value)
       if (c) {
         form.value = normalizeCharacter(c)
@@ -419,11 +392,10 @@ export function useCharacterForm(options = {}) {
     occupationPickerOpen.value = false
   }
 
-  // 核心属性：上限 90；自行填写时 8 项共享点数池，幸运单独掷 3 选 1
   const CHAR_MIN = 30
   const CHAR_MAX = 90
   const CHAR_ATTRS = ['str', 'dex', 'siz', 'app', 'con', 'int', 'pow', 'edu']
-  const CHAR_POINTS_TOTAL = 480 // 自行填写时 8 项总点数
+  const CHAR_POINTS_TOTAL = 480
   const CHAR_ROLL_BATCH = [
     { notation: '3d6', key: 'str', label: '力量STR', multiply: 5 },
     { notation: '3d6', key: 'dex', label: '敏捷DEX', multiply: 5 },
@@ -435,65 +407,94 @@ export function useCharacterForm(options = {}) {
     { notation: '2d6+6', key: 'edu', label: '教育EDU', multiply: 5 },
     { notation: '3d6', key: 'luc', label: '幸运LUC', multiply: 5 },
   ]
-  const LUCK_ROLL_BATCH = [{ notation: '3d6', key: 'luc', label: '幸运LUC', multiply: 5 }]
 
-  const diceRollOpen = ref(false)
-  const diceRollBatch = ref([])
-  const diceRollMaxRolls = ref(1)
+  async function rollBatchOnce(batch) {
+    const list = []
+    if (!isDice3DInitialized.value) return list
+    try {
+      const notations = batch.map((b) => b.notation)
+      const res = await roll3D(notations)
+      // dice-box 返回扁平数组：每颗骰子一个元素，不是按组。需按 notation 的 count 切片并求和
+      if (Array.isArray(res) && res.length > 0) {
+        let idx = 0
+        for (const b of batch) {
+          const parsed = parseNotation(b.notation)
+          if (!parsed) continue
+          const { count, modifier } = parsed
+          const slice = res.slice(idx, idx + count)
+          idx += count
+          const base = slice.reduce((sum, d) => sum + (Number(d?.value) ?? 0), 0) + (modifier || 0)
+          list.push({ key: b.key, base, multiply: b.multiply || 1 })
+        }
+      }
+    } catch (_) {
+    }
+    return list
+  }
 
-  const diceRollInitialResults = ref([])
-  function getCacheForCard(key) {
-    let cache = rollCacheByCard.value[key]
-    if (key !== 'new' && (!cache || (!cache.luck?.length && !cache.full?.length))) {
-      const stored = loadRollCacheFromStorage()
-      cache = stored[key] || { luck: [], full: [] }
-      rollCacheByCard.value = { ...rollCacheByCard.value, [key]: cache }
-    }
-    return cache || { luck: [], full: [] }
-  }
-  function openRollAllChars() {
-    diceRollBatch.value = [...CHAR_ROLL_BATCH]
-    diceRollMaxRolls.value = 5
-    const key = currentRollCacheKey.value
-    const cache = getCacheForCard(key)
-    const full = (cache.full || [])
-    diceRollInitialResults.value = full.length ? full.map((g) => g.map((r) => ({ ...r }))) : []
-    diceRollOpen.value = true
-  }
-  function openRollLuckOnly() {
-    diceRollBatch.value = [...LUCK_ROLL_BATCH]
-    diceRollMaxRolls.value = 3
-    const key = currentRollCacheKey.value
-    const cache = getCacheForCard(key)
-    const luck = (cache.luck || [])
-    diceRollInitialResults.value = luck.length ? luck.map((g) => g.map((r) => ({ ...r }))) : []
-    diceRollOpen.value = true
-  }
-  function onDiceRollResults(allResults) {
-    if (!diceRollBatch.value.length) return
-    const key = currentRollCacheKey.value
-    const isLuckOnly = diceRollBatch.value.length === 1 && diceRollBatch.value[0].key === 'luc'
-    const copy = allResults.map((g) => g.map((r) => ({ ...r })))
-    const prev = rollCacheByCard.value[key] || { luck: [], full: [] }
-    const next = isLuckOnly ? { ...prev, luck: copy } : { ...prev, full: copy }
-    rollCacheByCard.value = { ...rollCacheByCard.value, [key]: next }
-    if (key !== 'new') {
-      const stored = loadRollCacheFromStorage()
-      stored[key] = next
-      saveRollCacheToStorage(stored)
-    }
-  }
-  function onDiceRollConfirm(payload) {
-    const keys = Object.keys(payload)
-    keys.forEach((key) => {
-      const v = Math.min(CHAR_MAX, Math.max(0, Number(payload[key]) || 0))
-      form.value[key] = v
+  const ROLL_MAX = 5
+  const rollHistory = ref([]) // 最多 5 组掷骰结果
+  const rollIndex = ref(0)   // 当前展示的是第几组（0~4）
+
+  // 加载已保存的 rolled 角色时，将当前属性作为第 1 组
+  watch(
+    () => form.value.attributesSource,
+    (src) => {
+      if (src === 'rolled' && rollHistory.value.length === 0) {
+        const snap = {}
+        CHAR_ROLL_BATCH.forEach((b) => {
+          const v = form.value[b.key]
+          if (v != null) snap[b.key] = Math.min(CHAR_MAX, Math.max(0, Number(v) || 0))
+        })
+        if (Object.keys(snap).length > 0) {
+          rollHistory.value = [snap]
+          rollIndex.value = 0
+        }
+      }
+    },
+    { immediate: true }
+  )
+
+  function applyRollToForm(snapshot) {
+    Object.keys(snapshot).forEach((key) => {
+      form.value[key] = snapshot[key]
     })
-    if (keys.length > 1) form.value.attributesSource = 'rolled'
-    diceRollOpen.value = false
+    form.value.attributesSource = 'rolled'
   }
-  function closeDiceRoll() {
-    diceRollOpen.value = false
+
+  function snapshotFromList(list) {
+    const snap = {}
+    list.forEach(({ key, base, multiply }) => {
+      const value = (Number(base) || 0) * (multiply || 1)
+      snap[key] = Math.min(CHAR_MAX, Math.max(0, Number(value) || 0))
+    })
+    return snap
+  }
+
+  const rollRolling = ref(false)
+
+  async function openRollAllChars() {
+    if (rollHistory.value.length >= ROLL_MAX) {
+      // 已达 5 次，在已有结果之间切换（同步，无需 loading）
+      rollIndex.value = (rollIndex.value + 1) % ROLL_MAX
+      applyRollToForm(rollHistory.value[rollIndex.value])
+      return
+    }
+    rollRolling.value = true
+    try {
+      const list = await rollBatchOnce(CHAR_ROLL_BATCH)
+      if (!list.length) return
+      const snap = snapshotFromList(list)
+      rollHistory.value.push(snap)
+      rollIndex.value = rollHistory.value.length - 1
+      applyRollToForm(snap)
+    } finally {
+      rollRolling.value = false
+    }
+  }
+
+  async function openRollLuckOnly() {
+    await rollByBatch(CHAR_ROLL_BATCH.filter((b) => b.key === 'luc'))
   }
   const charPointsRemaining = computed(() => {
     if (form.value.attributesSource !== 'manual') return 0
@@ -542,13 +543,10 @@ export function useCharacterForm(options = {}) {
     penetrateLabel,
     openRollAllChars,
     openRollLuckOnly,
-    diceRollOpen,
-    diceRollBatch,
-    diceRollMaxRolls,
-    diceRollInitialResults,
-    onDiceRollResults,
-    onDiceRollConfirm,
-    closeDiceRoll,
+    rollHistory,
+    rollIndex,
+    rollRolling,
+    ROLL_MAX,
     CHAR_ATTRS,
     CHAR_MIN,
     CHAR_MAX,

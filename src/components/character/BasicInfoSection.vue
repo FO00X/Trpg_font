@@ -1,67 +1,3 @@
-<script setup>
-import { ref, computed, inject } from 'vue'
-import { Icon } from '@iconify/vue'
-import { Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
-import { labelCls, inputCls, sectionCls, sectionTitleCls, genderOptions } from '../../composables/useCharacterForm'
-import { CHAR_LABELS } from '../../data/characterConstants'
-import { getOccupationMeta } from '../../data/occupationMeta'
-import { NAME_COUNTRY_OPTIONS, NAME_GENDER_OPTIONS } from '../../utils/randomName'
-import ListboxSelect from '../ui/ListboxSelect.vue'
-import HpMpSanBar from './HpMpSanBar.vue'
-import StatusBadges from './StatusBadges.vue'
-
-const {
-  form,
-  syncDerived,
-  id: characterId,
-  isNew,
-  openRollAllChars,
-  openRollLuckOnly,
-  charPointsRemaining,
-  CHAR_ATTRS,
-  CHAR_MIN,
-  CHAR_MAX,
-  CHAR_POINTS_TOTAL,
-  openRandomNameModal,
-  randomNameModalOpen,
-  randomNameCountry,
-  randomNameGender,
-  generatedName,
-  doGenerateRandomName,
-  confirmRandomName,
-  closeRandomNameModal,
-  occupationPickerOpen,
-  openOccupationPicker,
-  closeOccupationPicker,
-  selectOccupation,
-  occupationGroups,
-} = inject('characterForm')
-
-const occupationMeta = computed(() => getOccupationMeta(form.value?.occupation))
-const occupationCategoryFilter = ref('')
-const filteredOccupationJobs = computed(() => {
-  const groups = occupationGroups || []
-  if (!occupationCategoryFilter.value) {
-    return groups.flatMap((g) => (g.jobs || []).map((job) => ({ job, groupName: g.name })))
-  }
-  const group = groups.find((g) => g.name === occupationCategoryFilter.value)
-  return group ? (group.jobs || []).map((job) => ({ job, groupName: group.name })) : []
-})
-
-function onSelectOccupation(job) {
-  selectOccupation(job)
-  closeOccupationPicker()
-}
-
-const isRolled = () => form.value?.attributesSource === 'rolled'
-function clampChar(key) {
-  const v = Number(form.value[key])
-  if (Number.isNaN(v) || v === '' || v === null || v === undefined) form.value[key] = CHAR_MIN
-  else if (v > CHAR_MAX) form.value[key] = CHAR_MAX
-  else if (v < CHAR_MIN) form.value[key] = CHAR_MIN
-}
-</script>
-
 <template>
   <div class="space-y-6">
     <section :class="sectionCls" data-guide="investigator-info-card">
@@ -93,19 +29,16 @@ function clampChar(key) {
         </div>
         <!-- 年龄 + 性别 同一行 -->
         <div class="flex gap-2 items-center">
-          <label class="text-base-content/60 whitespace-nowrap pr-9 text-left text-sm">年龄</label>
+          <label class="text-base-content/60 whitespace-nowrap text-left text-sm">年龄</label>
           <input v-model.number="form.age" type="number" min="15" max="99" :class="inputCls" class="appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" @wheel.prevent="(e) => e.target.blur()" />
-          <label class="text-base-content/60 whitespace-nowrap w-16 text-left text-sm">性别</label>
+          <label class="text-base-content/60 whitespace-nowrap text-left text-sm">性别</label>
           <ListboxSelect v-model="form.gender" :options="genderOptions" placeholder="选择性别" />
         </div>
-        <!-- 现居地 -->
-        <div class="grid grid-cols-[auto,1fr] gap-2 items-center">
-          <label :class="labelCls" class="w-16 text-left">现居地</label>
+        <!-- 现居地 + 出生地 同一行 -->
+        <div class="flex gap-2 items-center">
+          <label class="text-base-content/60 whitespace-nowrap text-left text-sm">现居地</label>
           <input v-model="form.currentResidence" type="text" :class="inputCls" placeholder="现居地" />
-        </div>
-        <!-- 出生地 -->
-        <div class="grid grid-cols-[auto,1fr] gap-2 items-center">
-          <label :class="labelCls" class="w-16 text-left">出生地</label>
+          <label class="text-base-content/60 whitespace-nowrap text-left text-sm">出生地</label>
           <input v-model="form.birthplace" type="text" :class="inputCls" placeholder="出生地" />
         </div>
       </div>
@@ -114,15 +47,15 @@ function clampChar(key) {
       <div class="flex items-start justify-between gap-2 mb-3">
         <h2 :class="sectionTitleCls">核心属性（Characteristics）</h2>
         <button
-          v-if="!isRolled()"
           type="button"
-          class="p-2.5 rounded-xl bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30 shrink-0"
-          title="投掷骰子随机全部属性（不可修改）"
+          class="p-2.5 rounded-xl bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30 shrink-0 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-accent/20"
+          :title="(rollHistory?.length ?? 0) >= (ROLL_MAX ?? 5) ? '在已投掷的 5 组结果之间切换' : '投掷骰子随机全部属性'"
+          :disabled="rollRolling?.value"
           @click="openRollAllChars"
         >
-          <Icon icon="mdi:dice-multiple" class="text-2xl" />
+          <Icon icon="mdi:dice-multiple" class="text-2xl shrink-0" :class="{ 'animate-spin': rollRolling?.value }" />
+          <span class="text-sm font-medium">{{ rollRolling?.value ? '投掷中…' : rollButtonLabel }}</span>
         </button>
-        <span v-else class="text-xs text-base-content shrink-0 self-center">已投掷</span>
       </div>
       <!-- 自行填写时显示剩余点数 -->
       <div v-if="form.attributesSource === 'manual'" class="mb-3 px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-sm">
@@ -150,7 +83,7 @@ function clampChar(key) {
           <div v-if="isRolled()" class="w-full px-2 py-1.5 rounded bg-base-100 border border-base-300 text-base-content text-sm">{{ form.luc ?? 0 }}</div>
           <div v-else class="flex items-center gap-2">
             <div class="flex-1 min-w-0 px-2 py-1.5 rounded bg-base-100 border border-base-300 text-base-content text-sm">{{ form.luc ?? 0 }}</div>
-            <button type="button" class="p-2 rounded-lg bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30 shrink-0" title="投掷幸运（3 次选 1）" @click="openRollLuckOnly">
+            <button type="button" class="p-2 rounded-lg bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30 shrink-0" title="投掷幸运" @click="openRollLuckOnly">
               <Icon icon="mdi:dice-multiple" class="text-lg" />
             </button>
           </div>
@@ -237,3 +170,79 @@ function clampChar(key) {
     </Dialog>
   </div>
 </template>
+
+<script setup>
+import { ref, computed, inject } from 'vue'
+import { Icon } from '@iconify/vue'
+import { Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
+import { labelCls, inputCls, sectionCls, sectionTitleCls, genderOptions } from '../../composables/useCharacterForm'
+import { CHAR_LABELS } from '../../data/characterConstants'
+import { getOccupationMeta } from '../../data/occupationMeta'
+import { NAME_COUNTRY_OPTIONS, NAME_GENDER_OPTIONS } from '../../utils/randomName'
+import ListboxSelect from '../ui/ListboxSelect.vue'
+import HpMpSanBar from './HpMpSanBar.vue'
+import StatusBadges from './StatusBadges.vue'
+
+const {
+  form,
+  syncDerived,
+  id: characterId,
+  isNew,
+  openRollAllChars,
+  openRollLuckOnly,
+  rollHistory,
+  rollIndex,
+  rollRolling,
+  ROLL_MAX,
+  charPointsRemaining,
+  CHAR_ATTRS,
+  CHAR_MIN,
+  CHAR_MAX,
+  CHAR_POINTS_TOTAL,
+  openRandomNameModal,
+  randomNameModalOpen,
+  randomNameCountry,
+  randomNameGender,
+  generatedName,
+  doGenerateRandomName,
+  confirmRandomName,
+  closeRandomNameModal,
+  occupationPickerOpen,
+  openOccupationPicker,
+  closeOccupationPicker,
+  selectOccupation,
+  occupationGroups,
+} = inject('characterForm')
+
+const rollButtonLabel = computed(() => {
+  const n = rollHistory?.value?.length ?? 0
+  if (n === 0) return '投掷'
+  const idx = (rollIndex?.value ?? 0) + 1
+  return `(${idx}/${ROLL_MAX ?? 5})`
+})
+
+const occupationMeta = computed(() => getOccupationMeta(form.value?.occupation))
+const occupationCategoryFilter = ref('')
+const filteredOccupationJobs = computed(() => {
+  const groups = occupationGroups || []
+  if (!occupationCategoryFilter.value) {
+    return groups.flatMap((g) => (g.jobs || []).map((job) => ({ job, groupName: g.name })))
+  }
+  const group = groups.find((g) => g.name === occupationCategoryFilter.value)
+  return group ? (group.jobs || []).map((job) => ({ job, groupName: group.name })) : []
+})
+
+function onSelectOccupation(job) {
+  selectOccupation(job)
+  closeOccupationPicker()
+}
+
+const isRolled = () => form.value?.attributesSource === 'rolled'
+function clampChar(key) {
+  const v = Number(form.value[key])
+  if (Number.isNaN(v) || v === '' || v === null || v === undefined) form.value[key] = CHAR_MIN
+  else if (v > CHAR_MAX) form.value[key] = CHAR_MAX
+  else if (v < CHAR_MIN) form.value[key] = CHAR_MIN
+}
+</script>
+

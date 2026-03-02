@@ -67,10 +67,16 @@
           </button>
           <button
             type="button"
-            class="px-5 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-content shadow-sm shadow-primary/20 active:scale-95 transition-all"
+            class="px-5 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-content shadow-sm shadow-primary/20 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
+            :disabled="diceRolling"
             @click="rollDice(selectedDice)"
           >
-            确认掷骰
+            <Icon
+              v-if="diceRolling"
+              icon="mdi:loading"
+              class="text-sm animate-spin"
+            />
+            <span v-else>确认掷骰</span>
           </button>
         </div>
       </div>
@@ -156,23 +162,12 @@
       </div>
     </BottomSheet>
 
-    <!-- 被请求方本地骰子动画弹窗：先掷骰按钮 → 动画 → 结果 → 确定，无取消/关闭 -->
-    <DiceRollModal
-      :open="checkModalOpen"
-      :batch="checkModalBatch"
-      :max-rolls="1"
-      :request-mode="true"
-      @close="checkModalOpen = false"
-      @confirm="handleCheckConfirm"
-    />
-
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import DiceRollModal from './DiceRollModal.vue'
 import BottomSheet from './BottomSheet.vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
@@ -181,6 +176,8 @@ import { useCharactersStore } from '../stores/characters'
 import { IMMEDIATE_INSANITY_TABLE } from '../data/madnessTable'
 import { useChannelMessages } from '../composables/useChannelMessages'
 import { useToast } from '../composables/useToast'
+import { useDice3D } from '../composables/useDice3D'
+import { parseAndRollDice as utilsParseAndRollDice, randomD100 as utilsRandomD100, rollAmount as utilsRollAmount } from '../utils/dice'
 import { MESSAGE_TYPES, ROOM_CHARACTER_STATUS } from '../constants/enums'
 import RoomChatMessages from './RoomChatMessages.vue'
 
@@ -194,6 +191,7 @@ const props = defineProps({
 const auth = useAuthStore()
 const gameRoomsStore = useGameRoomsStore()
 const charactersStore = useCharactersStore()
+const { roll: roll3D, isInitialized: isDice3DInitialized } = useDice3D()
 const activeTool = ref(null) // 'dice' | 'request' | 'stat' | null
 const loading = ref(false)
 const sending = ref(false)
@@ -220,17 +218,13 @@ const statExpr = ref('1')
 
 // 掷骰面板选择
 const selectedDice = ref('1d100')
+const diceRolling = ref(false)
 
 // 技能选择弹窗（自检 / 请求检定 共用）
 const skillPickerOpen = ref(false)
 const skillPickerMode = ref('self') // 'self' | 'request'
 const skillPickerSkills = ref([]) // { raw, displayName }[]
 const skillPickerLoading = ref(false)
-
-// 被请求方：本地检定弹窗
-const checkModalOpen = ref(false)
-const checkModalBatch = ref([])
-const checkRequest = ref(null)
 
 const toast = useToast()
 function showToast(message, duration = 3000) {
@@ -323,35 +317,8 @@ async function getSpeakerNameForMessage() {
   return me?.username || me?.email?.split?.('@')[0] || '我'
 }
 
-/**
- * 解析掷骰表达式并执行
- */
-function parseAndRollDice(expr) {
-  const m = expr.trim().match(/^(\d*)d(\d+)$/i)
-  if (!m) return null
-  
-  const count = m[1] ? Math.max(1, parseInt(m[1], 10)) : 1
-  const sides = Math.max(1, parseInt(m[2], 10))
-  
-  if (count > 100 || sides > 1000) return null
-  
-  const rolls = []
-  let sum = 0
-  for (let i = 0; i < count; i++) {
-    const v = Math.floor(Math.random() * sides) + 1
-    rolls.push(v)
-    sum += v
-  }
-  
-  return {
-    count,
-    sides,
-    rolls,
-    sum,
-    expr: `${count}d${sides}`,
-    detail: count > 1 ? ` = ${rolls.join(' + ')} = ${sum}` : ` = ${sum}`
-  }
-}
+// 统一使用 utils/dice 中的工具函数
+const parseAndRollDice = (expr) => utilsParseAndRollDice(expr, roll3D, isDice3DInitialized)
 
 async function openSkillPickerForRequest() {
   // 先校验是否选择了目标玩家
@@ -441,42 +408,8 @@ function onKeydown(e) {
   }
 }
 
-function randomD100() {
-  return Math.floor(Math.random() * 100) + 1
-}
-
-// 掷骰表达式解析（仅用于理智损失）：支持如 "1", "1d4", "d10"
-function rollAmount(expr) {
-  const raw = String(expr || '').trim().toLowerCase()
-  if (!raw) return { total: 0, detail: '0' }
-
-  // 纯数字
-  if (!raw.includes('d')) {
-    const n = Number(raw)
-    const v = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
-    return { total: v, detail: String(v) }
-  }
-
-  const m = raw.match(/^(\d*)d(\d+)$/)
-  if (!m) {
-    const n = Number(raw)
-    const v = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
-    return { total: v, detail: String(v) }
-  }
-
-  const count = m[1] ? Math.max(1, parseInt(m[1], 10)) : 1
-  const sides = Math.max(1, parseInt(m[2], 10))
-  const rolls = []
-  let sum = 0
-  for (let i = 0; i < count; i++) {
-    const v = Math.floor(Math.random() * sides) + 1
-    rolls.push(v)
-    sum += v
-  }
-  const detail =
-    count > 1 ? `${count}d${sides} = ${rolls.join(' + ')} = ${sum}` : `${count}d${sides} = ${sum}`
-  return { total: sum, detail }
-}
+const randomD100 = () => utilsRandomD100(roll3D, isDice3DInitialized)
+const rollAmount = (expr) => utilsRollAmount(expr, roll3D, isDice3DInitialized)
 
 async function sendSystemMessage(text) {
   sending.value = true
@@ -539,7 +472,7 @@ async function applyStatChangeFromPanel() {
 
   const field = metaAttr.field
   const oldValue = Number(sheet[field] ?? 0) || 0
-  const rollInfo = rollAmount(expr)
+  const rollInfo = await rollAmount(expr)
   const delta = rollInfo.total
   const signedDelta = op === '+' ? delta : -delta
   const newValue = Math.max(0, oldValue + signedDelta)
@@ -562,16 +495,22 @@ async function applyStatChangeFromPanel() {
 }
 
 async function rollDice(diceType = '1d100') {
-  const rollResult = parseAndRollDice(diceType)
-  if (!rollResult) {
-    showToast('掷骰格式错误')
-    return
+  if (diceRolling.value) return
+  diceRolling.value = true
+  try {
+    const rollResult = await parseAndRollDice(diceType)
+    if (!rollResult) {
+      showToast('掷骰格式错误')
+      return
+    }
+
+    const name = await getSpeakerNameForMessage()
+    const text = `【掷骰】${name} 掷出 ${rollResult.expr}${rollResult.detail}`
+    await sendSystemMessage(text)
+    selectedDice.value = '1d100'
+  } finally {
+    diceRolling.value = false
   }
-  
-  const name = await getSpeakerNameForMessage()
-  const text = `【掷骰】${name} 掷出 ${rollResult.expr}${rollResult.detail}`
-  await sendSystemMessage(text)
-  selectedDice.value = '1d100'
 }
 
 // 辅助：获取当前房间绑定角色的技能列表（用于弹窗选择）
@@ -754,7 +693,7 @@ async function skillCheckByName(keyword, modifier = 0, hidden = false) {
 
   const baseTarget = skillSuccess(chosen, sheet)
   const target = baseTarget + (modifier || 0)
-  const value = randomD100()
+  const value = await randomD100()
   let result = '失败'
   if (value <= Math.floor(target / 5)) result = '极难成功'
   else if (value <= Math.floor(target / 2)) result = '困难成功'
@@ -785,7 +724,7 @@ async function handleRollCommand(text) {
   const expr = text.slice(2).trim() // 去掉 .r
   const diceExpr = expr || '1d100'
   
-  const rollResult = parseAndRollDice(diceExpr)
+  const rollResult = await parseAndRollDice(diceExpr)
   if (!rollResult) {
     showToast('掷骰指令格式错误，请使用 ".r d100" 或 ".r 3d6" 之类格式。')
     return true
@@ -804,7 +743,7 @@ async function handleHiddenRollCommand(text) {
   const expr = text.slice(3).trim() // 去掉 .rh
   const diceExpr = expr || '1d100'
   
-  const rollResult = parseAndRollDice(diceExpr)
+  const rollResult = await parseAndRollDice(diceExpr)
   if (!rollResult) {
     showToast('掷骰指令格式错误，请使用 ".rh d100" 或 ".rh 3d6" 之类格式。')
     return true
@@ -841,9 +780,9 @@ async function handleSanityCheckCommand(text) {
   }
 
   const san = Number(sheet.sanCurrent ?? 0) || 0
-  const d100 = randomD100()
+  const d100 = await randomD100()
   const isSuccess = d100 <= san
-  const lossInfo = isSuccess ? rollAmount(successExpr) : rollAmount(failExpr)
+  const lossInfo = isSuccess ? await rollAmount(successExpr) : await rollAmount(failExpr)
   const loss = lossInfo.total
   const newSan = Math.max(0, san - loss)
   const triggerInsanity = loss >= 5
@@ -906,7 +845,7 @@ async function handleStatCommand(text) {
 
   const field = metaAttr.field
   const oldValue = Number(sheet[field] ?? 0) || 0
-  const rollInfo = rollAmount(expr)
+  const rollInfo = await rollAmount(expr)
   const delta = rollInfo.total
   const signedDelta = op === '+' ? delta : -delta
   const newValue = Math.max(0, oldValue + signedDelta)
@@ -998,8 +937,8 @@ async function handleCommand(raw) {
   return false
 }
 
-// 处理服务端推送的请求检定消息，仅在目标用户端弹出骰子动画弹窗
-function handleIncomingCheckRequest(msg) {
+// 处理服务端推送的请求检定消息：目标用户端自动使用 3D 骰子完成掷骰并生成系统消息
+async function handleIncomingCheckRequest(msg) {
   const me = auth.user?.value
   if (!me?.id) return
   if (!msg || msg.type !== MESSAGE_TYPES.CHECK_REQUEST) return
@@ -1011,38 +950,25 @@ function handleIncomingCheckRequest(msg) {
   }
   if (!meta || meta.targetUserId !== me.id) return
 
-  checkRequest.value = meta
+  let rollValue = 0
   if (meta.kind === 'skill' || meta.kind === 'sanity') {
-    checkModalBatch.value = [
-      { notation: '1d100', key: 'value', label: 'D100' },
-    ]
+    // 技能 / 理智检定都使用 1d100
+    rollValue = await randomD100()
   } else if (meta.kind === 'madness') {
-    checkModalBatch.value = [
-      { notation: '1d10', key: 'value', label: 'D10' },
-    ]
+    // 疯狂症状使用 1d10
+    const r = await parseAndRollDice('1d10')
+    rollValue = r?.sum ?? (Math.floor(Math.random() * 10) + 1)
   } else {
     return
   }
-  checkModalOpen.value = true
-}
-
-// 玩家在弹窗中完成掷骰后的处理：根据请求类型生成系统消息
-async function handleCheckConfirm(payload) {
-  const meta = checkRequest.value
-  if (!meta) return
-  const rollValue = Number(payload?.value || 0) || 0
 
   if (meta.kind === 'skill') {
-    // 与普通技能检定一致的判定逻辑
     await handleLocalSkillCheck(meta, rollValue)
   } else if (meta.kind === 'sanity') {
     await handleLocalSanCheck(meta, rollValue)
   } else if (meta.kind === 'madness') {
     await handleLocalMadness(meta, rollValue)
   }
-
-  checkModalOpen.value = false
-  checkRequest.value = null
 }
 
 async function handleLocalSkillCheck(meta, value) {
@@ -1109,7 +1035,7 @@ async function handleLocalSanCheck(meta, value) {
   else if (value === 100) result = '大失败'
 
   const chosenExpr = isSuccess ? successExpr : failExpr
-  const lossInfo = rollAmount(chosenExpr)
+  const lossInfo = await rollAmount(chosenExpr)
   const loss = lossInfo.total
   const newSan = Math.max(0, san - loss)
   const triggerInsanity = loss >= 5

@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col h-full">
-    <PageHeader title="用户列表" icon="mdi:account-supervisor">
+    <PageHeader v-if="standalone" title="用户列表" icon="mdi:account-supervisor">
       <template #actions>
         <button type="button" :disabled="loading" class="btn btn-ghost btn-sm" @click="load">
           <Icon icon="mdi:refresh" class="text-xl" />
@@ -8,7 +8,7 @@
       </template>
     </PageHeader>
 
-    <div class="flex-1 overflow-auto scroll-thin p-4">
+    <div :class="standalone ? 'flex-1 overflow-auto scroll-thin p-4' : ''">
       <p v-if="!isAdmin" class="text-base-content text-center py-8">
         你没有权限查看此页面。
       </p>
@@ -91,6 +91,10 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
 import { Icon } from '@iconify/vue'
 
+defineProps({
+  standalone: { type: Boolean, default: true },
+})
+
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.user?.value?.role === 'admin')
 
@@ -150,4 +154,6 @@ async function load() {
 onMounted(() => {
   if (isAdmin.value) load()
 })
+
+defineExpose({ load, loading })
 </script>

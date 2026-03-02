@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@3d-dice/dice-box": "^1.1.4",
     "@headlessui/vue": "^1.7.22",
     "@iconify/vue": "^4.1.1",
     "@supabase/supabase-js": "^2.97.0",
