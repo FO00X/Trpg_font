@@ -72,17 +72,6 @@
     </div>
   </div>
 
-  <!-- Toast 提示 -->
-  <Toast ref="toastRef" />
-  
-  <!-- 确认对话框 -->
-  <ConfirmDialog
-    v-model:visible="confirmDialogVisible"
-    :title="confirmDialogTitle"
-    :message="confirmDialogMessage"
-    @confirm="confirmDialogResolve"
-    @cancel="confirmDialogReject"
-  />
 </template>
 
 <script setup>
@@ -91,17 +80,19 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { useDateFormat } from '@vueuse/core'
 
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import Toast from '../components/Toast.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { useToast } from '../composables/useToast'
+import { useConfirmDialog } from '../composables/useConfirmDialog'
+import { formatDateTime } from '../utils/date'
 import { useNotesStore } from '../stores/notes'
 
 const route = useRoute()
 const router = useRouter()
 const notesStore = useNotesStore()
+const toast = useToast()
+const { confirm } = useConfirmDialog()
 
 const isNew = computed(() => route.name === 'note-new')
 const id = computed(() => route.params.id)
@@ -117,36 +108,6 @@ const loading = ref(true)
 const error = ref('')
 const isEditing = ref(false)
 
-// Toast 和确认对话框
-const toastRef = ref(null)
-const confirmDialogVisible = ref(false)
-const confirmDialogTitle = ref('确认')
-const confirmDialogMessage = ref('')
-let confirmDialogResolve = null
-let confirmDialogReject = null
-
-function showToast(message, duration = 3000) {
-  if (toastRef.value) {
-    toastRef.value.show(message, duration)
-  }
-}
-
-function showConfirm(title, message) {
-  return new Promise((resolve) => {
-    confirmDialogTitle.value = title
-    confirmDialogMessage.value = message
-    confirmDialogVisible.value = true
-    confirmDialogResolve = () => {
-      resolve(true)
-      confirmDialogVisible.value = false
-    }
-    confirmDialogReject = () => {
-      resolve(false)
-      confirmDialogVisible.value = false
-    }
-  })
-}
-
 const headerTitle = computed(() => {
   if (isNew.value) return '新建笔记'
   return isEditing.value ? '编辑笔记' : '查看笔记'
@@ -158,10 +119,7 @@ const parsedContent = computed(() => {
   return DOMPurify.sanitize(rawHtml)
 })
 
-const formattedDate = computed(() => {
-  if (!updatedAt.value) return ''
-  return useDateFormat(updatedAt.value, 'YYYY-MM-DD HH:mm').value
-})
+const formattedDate = computed(() => formatDateTime(updatedAt.value))
 
 const canSave = computed(() => {
   return title.value.trim().length > 0 || content.value.trim().length > 0
@@ -192,7 +150,7 @@ onMounted(async () => {
 
 async function save() {
   if (!canSave.value) {
-    showToast('标题和内容不能同时为空')
+    toast.error('标题和内容不能同时为空')
     return { ok: false }
   }
 
@@ -204,10 +162,10 @@ async function save() {
     saving.value = false
     if (!res.ok) {
       error.value = res.message || '创建失败'
-      showToast('创建失败：' + (res.message || '未知错误'))
+      toast.error('创建失败：' + (res.message || '未知错误'))
       return res
     }
-    showToast('创建成功')
+    toast.success('创建成功')
     router.replace({ name: 'note-edit', params: { id: res.data.id } })
     return res
   }
@@ -216,44 +174,44 @@ async function save() {
   saving.value = false
   if (!res.ok) {
     error.value = res.message || '保存失败'
-    showToast('保存失败：' + (res.message || '未知错误'))
+    toast.error('保存失败：' + (res.message || '未知错误'))
   } else {
     originalTitle.value = title.value
     originalContent.value = content.value
     if (res.data?.updated_at) {
       updatedAt.value = res.data.updated_at
     }
-    showToast('保存成功')
+    toast.success('保存成功')
   }
   return res
 }
 
 async function removeNote() {
-  const confirmed = await showConfirm('确认删除', '确定删除这篇笔记？')
+  const confirmed = await confirm({ title: '确认删除', message: '确定删除这篇笔记？' })
   if (!confirmed) return
   saving.value = true
   const res = await notesStore.remove(id.value)
   saving.value = false
   if (res.ok) {
-    showToast('删除成功')
+    toast.success('删除成功')
     setTimeout(() => {
       router.push({ name: 'notes' })
     }, 500)
   } else {
     error.value = res.message || '删除失败'
-    showToast('删除失败：' + (res.message || '未知错误'))
+    toast.error('删除失败：' + (res.message || '未知错误'))
   }
 }
 
 function back() {
   if (isEditing.value && !isNew.value && (title.value !== originalTitle.value || content.value !== originalContent.value)) {
-    showConfirm('放弃修改', '有未保存的修改，确定要放弃吗？').then(confirmed => {
+    confirm({ title: '放弃修改', message: '有未保存的修改，确定要放弃吗？' }).then(confirmed => {
       if (confirmed) {
         router.push({ name: 'notes' })
       }
     })
   } else if (isEditing.value && isNew.value && canSave.value) {
-    showConfirm('放弃新建', '有未保存的内容，确定要离开吗？').then(confirmed => {
+    confirm({ title: '放弃新建', message: '有未保存的内容，确定要离开吗？' }).then(confirmed => {
       if (confirmed) {
         router.push({ name: 'notes' })
       }
@@ -283,7 +241,7 @@ function onCancelEdit() {
   }
   // 如果有修改，则确认
   if (title.value !== originalTitle.value || content.value !== originalContent.value) {
-    showConfirm('放弃修改', '有未保存的修改，确定要丢弃吗？').then(confirmed => {
+    confirm({ title: '放弃修改', message: '有未保存的修改，确定要丢弃吗？' }).then(confirmed => {
       if (confirmed) {
         title.value = originalTitle.value
         content.value = originalContent.value

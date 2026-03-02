@@ -25,8 +25,6 @@
       </GameRoomForm>
     </div>
 
-    <!-- Toast 提示 -->
-    <Toast ref="toastRef" />
   </div>
 </template>
 
@@ -36,19 +34,12 @@ import { useRouter } from 'vue-router'
 import PageHeader from '../components/PageHeader.vue'
 import ModuleSelect from '../components/ModuleSelect.vue'
 import GameRoomForm from '../components/GameRoomForm.vue'
-import Toast from '../components/Toast.vue'
+import { useToast } from '../composables/useToast'
 import { useGameRoomsStore } from '../stores/gameRooms'
 
 const router = useRouter()
 const { availableTags, availableTagGroups, fetchTags, addRoom } = useGameRoomsStore()
-
-// Toast
-const toastRef = ref(null)
-function showToast(message, duration = 3000) {
-  if (toastRef.value) {
-    toastRef.value.show(message, duration)
-  }
-}
+const toast = useToast()
 
 onMounted(() => {
   fetchTags()
@@ -57,6 +48,7 @@ onMounted(() => {
 const roomForm = ref({
   name: '',
   description: '',
+  backstory: '',
   module: '',
   icon: '',
   maxPlayers: 6,
@@ -67,7 +59,7 @@ async function confirmCreateRoom() {
   const v = roomForm.value || {}
   const name = (v.name || '').trim()
   if (!name) {
-    showToast('请填写房间名称')
+    toast.error('请填写房间名称')
     return
   }
 
@@ -75,6 +67,7 @@ async function confirmCreateRoom() {
   const payload = {
     name,
     description: (v.description || '').trim(),
+    backstory: (v.backstory || '').trim(),
     module: moduleName || '自定义模组',
     icon: v.icon || '',
     maxPlayers: v.maxPlayers ?? 6,
@@ -86,11 +79,11 @@ async function confirmCreateRoom() {
     if (room) {
       goBack()
     } else {
-      showToast('创建房间失败，请稍后重试')
+      toast.error('创建房间失败，请稍后重试')
     }
   } catch (e) {
     console.error('创建房间出错:', e)
-    showToast('创建房间出错，请稍后重试')
+    toast.error('创建房间出错，请稍后重试')
   }
 }
 

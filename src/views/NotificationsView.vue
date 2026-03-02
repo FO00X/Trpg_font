@@ -7,7 +7,9 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import Toast from '../components/Toast.vue'
+import { useToast } from '../composables/useToast'
+import { formatDateTime, formatRelativeShort } from '../utils/date'
+import { ROOM_CHARACTER_STATUS } from '../constants/enums'
 import { useNotificationsStore } from '../stores/notifications'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useUpdateLogsStore } from '../stores/updateLogs'
@@ -24,6 +26,7 @@ const notificationsStore = useNotificationsStore()
 const gameRoomsStore = useGameRoomsStore()
 const updateLogsStore = useUpdateLogsStore()
 const authStore = useAuthStore()
+const toast = useToast()
 
 const activeTab = ref('notifications') // 'notifications' | 'updates'
 const loading = ref(true)
@@ -84,14 +87,6 @@ watch(activeTab, (tab) => {
   if (tab === 'updates') fetchUpdateLogs()
 })
 
-function formatTime(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const sameDay = d.toDateString() === now.toDateString()
-  if (sameDay) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
 
 function iconForType(type) {
   const map = { system: 'mdi:bell', friend_request: 'mdi:account-plus', room_invite: 'mdi:door-open', room_apply: 'mdi:door-open' }
@@ -130,15 +125,15 @@ async function onApprove(n) {
   if (n.decision) return
   const info = parseRoomApplyInfo(n)
   if (!info) {
-    showToast('无法解析房间信息，请稍后重试')
+    toast.error('无法解析房间信息，请稍后重试')
     return
   }
-  const res = await gameRoomsStore.updateApplicationStatus(info.roomId, info.applicantId, 'accepted')
+  const res = await gameRoomsStore.updateApplicationStatus(info.roomId, info.applicantId, ROOM_CHARACTER_STATUS.ACCEPTED)
   if (!res.ok) {
-    showToast(res.message || '操作失败')
+    toast.error(res.message || '操作失败')
     return
   }
-  await notificationsStore.setDecision(n.id, 'accepted')
+  await notificationsStore.setDecision(n.id, ROOM_CHARACTER_STATUS.ACCEPTED)
 }
 
 async function onReject(n) {
@@ -146,15 +141,15 @@ async function onReject(n) {
   if (n.decision) return
   const info = parseRoomApplyInfo(n)
   if (!info) {
-    showToast('无法解析房间信息，请稍后重试')
+    toast.error('无法解析房间信息，请稍后重试')
     return
   }
-  const res = await gameRoomsStore.updateApplicationStatus(info.roomId, info.applicantId, 'rejected')
+  const res = await gameRoomsStore.updateApplicationStatus(info.roomId, info.applicantId, ROOM_CHARACTER_STATUS.REJECTED)
   if (!res.ok) {
-    showToast(res.message || '操作失败')
+    toast.error(res.message || '操作失败')
     return
   }
-  await notificationsStore.setDecision(n.id, 'rejected')
+  await notificationsStore.setDecision(n.id, ROOM_CHARACTER_STATUS.REJECTED)
 }
 
 async function markAllRead() {
@@ -168,11 +163,6 @@ function roomTitle(n) {
   return roomNameById.value[info.roomId] || ''
 }
 
-function formatDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
 
 function openAddLog() {
   logDialogMode.value = 'add'
@@ -233,13 +223,6 @@ function closeDeleteConfirm() {
 const updateLogsTimeline = computed(() => updateLogsStore.list.value || [])
 const expandedLogId = ref(null)
 
-// Toast
-const toastRef = ref(null)
-function showToast(message, duration = 3000) {
-  if (toastRef.value) {
-    toastRef.value.show(message, duration)
-  }
-}
 
 watch(
   updateLogsTimeline,
@@ -320,13 +303,13 @@ function isLogExpanded(item) {
               {{ n.content }}
               <span v-if="n.type === 'room_apply' && roomTitle(n)" class="text-primary/80 font-semibold">{{ roomTitle(n) }}</span>
             </div>
-            <div class="text-xs text-base-content/40 mt-2">{{ formatTime(n.created_at) }}</div>
+            <div class="text-xs text-base-content/40 mt-2">{{ formatRelativeShort(n.created_at) }}</div>
           </div>
           <div v-if="n.type === 'room_apply'" class="flex items-center gap-2 shrink-0 self-center" @click.stop>
-            <template v-if="n.decision === 'accepted'">
+            <template v-if="n.decision === ROOM_CHARACTER_STATUS.ACCEPTED">
               <span class="px-2.5 py-1 rounded-xl text-xs font-medium bg-success/10 text-success">已同意</span>
             </template>
-            <template v-else-if="n.decision === 'rejected'">
+            <template v-else-if="n.decision === ROOM_CHARACTER_STATUS.REJECTED">
               <span class="px-2.5 py-1 rounded-xl text-xs font-medium bg-error/10 text-error">已拒绝</span>
             </template>
             <template v-else>
@@ -384,12 +367,12 @@ function isLogExpanded(item) {
             :class="isLogExpanded(item) ? '' : 'hover:shadow-md'"
           >
             <div
-              class="flex items-start justify-between gap-3 p-4 cursor-pointer select-none active:scale-[0.99] transition-transform"
+              class="flex items-start justify-between gap-3 px-4 py-2 cursor-pointer select-none active:scale-[0.99] transition-transform"
               @click="toggleLogExpand(item)"
             >
               <div class="flex-1 min-w-0">
                 <h3 class="font-semibold text-base-content">{{ item.title }}</h3>
-                <span class="text-xs text-base-content/50 mt-1 block">{{ formatDate(item.created_at) }}</span>
+                <span class="text-xs text-base-content/50 mt-1 block">{{ formatDateTime(item.created_at) }}</span>
               </div>
 
               <div v-if="isAdmin" class="flex items-center gap-1 shrink-0 -mr-1" @click.stop>
@@ -426,7 +409,7 @@ function isLogExpanded(item) {
               <div v-show="isLogExpanded(item)" class="border-t border-base-200">
                 <div
                   v-if="item.content"
-                  class="markdown-body px-4 py-4 text-sm text-base-content/90 leading-relaxed"
+                  class="markdown-body px-4 py-2 text-sm text-base-content/90 leading-relaxed"
                   v-html="renderMarkdown(item.content)"
                 />
                 <div v-else class="px-4 py-4 text-sm text-base-content/50">暂无详细说明</div>
@@ -552,8 +535,6 @@ function isLogExpanded(item) {
       </div>
     </Dialog>
 
-    <!-- Toast 提示 -->
-    <Toast ref="toastRef" />
   </div>
 </template>
 

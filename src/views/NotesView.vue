@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { useNotesStore } from '../stores/notes'
+import { formatDateTime } from '../utils/date'
 
 const router = useRouter()
 const notesStore = useNotesStore()
@@ -16,12 +17,6 @@ onMounted(async () => {
   loading.value = false
   if (!res.ok) error.value = res.message || '加载失败'
 })
-
-function formatDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
 
 function openNote(note) {
   router.push({ name: 'note-edit', params: { id: note.id } })
@@ -62,7 +57,7 @@ function openNew() {
             <div class="flex-1 min-w-0">
               <div class="font-medium text-base-content truncate">{{ n.title || '无标题' }}</div>
               <div class="text-sm text-base-content/60 line-clamp-2">{{ n.content || '无内容' }}</div>
-              <div class="text-xs text-base-content/50 mt-1">{{ formatDate(n.updated_at) }}</div>
+              <div class="text-xs text-base-content/50 mt-1">{{ formatDateTime(n.updated_at) }}</div>
             </div>
             <Icon icon="mdi:chevron-right" class="text-base-content/50 shrink-0 mt-1" />
           </div>

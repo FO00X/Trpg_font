@@ -12,7 +12,10 @@
         v-if="message"
         class="fixed top-4 left-1/2 -translate-x-1/2 z-[10000] pointer-events-none"
       >
-        <div class="alert shadow-lg text-sm max-w-md bg-base-200 text-base-content border border-base-300">
+        <div
+          class="alert shadow-lg text-sm max-w-md border"
+          :class="alertClass"
+        >
           {{ message }}
         </div>
       </div>
@@ -21,14 +24,23 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Teleport, Transition } from 'vue'
 
 const message = ref('')
+const messageType = ref('info') // 'info' | 'success' | 'error'
 let timer = null
 
-function show(msg, duration = 3000) {
+const alertClass = computed(() => {
+  const base = 'text-base-content'
+  if (messageType.value === 'success') return `alert-success ${base}`
+  if (messageType.value === 'error') return `alert-error ${base}`
+  return `bg-base-200 border-base-300 ${base}`
+})
+
+function show(msg, duration = 3000, type = 'info') {
   message.value = msg
+  messageType.value = type || 'info'
   if (timer) clearTimeout(timer)
   timer = setTimeout(() => {
     message.value = ''

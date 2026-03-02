@@ -2,7 +2,7 @@
   <div class="flex flex-col h-full">
     <!-- 私聊时：只显示聊天区域 + 返回 -->
     <template v-if="dmChannelId">
-      <header class="navbar h-14 shrink-0 px-4 border-b border-base-300 bg-base-200 rounded-none">
+      <header class="navbar h-14 shrink-0 px-4 border-b border-base-300 bg-base-100 rounded-none">
         <button type="button" class="btn btn-ghost btn-square btn-sm" title="返回好友列表" @click="closeDm">
           <Icon icon="mdi:arrow-left" class="text-xl" />
         </button>
@@ -124,17 +124,6 @@
       </div>
     </template>
 
-    <!-- Toast 提示 -->
-    <Toast ref="toastRef" />
-    
-    <!-- 确认对话框 -->
-    <ConfirmDialog
-      v-model:visible="confirmDialogVisible"
-      :title="confirmDialogTitle"
-      :message="confirmDialogMessage"
-      @confirm="confirmDialogResolve"
-      @cancel="confirmDialogReject"
-    />
   </div>
 </template>
 
@@ -145,8 +134,8 @@ import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 import MessageList from '../components/MessageList.vue'
 import MessageInput from '../components/MessageInput.vue'
-import Toast from '../components/Toast.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { useToast } from '../composables/useToast'
+import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useChatStore } from '../stores/chat'
 import { useFriendsStore } from '../stores/friends'
 
@@ -167,36 +156,14 @@ const {
   removeFriend,
   cancelSentRequest,
 } = useFriendsStore()
+const toast = useToast()
+const { confirm } = useConfirmDialog()
 
 const showAddFriend = ref(false)
 const addFriendInput = ref('')
 const addFriendLoading = ref(false)
 const addFriendError = ref('')
 const addFriendSuccess = ref(false)
-
-// Toast 和确认对话框
-const toastRef = ref(null)
-const confirmDialogVisible = ref(false)
-const confirmDialogTitle = ref('确认')
-const confirmDialogMessage = ref('')
-let confirmDialogResolve = null
-let confirmDialogReject = null
-
-function showToast(message, duration = 3000) {
-  if (toastRef.value) {
-    toastRef.value.show(message, duration)
-  }
-}
-
-function showConfirm(title, message) {
-  return new Promise((resolve) => {
-    confirmDialogTitle.value = title
-    confirmDialogMessage.value = message
-    confirmDialogVisible.value = true
-    confirmDialogResolve = () => resolve(true)
-    confirmDialogReject = () => resolve(false)
-  })
-}
 
 async function loadAll() {
   await Promise.all([fetchFriends(), fetchPendingReceived(), fetchPendingSent()])
@@ -252,7 +219,7 @@ async function onSendRequest() {
 
 async function onAcceptRequest(requestId) {
   const res = await acceptRequest(requestId)
-  if (!res.ok) showToast(res.message || '操作失败')
+  if (!res.ok) toast.error(res.message || '操作失败')
 }
 
 async function onRejectRequest(requestId) {
@@ -264,9 +231,9 @@ async function onCancelSentRequest(requestId) {
 }
 
 async function onRemoveFriend(friend) {
-  const confirmed = await showConfirm('确认删除', `确定要删除好友「${friend.name}」吗？`)
+  const confirmed = await confirm({ title: '确认删除', message: `确定要删除好友「${friend.name}」吗？` })
   if (!confirmed) return
   const res = await removeFriend(friend.id)
-  if (!res.ok) showToast(res.message || '操作失败')
+  if (!res.ok) toast.error(res.message || '操作失败')
 }
 </script>

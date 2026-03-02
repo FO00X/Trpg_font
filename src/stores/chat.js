@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth'
 import { useProfileCache } from '../stores/profileCache'
 
 // 频道列表（大厅等）与模组/子频道，由 fetchChannels 从后端拉取
+// 默认先给出一个 general，实际会立即被后端数据覆盖
 const channels = ref([{ id: 'general', name: '大厅', icon: 'mdi:home', unread: 0 }])
 const modules = ref([])
 
@@ -14,27 +15,18 @@ const directChannels = ref([])
 // 当前选中的频道
 const currentChannelId = ref('general')
 
-// 消息列表 { channelId -> messages[] }，由 fetchMessages 与 Socket 填充
-const messagesByChannel = ref({
-  general: [
-    { id: '1', userId: 'system', userName: '系统', content: '欢迎使用 FOXTrpg。请在下方输入消息并发送。', time: Date.now() - 3600000, type: 'system' },
-  ],
-})
+// 消息列表 { channelId -> messages[] }，由 fetchMessages 与 Realtime 填充
+const messagesByChannel = ref({})
 
-// 当前用户（可后续接登录）
+// 当前用户信息，由 authStore 同步（initSocket 内部 watch）
 const currentUser = ref({
-  id: 'me',
-  name: '我',
+  id: null,
+  name: '',
   avatar: null,
 })
 
-// 在线用户 Mock
-const onlineUsers = ref([
-  { id: 'u1', name: '熊猫', status: 'online' },
-  { id: 'u2', name: '田中', status: 'online' },
-  { id: 'u3', name: '方糕', status: 'online' },
-  { id: 'u4', name: '言安', status: 'online' },
-])
+// 在线用户列表：真实环境中应由独立的在线状态服务或房间成员列表维护，这里不再使用本地 Mock
+const onlineUsers = ref([])
 
 // 子频道内玩家选中的角色：{ [channelId]: { [userId]: characterId | null } }
 const subChannelMemberCharacter = ref({})
@@ -438,10 +430,13 @@ export function useChatStore() {
   /** 退出登录：重置为默认用户（后续可接真实登出逻辑） */
   function logout() {
     currentUser.value = {
-      id: 'me',
-      name: '我',
+      id: null,
+      name: '',
       avatar: null,
     }
+    messagesByChannel.value = {}
+    directChannels.value = []
+    dmPeerProfile.value = null
   }
 
   /** 设置当前用户在当前子频道选中的角色（后续可接持久化/同步） */

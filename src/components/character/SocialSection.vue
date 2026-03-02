@@ -1,10 +1,10 @@
 <script setup>
-import { inject, computed } from 'vue'
+import { inject, computed, ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { Dialog, DialogOverlay, DialogPanel, DialogTitle } from '@headlessui/vue'
 import { inputCls, labelCls, sectionCls, sectionTitleCls } from '../../composables/useCharacterForm'
 import { useChatStore } from '../../stores/chat'
-import ComboboxSelect from '../ui/ComboboxSelect.vue'
+import { supabase } from '../../lib/supabase'
 
 const ctx = inject('characterForm')
 const {
@@ -21,15 +21,40 @@ const {
   removeScenario,
 } = ctx
 
-const { currentUser, onlineUsers } = useChatStore()
+const { currentUser } = useChatStore()
+
+// 所有用户的可选名称（从 profiles.username 拉取）
+const allUserNames = ref([])
+
+onMounted(async () => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('username')
+      .order('username', { ascending: true })
+
+    if (!error && data) {
+      allUserNames.value = data
+        .map((p) => (p.username || '').trim())
+        .filter(Boolean)
+    }
+  } catch {
+    // 忽略错误，保持为空列表
+  }
+})
+
 const playerOptions = computed(() => {
-  const names = [currentUser.value?.name].filter(Boolean)
-  onlineUsers.value.forEach((u) => { if (u.name && !names.includes(u.name)) names.push(u.name) })
-  return names
+  const namesSet = new Set()
+  const selfName = (currentUser.value?.name || '').trim()
+  if (selfName) namesSet.add(selfName)
+  for (const n of allUserNames.value) {
+    if (n) namesSet.add(n)
+  }
+  return Array.from(namesSet)
 })
 
 const RELATION_OPTIONS = [
-  '家人', '朋友', '同事', '恋人', '熟人', '导师', '学生', '邻居', '雇主', '下属', '搭档', '仇敌', '陌生人', '其他',
+  '家人', '朋友', '同事', '恋人', '熟人', '导师', '学生', '邻居', '上级', '下属', '搭档', '仇敌', '陌生人', '仅认识',
 ]
 
 function companionDisplayText(comp) {
@@ -69,15 +94,48 @@ function companionDisplayText(comp) {
             <div class="space-y-3">
               <div>
                 <label :class="labelCls">角色名字</label>
-                <input v-model="companionDraft.name" type="text" :class="inputCls" placeholder="角色名字" />
+                <input
+                  v-model="companionDraft.name"
+                  type="text"
+                  :class="inputCls"
+                  placeholder="角色名字"
+                />
               </div>
               <div>
                 <label :class="labelCls">所属玩家</label>
-                <ComboboxSelect v-model="companionDraft.player" :options="playerOptions" placeholder="选择或输入玩家" />
+                <select
+                  v-model="companionDraft.player"
+                  class="select select-bordered w-full"
+                >
+                  <option disabled value="">
+                    {{ playerOptions.length ? '选择玩家' : '暂无在线玩家' }}
+                  </option>
+                  <option
+                    v-for="name in playerOptions"
+                    :key="name"
+                    :value="name"
+                  >
+                    {{ name }}
+                  </option>
+                </select>
               </div>
               <div>
                 <label :class="labelCls">关系</label>
-                <ComboboxSelect v-model="companionDraft.relation" :options="RELATION_OPTIONS" placeholder="选择或输入关系" />
+                <select
+                  v-model="companionDraft.relation"
+                  class="select select-bordered w-full"
+                >
+                  <option disabled value="">
+                    选择关系
+                  </option>
+                  <option
+                    v-for="opt in RELATION_OPTIONS"
+                    :key="opt"
+                    :value="opt"
+                  >
+                    {{ opt }}
+                  </option>
+                </select>
               </div>
             </div>
             <div class="flex gap-2 mt-4">

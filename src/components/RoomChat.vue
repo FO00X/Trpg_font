@@ -1,82 +1,11 @@
 <template>
   <div class="flex flex-col h-full">
-    <!-- 内联提示（替代 Toast） -->
-    <div
-      v-if="alertMessage"
-      role="alert"
-      class="alert gap-2 py-2 px-4 text-sm shrink-0 rounded-none border-0 border-b border-base-300/50"
-      :class="alertClass"
-    >
-      <Icon :icon="alertIcon" class="text-lg shrink-0" />
-      <span>{{ alertMessage }}</span>
-      <button type="button" class="btn btn-ghost btn-xs btn-square ml-auto" aria-label="关闭" @click="alertMessage = ''">
-        <Icon icon="mdi:close" class="text-lg" />
-      </button>
-    </div>
     <!-- 消息列表 -->
-    <div ref="listEl" class="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-2">
-      <template v-for="m in messages" :key="m.id">
-        <!-- 系统通知：掷骰、暗骰、技能检定等，不作为说话人展示 -->
-        <div
-          v-if="m.type === 'system' || m.type === 'hidden_roll' || m.type === 'hidden_skill' || m.type === 'check_request'"
-          class="flex justify-center my-1 text-[11px] text-base-content"
-        >
-          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-base-200/50 border border-accent-muted/30">
-            <Icon icon="mdi:information-outline" class="text-sm" />
-            <span>{{ getMessageContent(m) }}</span>
-          </div>
-        </div>
-
-        <!-- 普通聊天消息（小说式：角色说话 / KP 环境描写） -->
-        <div
-          v-else
-          :class="[
-            'flex gap-2 text-sm',
-            m.isSelf ? 'flex-row-reverse' : 'flex-row',
-          ]"
-        >
-          <div
-            class="w-8 h-8 rounded-full bg-base-100-active flex items-center justify-center shrink-0 text-accent text-xs font-medium"
-          >
-            {{ m.userName.slice(0, 1).toUpperCase() }}
-          </div>
-          <div :class="['max-w-[75%] flex flex-col', m.isSelf ? 'items-end' : 'items-start']">
-            <div class="flex items-baseline gap-2 mb-1">
-              <span
-                class="px-2 py-0.5 rounded-md text-[10px] font-bold"
-                :class="getSpeakerBadge(m).class"
-              >
-                {{ getSpeakerBadge(m).text }}
-              </span>
-              <span class="text-xs font-bold text-base-content">{{ getSpeakerName(m) }}</span>
-              <span class="text-[10px] text-base-content/40">{{ formatTime(m.time) }}</span>
-            </div>
-            <!-- KP：环境描写/叙事风格；PL：角色对话（他人消息加「」） -->
-            <div
-              :class="[
-                'px-4 py-2.5 text-sm break-words whitespace-pre-wrap shadow-sm leading-relaxed',
-                m.speakerRole === 'kp'
-                  ? 'rounded-2xl bg-base-200 text-base-content/80 border-l-4 border-primary rounded-tl-sm'
-                  : m.isSelf
-                    ? 'rounded-3xl rounded-br-sm bg-primary text-primary-content shadow-primary/20'
-                    : 'rounded-3xl rounded-bl-sm bg-base-100 border border-base-200',
-              ]"
-            >
-              <template v-if="m.speakerRole !== 'kp' && !m.isSelf">
-                <span class="text-base-content">「</span>{{ getMessageContent(m) }}<span class="text-base-content">」</span>
-              </template>
-              <template v-else>
-                {{ getMessageContent(m) }}
-              </template>
-            </div>
-          </div>
-        </div>
-      </template>
-      <div v-if="!messages.length && !loading" class="text-center text-xs text-base-content py-6">
-        暂无消息，开始在房间里说点什么吧～
-      </div>
-      <LoadingSpinner v-if="loading" :block="false" size="sm" message="加载中…" className="justify-center py-4" />
-    </div>
+    <RoomChatMessages
+      :messages="messages"
+      :loading="loading"
+      :is-owner="isOwner"
+    />
 
     <div class="border-t border-base-200/50 bg-base-100 px-3 py-2 flex flex-col gap-2 pb-safe">
       <div class="flex items-center gap-2 text-xs text-base-content/60 px-1 overflow-x-auto scroll-thin">
@@ -241,9 +170,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import LoadingSpinner from './LoadingSpinner.vue'
 import DiceRollModal from './DiceRollModal.vue'
 import BottomSheet from './BottomSheet.vue'
 import { supabase } from '../lib/supabase'
@@ -251,6 +179,10 @@ import { useAuthStore } from '../stores/auth'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useCharactersStore } from '../stores/characters'
 import { IMMEDIATE_INSANITY_TABLE } from '../data/madnessTable'
+import { useChannelMessages } from '../composables/useChannelMessages'
+import { useToast } from '../composables/useToast'
+import { MESSAGE_TYPES, ROOM_CHARACTER_STATUS } from '../constants/enums'
+import RoomChatMessages from './RoomChatMessages.vue'
 
 const props = defineProps({
   roomId: {
@@ -262,13 +194,10 @@ const props = defineProps({
 const auth = useAuthStore()
 const gameRoomsStore = useGameRoomsStore()
 const charactersStore = useCharactersStore()
-const listEl = ref(null)
-const messages = ref([])
 const activeTool = ref(null) // 'dice' | 'request' | 'stat' | null
-const loading = ref(true)
+const loading = ref(false)
 const sending = ref(false)
 const input = ref('')
-let realtimeChannel = null
 
 // 是否为房主（用于显示掷骰/检定中的 KP 名称）
 const isOwner = ref(false)
@@ -303,40 +232,32 @@ const checkModalOpen = ref(false)
 const checkModalBatch = ref([])
 const checkRequest = ref(null)
 
-// 内联 Alert 提示（替代 Toast）
-const alertMessage = ref('')
-const alertType = ref('warning') // 'error' | 'warning' | 'info'
-let alertTimer = null
-const alertClass = computed(() => {
-  if (alertType.value === 'error') return 'alert-error'
-  if (alertType.value === 'info') return 'alert-info'
-  return 'alert-warning'
-})
-const alertIcon = computed(() => {
-  if (alertType.value === 'error') return 'mdi:alert-circle-outline'
-  if (alertType.value === 'info') return 'mdi:information-outline'
-  return 'mdi:alert-outline'
-})
+const toast = useToast()
 function showToast(message, duration = 3000) {
-  alertType.value = 'warning'
-  alertMessage.value = message
-  if (alertTimer) clearTimeout(alertTimer)
-  alertTimer = setTimeout(() => {
-    alertMessage.value = ''
-    alertTimer = null
-  }, duration)
-}
-function showAlert(message, type = 'warning', duration = 3000) {
-  alertType.value = type
-  alertMessage.value = message
-  if (alertTimer) clearTimeout(alertTimer)
-  alertTimer = setTimeout(() => {
-    alertMessage.value = ''
-    alertTimer = null
-  }, duration)
+  toast.show(message, duration, 'warning')
 }
 
 const channelId = computed(() => `room:${props.roomId}`)
+
+// 房间内消息流：统一使用通用的 useChannelMessages composable 管理加载与 Realtime
+const {
+  messages,
+  loading: messagesLoading,
+} = useChannelMessages(channelId, {
+  onNewMessage(msg) {
+    if (msg.type === MESSAGE_TYPES.CHECK_REQUEST) {
+      handleIncomingCheckRequest(msg)
+    }
+  },
+})
+
+watch(
+  messagesLoading,
+  (val) => {
+    loading.value = val
+  },
+  { immediate: true }
+)
 
 // ==================== 工具函数 ====================
 
@@ -362,6 +283,29 @@ async function getCurrentRoomCharacter() {
   const charId = getRoomCharacter(props.roomId)
   if (!charId) return null
   return await getCharacterSheet(charId)
+}
+
+/**
+ * 根据角色 id 持久化更新角色卡部分字段（保持其余字段不变）
+ */
+async function updateCharacterById(characterId, patch) {
+  if (!characterId || !patch || typeof patch !== 'object') return
+  const raw = charactersStore.getById(characterId)
+  if (!raw) return
+  const draft = { ...raw, ...patch }
+  delete draft.id
+  delete draft.updated_at
+  await charactersStore.update(characterId, draft)
+}
+
+/**
+ * 更新当前房间绑定角色卡的字段
+ */
+async function updateCurrentRoomCharacter(patch) {
+  const { getRoomCharacter } = gameRoomsStore
+  const charId = getRoomCharacter(props.roomId)
+  if (!charId) return
+  await updateCharacterById(charId, patch)
 }
 
 /**
@@ -409,97 +353,6 @@ function parseAndRollDice(expr) {
   }
 }
 
-function normalizeRow(row) {
-  const userId = row.user_id || 'system'
-  const userName = row.user_name || (userId === 'system' ? '系统' : '未知')
-  const me = auth.user?.value
-  return {
-    id: row.id,
-    userId,
-    userName,
-    content: row.content,
-    time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
-    type: row.type || 'text',
-    speakerRole: row.speaker_role || null,
-    speakerNpcId: row.speaker_npc_id || null,
-    speakerNpcName: row.speaker_npc_name || null,
-    isSelf: me && me.id === userId,
-  }
-}
-
-function getMessageContent(msg) {
-  if ((msg.type === 'hidden_roll' || msg.type === 'hidden_skill') && !isOwner.value) {
-    return '？？'
-  }
-  if (msg.type === 'check_request') {
-    try {
-      const data = JSON.parse(msg.content || '{}')
-      const from = data.requesterName || 'KP'
-      const who = data.targetCharacterName || '某位玩家'
-      if (data.kind === 'skill') {
-        const mod = data.modifier ? (data.modifier > 0 ? `+${data.modifier}` : `${data.modifier}`) : ''
-        const extra = mod ? `（${mod}）` : ''
-        return `【技能检定】${who} 进行「${data.skillName || '未知技能'}」检定${extra}`
-      }
-      if (data.kind === 'sanity') {
-        const succ = data.sanSuccessExpr || '0'
-        const fail = data.sanFailExpr || '1'
-        return `【理智检定】${who} 进行理智检定（成功失去 ${succ}，失败失去 ${fail}）`
-      }
-      if (data.kind === 'madness') {
-        return `【疯狂症状】 ${who} 抽取疯狂症状`
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-  return msg.content
-}
-
-function getSpeakerName(msg) {
-  if (msg.type === 'system' || msg.type === 'hidden_roll' || msg.type === 'hidden_skill' || msg.type === 'check_request')
-    return '骰娘'
-  if (msg.speakerRole === 'kp') return 'KP'
-  if (msg.speakerRole === 'npc' && msg.speakerNpcName) return msg.speakerNpcName
-  return msg.userName || '未知'
-}
-
-function getSpeakerBadge(msg) {
-  if (msg.type === 'system' || msg.type === 'hidden_roll' || msg.type === 'hidden_skill' || msg.type === 'check_request')
-    return { text: '骰娘', class: 'bg-accent-muted/20 text-base-content' }
-  if (msg.speakerRole === 'kp') return { text: 'KP', class: 'bg-blue-500/20 text-blue-400' }
-  if (msg.speakerRole === 'npc') return { text: 'NPC', class: 'bg-purple-500/20 text-purple-400' }
-  return { text: 'PL', class: 'bg-green-500/20 text-green-400' }
-}
-
-function scrollToBottom() {
-  nextTick(() => {
-    if (!listEl.value) return
-    listEl.value.scrollTop = listEl.value.scrollHeight
-  })
-}
-
-function formatTime(ts) {
-  const d = new Date(ts)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-async function loadMessages() {
-  loading.value = true
-  try {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
-      .eq('channel_id', channelId.value)
-      .order('created_at', { ascending: true })
-      .limit(200)
-    if (error) return
-    messages.value = (data || []).map(normalizeRow)
-    scrollToBottom()
-  } finally {
-    loading.value = false
-  }
-}
 async function openSkillPickerForRequest() {
   // 先校验是否选择了目标玩家
   if (!requestTargetUserId.value) {
@@ -519,39 +372,6 @@ async function openSkillPickerForRequest() {
   skillPickerMode.value = 'request'; // 标记为“请求检定”模式
   skillPickerOpen.value = true;
 }
-function setupRealtime() {
-  if (realtimeChannel) return
-  realtimeChannel = supabase
-    .channel(`room-chat-${props.roomId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `channel_id=eq.${channelId.value}`,
-      },
-      (payload) => {
-        const row = payload.new
-        if (messages.value.some((m) => m.id === row.id)) return
-        const msg = normalizeRow(row)
-        messages.value.push(msg)
-        if (msg.type === 'check_request') {
-          handleIncomingCheckRequest(msg)
-        }
-        scrollToBottom()
-      }
-    )
-    .subscribe()
-}
-
-function cleanupRealtime() {
-  if (realtimeChannel) {
-    supabase.removeChannel(realtimeChannel)
-    realtimeChannel = null
-  }
-}
-
 async function send() {
   const text = input.value.trim()
   if (!text || sending.value) return
@@ -596,19 +416,17 @@ async function send() {
       user_id: me.id,
       user_name: me.username || me.email?.split?.('@')[0] || '我',
       content: text,
-      type: 'text',
+      type: MESSAGE_TYPES.TEXT,
       speaker_role: speakerRole,
       speaker_npc_id: null,
       speaker_npc_name: speakerNpcName,
     }
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('messages')
       .insert(payload)
       .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
       .single()
-    if (!error && data) {
-      messages.value.push(normalizeRow(data))
-      scrollToBottom()
+    if (!error) {
       input.value = ''
     }
   } finally {
@@ -668,7 +486,7 @@ async function sendSystemMessage(text) {
       user_id: null,
       user_name: '骰娘',
       content: text,
-      type: 'system',
+      type: MESSAGE_TYPES.SYSTEM,
     }
     // 不在本地立即 push，交给 Realtime INSERT 事件统一处理，避免重复
     await supabase.from('messages').insert(payload)
@@ -678,7 +496,7 @@ async function sendSystemMessage(text) {
 }
 
 // 只对房主可见内容的消息（暗骰 / 暗中检定）
-async function sendHiddenMessage(text, type = 'hidden_roll') {
+async function sendHiddenMessage(text, type = MESSAGE_TYPES.HIDDEN_ROLL) {
   sending.value = true
   try {
     const payload = {
@@ -733,6 +551,8 @@ async function applyStatChangeFromPanel() {
       : expr
       ? `（表达式 ${expr}）`
       : ''
+
+  await updateCurrentRoomCharacter({ [field]: newValue })
 
   const textMsg =
     `【属性变化】「${sheetName}」的 ${metaAttr.label}：` +
@@ -890,7 +710,7 @@ async function sendCheckRequest() {
       user_id: null,
       user_name: '骰娘',
       content: JSON.stringify(meta),
-      type: 'check_request',
+      type: MESSAGE_TYPES.CHECK_REQUEST,
     });
     activeTool.value = null;
     requestSkillName.value = '';
@@ -992,7 +812,7 @@ async function handleHiddenRollCommand(text) {
   
   const name = await getSpeakerNameForMessage()
   const textMsg = `【暗骰】${name} 掷出 ${rollResult.expr}${rollResult.detail}`
-  await sendHiddenMessage(textMsg, 'hidden_roll')
+  await sendHiddenMessage(textMsg, MESSAGE_TYPES.HIDDEN_ROLL)
   return true
 }
 
@@ -1025,6 +845,9 @@ async function handleSanityCheckCommand(text) {
   const isSuccess = d100 <= san
   const lossInfo = isSuccess ? rollAmount(successExpr) : rollAmount(failExpr)
   const loss = lossInfo.total
+  const newSan = Math.max(0, san - loss)
+  const triggerInsanity = loss >= 5
+  const madnessRoll = triggerInsanity ? (Math.floor(Math.random() * 10) + 1) : null
 
   let result = isSuccess ? '成功' : '失败'
   if (d100 === 1) result = '大成功'
@@ -1033,7 +856,15 @@ async function handleSanityCheckCommand(text) {
   const sheetName = sheet.name?.trim() || '未命名角色'
   const textMsg =
     `【理智检定】「${sheetName}」进行理智检定（当前SAN ${san}）：` + `1d100 = ${d100}，${result}，失去 ${loss} 点SAN`
+
+  const patch = triggerInsanity
+    ? { sanCurrent: newSan, temporaryInsanity: true }
+    : { sanCurrent: newSan }
+  await updateCurrentRoomCharacter(patch)
   await sendSystemMessage(textMsg)
+  if (triggerInsanity && madnessRoll != null) {
+    await logImmediateInsanity(sheetName, madnessRoll)
+  }
   return true
 }
 
@@ -1087,6 +918,8 @@ async function handleStatCommand(text) {
       : expr
       ? `（表达式 ${expr}）`
       : ''
+
+  await updateCurrentRoomCharacter({ [field]: newValue })
 
   const textMsg =
     `【属性变化】「${sheetName}」的 ${metaAttr.label}：` +
@@ -1169,7 +1002,7 @@ async function handleCommand(raw) {
 function handleIncomingCheckRequest(msg) {
   const me = auth.user?.value
   if (!me?.id) return
-  if (!msg || msg.type !== 'check_request') return
+  if (!msg || msg.type !== MESSAGE_TYPES.CHECK_REQUEST) return
   let meta
   try {
     meta = JSON.parse(msg.content || '{}')
@@ -1278,11 +1111,22 @@ async function handleLocalSanCheck(meta, value) {
   const chosenExpr = isSuccess ? successExpr : failExpr
   const lossInfo = rollAmount(chosenExpr)
   const loss = lossInfo.total
+  const newSan = Math.max(0, san - loss)
+  const triggerInsanity = loss >= 5
+  const madnessRoll = triggerInsanity ? (Math.floor(Math.random() * 10) + 1) : null
 
   const sheetName = sheet.name?.trim() || '未命名角色'
   const text =
     `【理智检定】「${sheetName}」进行理智检定（当前SAN ${san}）：` + `1d100 = ${value}，${result}，失去 ${loss} 点SAN`
+
+  const patch = triggerInsanity
+    ? { sanCurrent: newSan, temporaryInsanity: true }
+    : { sanCurrent: newSan }
+  await updateCharacterById(charId, patch)
   await sendSystemMessage(text)
+  if (triggerInsanity && madnessRoll != null) {
+    await logImmediateInsanity(sheetName, madnessRoll)
+  }
 }
 
 async function handleLocalMadness(meta, value) {
@@ -1294,17 +1138,21 @@ async function handleLocalMadness(meta, value) {
   if (!sheet) return
   const sheetName = sheet.name?.trim() || '未命名角色'
 
-  const id = Math.min(Math.max(Math.floor(Number(value)), 1), 10)
+  await logImmediateInsanity(sheetName, value)
+}
+
+/**
+ * 依据 D10 掷骰结果记录一次立即性疯狂症状
+ */
+async function logImmediateInsanity(sheetName, rollValue) {
+  const id = Math.min(Math.max(Math.floor(Number(rollValue)), 1), 10)
   const entry = IMMEDIATE_INSANITY_TABLE.find((item) => item.id === id)
   const symptom = entry ? entry.title : '出现了一种难以言喻的疯狂症状'
-  const text = `【疯狂症状】「${sheetName}」抽取到：${symptom}（D10 = ${value}）`
+  const text = `【疯狂症状】「${sheetName}」抽取到：${symptom}（D10 = ${rollValue}）`
   await sendSystemMessage(text)
 }
 
 onMounted(async () => {
-  loadMessages()
-  setupRealtime()
-
   // 计算当前用户是否为房主，用于开启 KP / NPC 发言身份选择
   const { getRoomById, fetchRoom } = gameRoomsStore
   const me = auth.user?.value
@@ -1323,17 +1171,20 @@ onMounted(async () => {
     try {
       const res = await gameRoomsStore.fetchRoomCharacterApplications(props.roomId)
       if (res.ok) {
-        const list = (res.list || []).filter((x) => x.status === 'accepted')
-        const members = []
-        for (const item of list) {
-          const sheet = await getCharacterSheet(item.characterId)
-          const charName = sheet?.name?.trim() || '未命名角色'
-          members.push({
+        const list = (res.list || []).filter((x) => x.status === ROOM_CHARACTER_STATUS.ACCEPTED)
+        const ids = [...new Set(list.map((x) => x.characterId).filter(Boolean))]
+        if (ids.length && charactersStore.fetchCharactersByIds) {
+          await charactersStore.fetchCharactersByIds(ids)
+        }
+        const members = list.map((item) => {
+          const raw = item.characterId ? charactersStore.getById(item.characterId) : null
+          const sheet = raw ? charactersStore.normalizeCharacter(raw) : null
+          return {
             userId: item.userId,
             characterId: item.characterId,
-            characterName: charName,
-          })
-        }
+            characterName: sheet?.name?.trim() || '未命名角色',
+          }
+        })
         roomMembers.value = members
       }
     } catch (e) {
@@ -1342,18 +1193,5 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => {
-  cleanupRealtime()
-})
-
-watch(
-  () => props.roomId,
-  () => {
-    cleanupRealtime()
-    messages.value = []
-    loadMessages()
-    setupRealtime()
-  }
-)
 </script>
 

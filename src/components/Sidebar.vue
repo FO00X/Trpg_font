@@ -573,6 +573,7 @@ const navItems = computed(() => {
   ]
   if (isAdminUser.value) {
     items.push({ path: '/admin/users', name: '用户列表', icon: 'mdi:account-supervisor' })
+    items.push({ path: '/admin/ai', name: 'AI管理', icon: 'mdi:robot-outline' })
   }
   return items
 })

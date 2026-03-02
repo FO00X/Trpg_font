@@ -1,6 +1,15 @@
 -- ============================================
--- TRPG 完整数据库结构（已合并原 001～009 迁移）
--- 新环境执行本文件即可；已有库无需重复执行。
+-- TRPG 一键建库脚本（推荐）
+-- 用途：当你更换/重建数据库时，直接执行本文件即可完成表结构 + RLS + 必要种子数据。
+-- 说明：下方包含 Supabase Storage 的 bucket / policy（需要在 Supabase 环境执行）。
+-- ============================================
+
+-- 常用扩展（Supabase 默认已启用，写上更稳）
+create extension if not exists pgcrypto;
+
+-- ============================================
+-- 以下内容基于 supabase/migrations/001_complete_schema.sql
+-- 并合并了 002～008 的增量变更。
 -- ============================================
 
 -- ---------- 1. 用户资料（与 auth.users 一对一） ----------
@@ -25,6 +34,11 @@ alter table public.profiles
   add column if not exists role text not null default 'user'
   check (role in ('user', 'admin'));
 comment on column public.profiles.role is 'user=普通用户, admin=管理员';
+
+-- 管理员可修改任意用户的 profile（如用户名）
+create policy "profiles_update_admin" on public.profiles
+  for update
+  using ((select p.role from public.profiles p where p.id = auth.uid()) = 'admin');
 
 -- ---------- 2. 角色卡（COC 表存 jsonb） ----------
 create table if not exists public.characters (
@@ -68,11 +82,13 @@ create policy "game_rooms_delete_own" on public.game_rooms for delete using (aut
 create index if not exists game_rooms_status_idx on public.game_rooms(status);
 create index if not exists game_rooms_module_idx on public.game_rooms(module);
 
--- 房间增强：模组文件、最大人数
+-- 房间增强：模组文件、最大人数、背景故事
 alter table public.game_rooms add column if not exists module_files jsonb not null default '[]';
 alter table public.game_rooms add column if not exists max_players integer not null default 6;
+alter table public.game_rooms add column if not exists backstory text;
 comment on column public.game_rooms.module_files is '模组文件列表，每项: { id, name, url, type }';
 comment on column public.game_rooms.max_players is '房间最大人数，默认 6';
+comment on column public.game_rooms.backstory is '房间背景故事，供玩家阅读';
 
 -- ---------- 4. 房间申请 ----------
 create table if not exists public.game_room_applications (
@@ -141,7 +157,14 @@ create policy "messages_select_all" on public.messages for select using (true);
 create policy "messages_insert_authenticated" on public.messages for insert with check (auth.uid() is not null);
 
 create index if not exists messages_channel_id_created_at_idx on public.messages(channel_id, created_at desc);
-alter publication supabase_realtime add table public.messages;
+do $$
+begin
+  alter publication supabase_realtime add table public.messages;
+exception
+  when duplicate_object then
+    null;
+end
+$$;
 
 -- ---------- 8. 房间可选模组与标签 ----------
 create table if not exists public.game_room_module_options (
@@ -155,6 +178,15 @@ insert into public.game_room_module_options (id, name, icon) values
   ('wangdie', '亡蝶葬仪', 'mdi:butterfly'),
   ('other', '其他', 'mdi:dots-horizontal')
 on conflict (id) do nothing;
+
+-- 移除模组选项中的「其他」，不再在列表中展示
+delete from public.game_room_module_options where id = 'other';
+
+-- 允许已登录用户插入自定义模组选项（创建房间时使用）
+create policy "module_options_insert_authenticated"
+  on public.game_room_module_options
+  for insert
+  with check (auth.uid() is not null);
 
 create table if not exists public.game_room_tag_options (tag text primary key);
 alter table public.game_room_tag_options enable row level security;
@@ -346,3 +378,124 @@ end;
 $$;
 
 comment on function public.admin_list_users() is 'Only callable when profiles.role=admin; returns id, email, username, created_at.';
+
+-- ---------- 19. 更新记录表（所有登录用户可读，仅管理员可写） ----------
+create table if not exists public.update_logs (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  content text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+comment on table public.update_logs is '系统更新记录，时间轴展示，仅管理员可增删改';
+
+alter table public.update_logs enable row level security;
+create policy "update_logs_select_authenticated"
+  on public.update_logs for select
+  using (auth.uid() is not null);
+create policy "update_logs_insert_admin"
+  on public.update_logs for insert
+  with check ((select p.role from public.profiles p where p.id = auth.uid()) = 'admin');
+create policy "update_logs_update_admin"
+  on public.update_logs for update
+  using ((select p.role from public.profiles p where p.id = auth.uid()) = 'admin');
+create policy "update_logs_delete_admin"
+  on public.update_logs for delete
+  using ((select p.role from public.profiles p where p.id = auth.uid()) = 'admin');
+create index if not exists update_logs_created_at_idx on public.update_logs(created_at desc);
+
+-- ---------- 20. Storage：avatars bucket（公开读；仅本人目录可写） ----------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  true,
+  2097152,
+  array['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+create policy "avatars_insert_own"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'avatars' and (storage.foldername(name))[1] = (auth.uid())::text
+);
+create policy "avatars_update_own"
+on storage.objects for update to authenticated
+using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (auth.uid())::text);
+create policy "avatars_delete_own"
+on storage.objects for delete to authenticated
+using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (auth.uid())::text);
+create policy "avatars_select_public"
+on storage.objects for select to public
+using (bucket_id = 'avatars');
+
+-- ---------- 21. Storage：room-clues-images bucket（公开读；认证用户可写） ----------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'room-clues-images',
+  'room-clues-images',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+create policy "room_clues_images_insert_authenticated"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'room-clues-images');
+create policy "room_clues_images_update_authenticated"
+on storage.objects for update to authenticated
+using (bucket_id = 'room-clues-images');
+create policy "room_clues_images_delete_authenticated"
+on storage.objects for delete to authenticated
+using (bucket_id = 'room-clues-images');
+create policy "room_clues_images_select_public"
+on storage.objects for select to public
+using (bucket_id = 'room-clues-images');
+
+-- ---------- 22. AI 配置与小说模式存储 ----------
+create table if not exists public.system_settings (
+  id text primary key,
+  value jsonb not null default '{}',
+  updated_at timestamptz default now()
+);
+
+alter table public.system_settings enable row level security;
+create policy "settings_select_auth" on public.system_settings for select using (auth.uid() is not null);
+create policy "settings_insert_admin" on public.system_settings for insert with check (
+  (select role from public.profiles where id = auth.uid()) = 'admin'
+);
+create policy "settings_update_admin" on public.system_settings for update using (
+  (select role from public.profiles where id = auth.uid()) = 'admin'
+);
+create policy "settings_delete_admin" on public.system_settings for delete using (
+  (select role from public.profiles where id = auth.uid()) = 'admin'
+);
+
+insert into public.system_settings (id, value) values (
+  'ai_config',
+  '{"apiUrl": "https://api.openai.com/v1/chat/completions", "apiKey": "", "model": "gpt-4o-mini"}'
+) on conflict (id) do nothing;
+
+create table if not exists public.room_log_novels (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.game_rooms(id) on delete cascade,
+  date text not null,
+  content text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(room_id, date)
+);
+
+alter table public.room_log_novels enable row level security;
+create policy "room_log_novels_select_all" on public.room_log_novels for select using (auth.uid() is not null);
+create policy "room_log_novels_insert_auth" on public.room_log_novels for insert with check (auth.uid() is not null);
+create policy "room_log_novels_update_auth" on public.room_log_novels for update using (auth.uid() is not null);

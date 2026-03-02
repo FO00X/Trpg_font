@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { useProfileCache } from './profileCache'
 
 const user = ref(null)
+const initialized = ref(false)
+let initPromise = null
 
 export function useAuthStore() {
   const isLoggedIn = computed(() => !!user.value)
@@ -41,10 +43,24 @@ export function useAuthStore() {
     }
   }
 
-  /** 应用启动时调用一次，用于恢复 session 并同步 user */
+  /** 应用启动时调用一次，用于恢复 session 并同步 user；可重复调用，仅执行一次 */
   async function init() {
-    const { data: { session } } = await supabase.auth.getSession()
-    await setSession(session)
+    if (initPromise) return initPromise
+    initPromise = (async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      await setSession(session)
+      initialized.value = true
+      supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session)
+      })
+    })()
+    return initPromise
+  }
+
+  /** 确保 auth 已初始化，供路由守卫使用 */
+  async function ensureInitialized() {
+    if (initialized.value) return
+    await init()
   }
 
   /**
@@ -135,7 +151,9 @@ export function useAuthStore() {
   return {
     user,
     isLoggedIn,
+    initialized,
     init,
+    ensureInitialized,
     setSession,
     login,
     signUp,

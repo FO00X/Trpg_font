@@ -299,6 +299,35 @@ export function useCharactersStore() {
     return character
   }
 
+  /**
+   * 批量拉取多条角色卡信息并合并到本地缓存，避免大量串行请求。
+   * @param {string[]} ids
+   * @returns {Promise<{ ok: boolean, list: any[], message?: string }>}
+   */
+  async function fetchCharactersByIds(ids) {
+    const uniqueIds = [...new Set((ids || []).filter(Boolean))]
+    if (uniqueIds.length === 0) {
+      return { ok: true, list: [] }
+    }
+    const { data, error } = await supabase
+      .from('characters')
+      .select('id, data, updated_at')
+      .in('id', uniqueIds)
+    if (error) {
+      return { ok: false, list: [], message: error.message }
+    }
+    const fetched = (data || []).map(rowToCharacter)
+    const byId = new Map(fetched.map((c) => [c.id, c]))
+    const next = [...characters.value]
+    for (const [id, c] of byId.entries()) {
+      const idx = next.findIndex((x) => x.id === id)
+      if (idx >= 0) next[idx] = c
+      else next.push(c)
+    }
+    characters.value = next
+    return { ok: true, list: fetched }
+  }
+
   function getDerived(sheet) {
     const con = sheet.con || 0, siz = sheet.siz || 0, pow = sheet.pow || 0, edu = sheet.edu || 0, str = sheet.str || 0
     const hpMax = Math.ceil((con + siz) / 10)
@@ -378,6 +407,7 @@ export function useCharactersStore() {
     characters,
     fetchList,
     fetchCharacter,
+    fetchCharactersByIds,
     getDefaultSheet,
     getDerived,
     getById,

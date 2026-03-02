@@ -1,229 +1,3 @@
-<script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { Icon } from '@iconify/vue'
-import { useCharactersStore } from '../stores/characters'
-import { useGameRoomsStore } from '../stores/gameRooms'
-import PageHeader from '../components/PageHeader.vue'
-import Toast from '../components/Toast.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { useCharacterCardModal } from '../composables/useCharacterCardModal'
-
-const router = useRouter()
-const { characters, remove, fetchList, getById, update, uploadCharacterPortrait } = useCharactersStore()
-const gameRoomsStore = useGameRoomsStore()
-const { openCharacterCard } = useCharacterCardModal()
-const openMenuId = ref(null)
-const portraitInputRef = ref(null)
-const portraitUploadTargetId = ref(null)
-const portraitUploading = ref(false)
-
-const reviewDialogOpen = ref(false)
-const reviewTargetCharacter = ref(null)
-const reviewRooms = ref([])
-const reviewLoading = ref(false)
-const reviewError = ref('')
-const reviewSuccess = ref('')
-const reviewSelectedRoomId = ref(null)
-
-// 角色卡在各房间的审核汇总状态：{ [characterId]: 'pending' | 'accepted' | 'rejected' }
-const reviewStatusByCharacterId = ref({})
-
-// Toast 和确认对话框
-const toastRef = ref(null)
-const confirmDialogVisible = ref(false)
-const confirmDialogTitle = ref('确认')
-const confirmDialogMessage = ref('')
-let confirmDialogResolve = null
-let confirmDialogReject = null
-
-function showToast(message, duration = 3000) {
-  if (toastRef.value) {
-    toastRef.value.show(message, duration)
-  }
-}
-
-function showConfirm(title, message) {
-  return new Promise((resolve) => {
-    confirmDialogTitle.value = title
-    confirmDialogMessage.value = message
-    confirmDialogVisible.value = true
-    confirmDialogResolve = () => {
-      resolve(true)
-      confirmDialogVisible.value = false
-    }
-    confirmDialogReject = () => {
-      resolve(false)
-      confirmDialogVisible.value = false
-    }
-  })
-}
-
-function formatUpdated(isoString) {
-  if (!isoString) return ''
-  const d = new Date(isoString)
-  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-function createNew() {
-  router.push('/characters/new')
-}
-
-function viewCharacter(c) {
-  openCharacterCard(c.id, true)
-}
-
-function editCharacter(c) {
-  router.push(`/characters/${c.id}`)
-}
-
-function toggleMenu(e, id) {
-  e.stopPropagation()
-  openMenuId.value = openMenuId.value === id ? null : id
-}
-
-function closeMenu() {
-  openMenuId.value = null
-}
-
-function openPortraitUpload(c) {
-  portraitUploadTargetId.value = c.id
-  closeMenu()
-  nextTick(() => {
-    portraitInputRef.value?.click()
-  })
-}
-
-async function onPortraitFileChange(e) {
-  const file = e.target.files?.[0]
-  e.target.value = ''
-  const id = portraitUploadTargetId.value
-  portraitUploadTargetId.value = null
-  if (!file || !id) return
-  portraitUploading.value = true
-  try {
-    const res = await uploadCharacterPortrait(id, file)
-    if (res.ok) {
-      const c = getById(id)
-      if (c) {
-        const draft = { ...c }
-        delete draft.id
-        delete draft.updated_at
-        draft.portrait = res.url
-        const ok = await update(id, draft)
-        if (!ok) showToast('头像已上传，但保存到角色卡失败，请到编辑页保存一次')
-      }
-    } else {
-      showToast(res.message || '上传失败')
-    }
-  } finally {
-    portraitUploading.value = false
-  }
-}
-
-async function deleteCharacter(c) {
-  if (isCharacterLocked(c)) {
-    showToast('该角色卡正在审核中或已通过，不能删除。')
-    return
-  }
-  const confirmed = await showConfirm('确认删除', `确定要删除角色「${c.name || '未命名'}」吗？此操作不可恢复。`)
-  if (!confirmed) return
-  const ok = await remove(c.id)
-  if (!ok) showToast('删除失败，请稍后重试')
-  closeMenu()
-}
-
-function openSubmitReview(c) {
-  reviewTargetCharacter.value = c
-  reviewDialogOpen.value = true
-  reviewRooms.value = []
-  reviewSelectedRoomId.value = null
-  reviewError.value = ''
-  reviewSuccess.value = ''
-  loadReviewRooms(c.id)
-}
-
-async function loadReviewRooms(characterId) {
-  reviewLoading.value = true
-  reviewError.value = ''
-  reviewSuccess.value = ''
-  const res = await gameRoomsStore.fetchMyJoinedRooms()
-  reviewLoading.value = false
-  if (!res.ok) {
-    reviewError.value = res.message || '加载房间失败，请稍后重试'
-    return
-  }
-  reviewRooms.value = res.rooms || []
-}
-
-async function confirmSubmitReview() {
-  if (!reviewTargetCharacter.value) return
-  if (!reviewSelectedRoomId.value) {
-    reviewError.value = '请选择要提交的房间'
-    return
-  }
-  reviewError.value = ''
-  reviewSuccess.value = ''
-  const res = await gameRoomsStore.submitCharacterForReview(
-    reviewSelectedRoomId.value,
-    reviewTargetCharacter.value.id,
-  )
-  if (!res.ok) {
-    reviewError.value = res.message || '提交失败，请稍后重试'
-    return
-  }
-  reviewSuccess.value = '已提交审核，请等待 KP 审核通过'
-  // 更新本地状态：该角色卡至少为“审核中”
-  if (reviewTargetCharacter.value) {
-    reviewStatusByCharacterId.value = {
-      ...reviewStatusByCharacterId.value,
-      [reviewTargetCharacter.value.id]: 'pending',
-    }
-  }
-  reviewDialogOpen.value = false
-}
-
-async function loadReviewStatuses() {
-  const res = await gameRoomsStore.fetchMyCharacterReviewStatuses()
-  if (!res.ok) return
-  reviewStatusByCharacterId.value = res.statusMap || {}
-}
-
-function characterReviewStatus(c) {
-  return reviewStatusByCharacterId.value[c.id] || null
-}
-
-function isCharacterLocked(c) {
-  const status = characterReviewStatus(c)
-  return status === 'pending' || status === 'accepted'
-}
-
-function characterStatusLabel(status) {
-  if (status === 'pending') return '审核中'
-  if (status === 'accepted') return '已通过'
-  if (status === 'rejected') return '被拒绝'
-  return ''
-}
-
-
-function onCardClick(c) {
-  if (openMenuId.value === c.id) {
-    closeMenu()
-    return
-  }
-  viewCharacter(c)
-}
-
-onMounted(async () => {
-  document.addEventListener('click', closeMenu)
-  await fetchList()
-  await loadReviewStatuses()
-})
-onUnmounted(() => {
-  document.removeEventListener('click', closeMenu)
-})
-</script>
-
 <template>
   <div class="flex flex-col h-full">
     <PageHeader title="角色卡" icon="mdi:card-account-details">
@@ -260,9 +34,9 @@ onUnmounted(() => {
                 v-if="characterReviewStatus(c)"
                 class="px-2 py-0.5 rounded-md text-[10px] font-medium shrink-0"
                 :class="{
-                  'bg-warning/10 text-warning': characterReviewStatus(c) === 'pending',
-                  'bg-success/10 text-success': characterReviewStatus(c) === 'accepted',
-                  'bg-error/10 text-error': characterReviewStatus(c) === 'rejected',
+                  'bg-warning/10 text-warning': characterReviewStatus(c) === ROOM_CHARACTER_STATUS.PENDING,
+                  'bg-success/10 text-success': characterReviewStatus(c) === ROOM_CHARACTER_STATUS.ACCEPTED,
+                  'bg-error/10 text-error': characterReviewStatus(c) === ROOM_CHARACTER_STATUS.REJECTED,
                 }"
               >
                 {{ characterStatusLabel(characterReviewStatus(c)) }}
@@ -275,17 +49,29 @@ onUnmounted(() => {
             </div>
           </div>
           
-          <div class="dropdown dropdown-end shrink-0">
-            <button type="button" tabindex="0" class="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-base-200 active:scale-95 transition-all text-base-content/60" aria-label="菜单" @click="toggleMenu($event, c.id)">
-              <Icon icon="mdi:dots-vertical" class="text-xl" />
-            </button>
-            <ul v-show="openMenuId === c.id" tabindex="0" class="dropdown-content menu menu-sm p-2 mt-2 w-36 bg-base-100 rounded-2xl shadow-xl z-20 space-y-1" @click.stop>
-              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" @click="viewCharacter(c); closeMenu()"><Icon icon="mdi:eye-outline" class="text-lg text-base-content/70" />查看</button></li>
-              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" :disabled="isCharacterLocked(c)" @click="editCharacter(c); closeMenu()"><Icon icon="mdi:pencil-outline" class="text-lg text-base-content/70" />编辑</button></li>
-              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" :disabled="portraitUploading" @click="openPortraitUpload(c)"><Icon :icon="portraitUploading ? 'mdi:loading' : 'mdi:image-edit-outline'" class="text-lg text-base-content/70" :class="{ 'animate-spin': portraitUploading }" />头像</button></li>
-              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" @click="openSubmitReview(c); closeMenu()"><Icon icon="mdi:send-check-outline" class="text-lg text-primary" />提交</button></li>
+          <div
+            class="dropdown dropdown-end shrink-0"
+            :class="{ 'dropdown-open': openMenuId === c.id }"
+            @click.stop
+          >
+            <div
+            tabindex="0"
+              type="button"
+              class="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-base-200 active:scale-95 transition-all text-base-content/60"
+              aria-label="菜单"
+              @click="toggleMenu($event, c.id)"
+            >
+              <Icon icon="mdi:dots-vertical" class="text-xl pointer-events-none" />
+            </div>
+            <ul
+              tabindex="-1"
+              class="dropdown-content menu menu-sm p-2 mt-2 w-36 bg-base-100 rounded-2xl shadow-xl z-20 space-y-1"
+            >
+              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" :disabled="isCharacterLocked(c)" @click.stop="editCharacter(c); closeMenu()"><Icon icon="mdi:pencil-outline" class="text-lg text-base-content/70" />编辑</button></li>
+              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" :disabled="portraitUploading" @click.stop="openPortraitUpload(c)"><Icon :icon="portraitUploading ? 'mdi:loading' : 'mdi:image-edit-outline'" class="text-lg text-base-content/70" :class="{ 'animate-spin': portraitUploading }" />头像</button></li>
+              <li><button type="button" class="py-2 rounded-xl active:scale-95 transition-all" @click.stop="openSubmitReview(c); closeMenu()"><Icon icon="mdi:send-check-outline" class="text-lg text-primary" />提交</button></li>
               <div class="divider my-0"></div>
-              <li><button type="button" class="py-2 rounded-xl text-error active:scale-95 transition-all" @click="deleteCharacter(c)"><Icon icon="mdi:delete-outline" class="text-lg" />删除</button></li>
+              <li><button type="button" class="py-2 rounded-xl text-error active:scale-95 transition-all" @click.stop="deleteCharacter(c)"><Icon icon="mdi:delete-outline" class="text-lg" />删除</button></li>
             </ul>
           </div>
         </div>
@@ -340,15 +126,197 @@ onUnmounted(() => {
     </dialog>
   </div>
 
-  <!-- Toast 提示 -->
-  <Toast ref="toastRef" />
-  
-  <!-- 确认对话框 -->
-  <ConfirmDialog
-    v-model:visible="confirmDialogVisible"
-    :title="confirmDialogTitle"
-    :message="confirmDialogMessage"
-    @confirm="confirmDialogResolve"
-    @cancel="confirmDialogReject"
-  />
 </template>
+<script setup>
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { Icon } from '@iconify/vue'
+import { useCharactersStore } from '../stores/characters'
+import { useGameRoomsStore } from '../stores/gameRooms'
+import PageHeader from '../components/PageHeader.vue'
+import { useToast } from '../composables/useToast'
+import { useConfirmDialog } from '../composables/useConfirmDialog'
+import { formatShortDateTime } from '../utils/date'
+import { ROOM_CHARACTER_STATUS, ROOM_CHARACTER_STATUS_LABELS } from '../constants/enums'
+import { useCharacterCardModal } from '../composables/useCharacterCardModal'
+
+const router = useRouter()
+const { characters, remove, fetchList, getById, update, uploadCharacterPortrait } = useCharactersStore()
+const gameRoomsStore = useGameRoomsStore()
+const { openCharacterCard } = useCharacterCardModal()
+const toast = useToast()
+const { confirm } = useConfirmDialog()
+const openMenuId = ref(null)
+const portraitInputRef = ref(null)
+const portraitUploadTargetId = ref(null)
+const portraitUploading = ref(false)
+
+const reviewDialogOpen = ref(false)
+const reviewTargetCharacter = ref(null)
+const reviewRooms = ref([])
+const reviewLoading = ref(false)
+const reviewError = ref('')
+const reviewSuccess = ref('')
+const reviewSelectedRoomId = ref(null)
+
+const reviewStatusByCharacterId = ref({})
+
+function formatUpdated(isoString) {
+  return formatShortDateTime(isoString)
+}
+
+function createNew() {
+  router.push('/characters/new')
+}
+
+function viewCharacter(c) {
+  openCharacterCard(c.id, true)
+}
+
+function editCharacter(c) {
+  router.push(`/characters/${c.id}`)
+}
+
+function toggleMenu(e, id) {
+  e.stopPropagation()
+  openMenuId.value = openMenuId.value === id ? null : id
+}
+
+function closeMenu() {
+  openMenuId.value = null
+}
+
+function openPortraitUpload(c) {
+  portraitUploadTargetId.value = c.id
+  closeMenu()
+  nextTick(() => {
+    portraitInputRef.value?.click()
+  })
+}
+
+async function onPortraitFileChange(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  const id = portraitUploadTargetId.value
+  portraitUploadTargetId.value = null
+  if (!file || !id) return
+  portraitUploading.value = true
+  try {
+    const res = await uploadCharacterPortrait(id, file)
+    if (res.ok) {
+      const c = getById(id)
+      if (c) {
+        const draft = { ...c }
+        delete draft.id
+        delete draft.updated_at
+        draft.portrait = res.url
+        const ok = await update(id, draft)
+        if (!ok) toast.error('头像已上传，但保存到角色卡失败，请到编辑页保存一次')
+      }
+    } else {
+      toast.error(res.message || '上传失败')
+    }
+  } finally {
+    portraitUploading.value = false
+  }
+}
+
+async function deleteCharacter(c) {
+  if (isCharacterLocked(c)) {
+    toast.error('该角色卡正在审核中或已通过，不能删除。')
+    return
+  }
+  const confirmed = await confirm({ title: '确认删除', message: `确定要删除角色「${c.name || '未命名'}」吗？此操作不可恢复。` })
+  if (!confirmed) return
+  const ok = await remove(c.id)
+  if (!ok) toast.error('删除失败，请稍后重试')
+  closeMenu()
+}
+
+function openSubmitReview(c) {
+  reviewTargetCharacter.value = c
+  reviewDialogOpen.value = true
+  reviewRooms.value = []
+  reviewSelectedRoomId.value = null
+  reviewError.value = ''
+  reviewSuccess.value = ''
+  loadReviewRooms(c.id)
+}
+
+async function loadReviewRooms(characterId) {
+  reviewLoading.value = true
+  reviewError.value = ''
+  reviewSuccess.value = ''
+  const res = await gameRoomsStore.fetchMyJoinedRooms()
+  reviewLoading.value = false
+  if (!res.ok) {
+    reviewError.value = res.message || '加载房间失败，请稍后重试'
+    return
+  }
+  reviewRooms.value = res.rooms || []
+}
+
+async function confirmSubmitReview() {
+  if (!reviewTargetCharacter.value) return
+  if (!reviewSelectedRoomId.value) {
+    reviewError.value = '请选择要提交的房间'
+    return
+  }
+  reviewError.value = ''
+  reviewSuccess.value = ''
+  const res = await gameRoomsStore.submitCharacterForReview(
+    reviewSelectedRoomId.value,
+    reviewTargetCharacter.value.id,
+  )
+  if (!res.ok) {
+    reviewError.value = res.message || '提交失败，请稍后重试'
+    return
+  }
+  reviewSuccess.value = '已提交审核，请等待 KP 审核通过'
+  // 更新本地状态：该角色卡至少为“审核中”
+  if (reviewTargetCharacter.value) {
+    reviewStatusByCharacterId.value = {
+      ...reviewStatusByCharacterId.value,
+      [reviewTargetCharacter.value.id]: ROOM_CHARACTER_STATUS.PENDING,
+    }
+  }
+  reviewDialogOpen.value = false
+}
+
+async function loadReviewStatuses() {
+  const res = await gameRoomsStore.fetchMyCharacterReviewStatuses()
+  if (!res.ok) return
+  reviewStatusByCharacterId.value = res.statusMap || {}
+}
+
+function characterReviewStatus(c) {
+  return reviewStatusByCharacterId.value[c.id] || null
+}
+
+function isCharacterLocked(c) {
+  const status = characterReviewStatus(c)
+  return status === ROOM_CHARACTER_STATUS.PENDING || status === ROOM_CHARACTER_STATUS.ACCEPTED
+}
+
+function characterStatusLabel(status) {
+  return ROOM_CHARACTER_STATUS_LABELS[status] || status || ''
+}
+
+
+function onCardClick(c) {
+  if (openMenuId.value === c.id) {
+    closeMenu()
+    return
+  }
+  viewCharacter(c)
+}
+
+onMounted(async () => {
+  document.addEventListener('click', closeMenu)
+  await fetchList()
+  await loadReviewStatuses()
+})
+onUnmounted(() => {
+  document.removeEventListener('click', closeMenu)
+})
+</script>

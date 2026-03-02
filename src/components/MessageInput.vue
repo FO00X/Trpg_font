@@ -10,7 +10,7 @@
         <Menu as="div" class="relative min-w-0">
           <MenuButton
             type="button"
-            class="h-10 w-[3.5rem] sm:w-auto sm:min-w-[4rem] sm:max-w-[6rem] px-2 sm:px-2.5 pr-7 sm:pr-8 rounded-lg bg-base-100 border border-base-300 text-sm text-base-content focus:border-accent/50 outline-none cursor-pointer text-left truncate"
+            class="h-10 w-[3.5rem] sm:w-auto sm:min-w-[4rem] px-2 sm:px-2.5 pr-7 sm:pr-8 rounded-lg bg-base-100 border border-base-300 text-sm text-base-content focus:border-accent/50 outline-none cursor-pointer text-left truncate"
             :title="speakerRoleFullLabel"
           >
             <span class="truncate block">{{ speakerRoleDisplayLabel }}</span>

@@ -74,22 +74,11 @@
       </button>
     </div>
 
-    <!-- Toast 提示 -->
-    <Toast ref="toastRef" />
-    
-    <!-- 确认对话框 -->
-    <ConfirmDialog
-      v-model:visible="confirmDialogVisible"
-      :title="confirmDialogTitle"
-      :message="confirmDialogMessage"
-      @confirm="confirmDialogResolve"
-      @cancel="confirmDialogReject"
-    />
   </div>
 </template>
 
 <script setup>
-import { provide, ref } from 'vue'
+import { provide } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useCharacterForm, SHEET_TABS } from '../composables/useCharacterForm'
 import PageHeader from '../components/PageHeader.vue'
@@ -98,34 +87,11 @@ import AbilitySection from '../components/character/AbilitySection.vue'
 import AssetsSection from '../components/character/AssetsSection.vue'
 import SocialSection from '../components/character/SocialSection.vue'
 import DiceRollModal from '../components/DiceRollModal.vue'
-import Toast from '../components/Toast.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { useConfirmDialog } from '../composables/useConfirmDialog'
 
-// Toast 和确认对话框
-const toastRef = ref(null)
-const confirmDialogVisible = ref(false)
-const confirmDialogTitle = ref('确认')
-const confirmDialogMessage = ref('')
-let confirmDialogResolve = null
-let confirmDialogReject = null
-
-function showConfirm(title, message) {
-  return new Promise((resolve) => {
-    confirmDialogTitle.value = title
-    confirmDialogMessage.value = message
-    confirmDialogVisible.value = true
-    confirmDialogResolve = () => {
-      resolve(true)
-      confirmDialogVisible.value = false
-    }
-    confirmDialogReject = () => {
-      resolve(false)
-      confirmDialogVisible.value = false
-    }
-  })
-}
-
-const ctx = useCharacterForm({ confirmFn: showConfirm })
+const { confirm } = useConfirmDialog()
+const confirmFn = (title, message) => confirm({ title, message })
+const ctx = useCharacterForm({ confirmFn })
 provide('characterForm', ctx)
 
 const { form, isNew, sheetTab, save, goBack, validationErrors, saveError, diceRollOpen, diceRollBatch, diceRollMaxRolls, diceRollInitialResults, onDiceRollResults, onDiceRollConfirm, closeDiceRoll } = ctx

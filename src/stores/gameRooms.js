@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from './auth'
+import { ROOM_STATUS, ROOM_CHARACTER_STATUS } from '../constants/enums'
 
 const rooms = ref([])
 const availableModules = ref([])
@@ -13,7 +14,7 @@ export function useGameRoomsStore() {
     const auth = useAuthStore()
     const myId = auth.user?.value?.id
 
-    let q = supabase.from('game_rooms').select('id, owner_id, title, module, tags, status, description, module_files, max_players, created_at, updated_at').order('created_at', { ascending: false })
+    let q = supabase.from('game_rooms').select('id, owner_id, title, module, tags, status, description, backstory, module_files, max_players, created_at, updated_at').order('created_at', { ascending: false })
     if (params.keyword != null && params.keyword !== '') {
       q = q.ilike('title', `%${params.keyword}%`)
     }
@@ -43,6 +44,7 @@ export function useGameRoomsStore() {
       tags: r.tags || [],
       status: r.status,
       description: r.description,
+      backstory: r.backstory ?? '',
       moduleFiles: r.module_files || [],
       maxPlayers: r.max_players ?? 6,
       created_at: r.created_at,
@@ -118,11 +120,12 @@ export function useGameRoomsStore() {
       title: payload.name || payload.title || '',
       module: moduleName,
       tags: Array.isArray(payload.tags) ? payload.tags : [],
-      status: 'recruiting',
+      status: ROOM_STATUS.RECRUITING,
       description: payload.description || null,
+      backstory: payload.backstory || null,
       max_players: payload.maxPlayers ?? 6,
     }
-    const { data, error } = await supabase.from('game_rooms').insert(row).select('id, owner_id, title, module, tags, status, description, max_players, created_at, updated_at').single()
+    const { data, error } = await supabase.from('game_rooms').insert(row).select('id, owner_id, title, module, tags, status, description, backstory, max_players, created_at, updated_at').single()
     if (error) return null
     if (moduleName) {
       await ensureModuleOption(moduleName, payload.icon)
@@ -135,6 +138,7 @@ export function useGameRoomsStore() {
       tags: data.tags || [],
       status: data.status,
       description: data.description,
+      backstory: data.backstory ?? '',
       maxPlayers: data.max_players ?? 6,
       created_at: data.created_at,
       updated_at: data.updated_at,
@@ -148,7 +152,7 @@ export function useGameRoomsStore() {
   }
 
   async function fetchRoom(roomId) {
-    const baseCols = 'id, owner_id, title, module, tags, status, description, module_files, max_players, created_at, updated_at'
+    const baseCols = 'id, owner_id, title, module, tags, status, description, backstory, module_files, max_players, created_at, updated_at'
     let data, error
     ;({ data, error } = await supabase
       .from('game_rooms')
@@ -181,6 +185,7 @@ export function useGameRoomsStore() {
       tags: data.tags || [],
       status: data.status,
       description: data.description,
+      backstory: data.backstory ?? '',
       moduleFiles: data.module_files || [],
       moduleEntries: Array.isArray(data.module_entries) ? data.module_entries : [],
       maxPlayers: data.max_players ?? 6,
@@ -231,7 +236,7 @@ export function useGameRoomsStore() {
     const auth = useAuthStore()
     const uid = auth.user?.value?.id
     if (!uid) return { ok: false, message: '未登录' }
-    const { error } = await supabase.from('game_room_applications').insert({ room_id: roomId, user_id: uid, status: 'pending' })
+    const { error } = await supabase.from('game_room_applications').insert({ room_id: roomId, user_id: uid, status: ROOM_CHARACTER_STATUS.PENDING })
     if (error) return { ok: false, message: error.message }
     await fetchRooms()
     return { ok: true }
@@ -241,7 +246,7 @@ export function useGameRoomsStore() {
     const auth = useAuthStore()
     const uid = auth.user?.value?.id
     if (!uid) return { ok: false, message: '未登录' }
-    if (!['accepted', 'rejected'].includes(status)) return { ok: false, message: '非法状态' }
+    if (![ROOM_CHARACTER_STATUS.ACCEPTED, ROOM_CHARACTER_STATUS.REJECTED].includes(status)) return { ok: false, message: '非法状态' }
 
     const { error } = await supabase
       .from('game_room_applications')
@@ -262,7 +267,7 @@ export function useGameRoomsStore() {
       .select('character_id, status')
       .eq('room_id', roomId)
       .eq('user_id', uid)
-      .eq('status', 'accepted')
+      .eq('status', ROOM_CHARACTER_STATUS.ACCEPTED)
     if (error) return []
     return (data || []).map((r) => r.character_id)
   }
@@ -299,7 +304,7 @@ export function useGameRoomsStore() {
     const auth = useAuthStore()
     const uid = auth.user?.value?.id
     if (!uid) return { ok: false, message: '未登录' }
-    if (!['accepted', 'rejected'].includes(status)) {
+    if (![ROOM_CHARACTER_STATUS.ACCEPTED, ROOM_CHARACTER_STATUS.REJECTED].includes(status)) {
       return { ok: false, message: '非法状态' }
     }
 
@@ -351,7 +356,7 @@ export function useGameRoomsStore() {
       .from('game_room_applications')
       .select('room_id, status')
       .eq('user_id', uid)
-      .eq('status', 'accepted')
+      .eq('status', ROOM_CHARACTER_STATUS.ACCEPTED)
 
     if (err1) return { ok: false, message: err1.message, rooms: [] }
 
@@ -391,16 +396,16 @@ export function useGameRoomsStore() {
       .maybeSingle()
 
     if (existing) {
-      if (existing.status === 'pending') {
+      if (existing.status === ROOM_CHARACTER_STATUS.PENDING) {
         return { ok: false, message: '该角色卡已提交该房间，正在等待 KP 审核' }
       }
-      if (existing.status === 'accepted') {
+      if (existing.status === ROOM_CHARACTER_STATUS.ACCEPTED) {
         return { ok: false, message: '该角色卡已被该房间通过审核' }
       }
       // 被拒绝时允许重新提交：更新为 pending
       const { error: updateError } = await supabase
         .from('room_characters')
-        .update({ status: 'pending' })
+        .update({ status: ROOM_CHARACTER_STATUS.PENDING })
         .eq('id', existing.id)
       if (updateError) return { ok: false, message: updateError.message }
       return { ok: true }
@@ -412,7 +417,7 @@ export function useGameRoomsStore() {
         room_id: roomId,
         user_id: uid,
         character_id: characterId,
-        status: 'pending',
+        status: ROOM_CHARACTER_STATUS.PENDING,
       })
 
     if (error) return { ok: false, message: error.message }
@@ -431,15 +436,17 @@ export function useGameRoomsStore() {
     if (payload.title != null) updates.title = payload.title
     if (payload.module != null) updates.module = payload.module
     if (payload.description != null) updates.description = payload.description
+    if (payload.backstory != null) updates.backstory = payload.backstory
     if (payload.maxPlayers != null) updates.max_players = payload.maxPlayers
     if (Array.isArray(payload.tags)) updates.tags = payload.tags
-    const { data, error } = await supabase.from('game_rooms').update(updates).eq('id', roomId).eq('owner_id', uid).select('id, owner_id, title, module, tags, status, description, max_players, created_at, updated_at').single()
+    const { data, error } = await supabase.from('game_rooms').update(updates).eq('id', roomId).eq('owner_id', uid).select('id, owner_id, title, module, tags, status, description, backstory, max_players, created_at, updated_at').single()
     if (error) return { ok: false, message: error.message }
     const r = rooms.value.find((x) => x.id === roomId)
     if (r) {
       r.title = data.title
       r.module = data.module
       r.description = data.description
+      r.backstory = data.backstory ?? ''
       r.maxPlayers = data.max_players ?? r.maxPlayers
       r.tags = data.tags || []
       r.updated_at = data.updated_at

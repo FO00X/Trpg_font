@@ -14,7 +14,7 @@ const { form, creditDerived } = inject('characterForm')
         <div>
           <label :class="labelCls">信用评价</label>
           <div class="mt-1 rounded-lg px-3 py-2 text-base-content">
-            <span class="font-medium text-primary">当前经济水平为：{{ creditDerived.creditRating }}</span>
+            <span class="font-bold text-accent">当前经济水平为：{{ creditDerived.creditRating }}</span>
             <p v-if="creditDerived.lifeStyleDesc" class="mt-2 text-sm text-base-content/60 whitespace-pre-line leading-relaxed">{{ creditDerived.lifeStyleDesc }}</p>
           </div>
         </div>

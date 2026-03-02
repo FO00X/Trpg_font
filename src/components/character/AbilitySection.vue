@@ -58,8 +58,7 @@
         </template>
         <template v-else>
           <div class="flex items-center gap-4 text-xs">
-            <label class="flex items-center gap-1.5 text-base-content">本职点数总额 <input v-model.number="form.skillRule.careerPointsTotal" type="number" min="0" class="w-16 px-2 py-1 rounded bg-base-100 border border-base-300 text-base-content text-center" /></label>
-            <label class="flex items-center gap-1.5 text-base-content">兴趣点数总额 <input v-model.number="form.skillRule.interestPointsTotal" type="number" min="0" class="w-16 px-2 py-1 rounded bg-base-100 border border-base-300 text-base-content text-center" /></label>
+            <span class="text-base-content">请先选择职业</span>
           </div>
         </template>
       </div>

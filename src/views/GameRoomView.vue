@@ -150,7 +150,7 @@
         >
           <div class="max-w-2xl mx-auto space-y-4">
             <div class="rounded-xl bg-base-100 border border-base-200 p-4">
-              <div class="flex items-center gap-2 mb-2">
+              <div class="flex items-center gap-2 mb-3">
                 <span
                   class="px-2 py-0.5 rounded text-xs font-medium"
                   :class="getStatusColor(room.status)"
@@ -159,10 +159,47 @@
                 </span>
                 <span class="text-sm text-base-content">{{ room.module }}</span>
               </div>
-              <p v-if="room.description" class="text-sm text-base-content/60 whitespace-pre-wrap">
-                {{ room.description }}
-              </p>
-              <div v-if="room.tags?.length" class="flex flex-wrap gap-1.5 mt-2">
+
+              <!-- 房间简介（可展开收起） -->
+              <div v-if="room.description" class="mb-4">
+                <div class="text-xs font-medium text-base-content/50 uppercase tracking-wider mb-1.5">房间简介</div>
+                <p
+                  class="text-sm text-base-content/60 whitespace-pre-wrap break-words"
+                  :class="{ 'line-clamp-3': !infoDescExpanded }"
+                >
+                  {{ room.description }}
+                </p>
+                <button
+                  type="button"
+                  class="text-xs text-primary hover:text-primary/80 mt-1 font-medium"
+                  @click="infoDescExpanded = !infoDescExpanded"
+                >
+                  {{ infoDescExpanded ? '收起' : '展开' }}
+                </button>
+              </div>
+
+              <!-- 背景故事（可展开收起） -->
+              <div class="mb-2">
+                <div class="text-xs font-medium text-base-content/50 uppercase tracking-wider mb-1.5">背景故事</div>
+                <template v-if="room.backstory">
+                  <p
+                    class="text-sm text-base-content/60 whitespace-pre-wrap break-words"
+                    :class="{ 'line-clamp-3': !infoBackstoryExpanded }"
+                  >
+                    {{ room.backstory }}
+                  </p>
+                  <button
+                    type="button"
+                    class="text-xs text-primary hover:text-primary/80 mt-1 font-medium"
+                    @click="infoBackstoryExpanded = !infoBackstoryExpanded"
+                  >
+                    {{ infoBackstoryExpanded ? '收起' : '展开' }}
+                  </button>
+                </template>
+                <p v-else class="text-sm text-base-content/40">暂无背景故事</p>
+              </div>
+
+              <div v-if="room.tags?.length" class="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-base-200">
                 <span
                   v-for="tag in room.tags"
                   :key="tag"
@@ -216,7 +253,7 @@
               <button
                 type="button"
                 class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-primary/40 bg-primary/5 text-primary font-medium hover:bg-primary/15 hover:border-primary/60 transition-colors active:scale-[0.98]"
-                @click="characterReviewOpen = true; loadRoomCharacterApplications()"
+                @click="characterReviewOpen = true"
               >
                 <Icon icon="mdi:clipboard-list-outline" class="text-lg shrink-0" />
                 <span>角色审核</span>
@@ -296,156 +333,18 @@
     </div>
 
     <!-- 房间用户 / 角色列表弹窗 -->
-    <Teleport to="body">
-      <Dialog :open="membersOpen" class="relative z-50" @close="membersOpen = false">
-        <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
-        <div class="fixed inset-0 flex items-center justify-center p-4" @click.self="membersOpen = false">
-          <DialogPanel class="mx-auto w-full max-w-md rounded-xl bg-base-100 border border-base-300 shadow-xl">
-            <DialogTitle class="sr-only">房间用户与角色</DialogTitle>
-            <div class="p-4">
-              <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold text-base-content flex items-center gap-2">
-                  <Icon icon="mdi:account-group-outline" class="text-xl text-accent" />
-                  房间用户与角色
-                </h2>
-                <button
-                  type="button"
-                  class="p-2 rounded-lg text-base-content hover:text-base-content hover:bg-base-content/10"
-                  @click="membersOpen = false"
-                >
-                  <Icon icon="mdi:close" class="text-xl" />
-                </button>
-              </div>
-
-              <div v-if="!displayMembers.length" class="py-6 text-center text-sm text-base-content">
-                暂无角色信息
-              </div>
-              <ul v-else class="space-y-2 max-h-64 overflow-y-auto scroll-thin">
-                <li
-                  v-for="m in displayMembers"
-                  :key="`${m.kind}-${m.display}-${m.user}`"
-                >
-                  <button
-                    v-if="m.kind !== 'kp' && m.characterId"
-                    type="button"
-                    class="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-base-200 border border-base-300 hover:border-accent/60 hover:bg-accent/10 text-left"
-                    @click="openCharacterCardModal(m.characterId, true)"
-                  >
-                    <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-green-500/20 text-green-400">
-                      {{ m.label }}
-                    </span>
-                    <span class="flex-1 min-w-0 text-sm text-base-content truncate">
-                      {{ m.display }}
-                    </span>
-                    <span class="text-xs text-base-content shrink-0">
-                      {{ m.user }}
-                    </span>
-                    <Icon icon="mdi:chevron-right" class="text-base text-base-content" />
-                  </button>
-                  <div
-                    v-else
-                    class="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-base-200 border border-base-300"
-                  >
-                    <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-500/20 text-blue-400">
-                      KP
-                    </span>
-                    <span class="flex-1 min-w-0 text-sm text-base-content truncate">
-                      {{ m.user || '房主' }}
-                    </span>
-                  </div>
-                </li>
-              </ul>
-            </div>
-          </DialogPanel>
-        </div>
-      </Dialog>
-    </Teleport>
+    <RoomMembersDialog
+      v-model:open="membersOpen"
+      :display-members="displayMembers"
+      @view-character="(id) => openCharacterCardModal(id, true)"
+    />
 
     <!-- 角色卡审核弹窗：KP 可同意/拒绝，其他人仅查看 -->
-    <Teleport to="body">
-      <Dialog :open="characterReviewOpen" class="relative z-50" @close="characterReviewOpen = false">
-        <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
-        <div class="fixed inset-0 flex items-center justify-center p-4" @click.self="characterReviewOpen = false">
-          <DialogPanel class="mx-auto w-full max-w-md rounded-xl bg-base-100 border border-base-300 shadow-xl">
-            <DialogTitle class="sr-only">角色卡审核</DialogTitle>
-            <div class="p-4">
-              <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold text-base-content flex items-center gap-2">
-                  <Icon icon="mdi:clipboard-list-outline" class="text-xl text-accent" />
-                  角色审核
-                </h2>
-                <button
-                  type="button"
-                  class="p-2 rounded-lg text-base-content hover:text-base-content hover:bg-base-content/10"
-                  @click="characterReviewOpen = false"
-                >
-                  <Icon icon="mdi:close" class="text-xl" />
-                </button>
-              </div>
-
-              <div v-if="characterReviewLoading" class="py-6 text-center text-sm text-base-content">
-                加载角色卡审核列表中…
-              </div>
-              <div v-else-if="characterReviewError" class="py-6 text-center text-sm text-red-400">
-                {{ characterReviewError }}
-              </div>
-              <div v-else-if="!roomCharacterApplications.length" class="py-6 text-center text-sm text-base-content">
-                暂无角色卡审核记录。
-              </div>
-              <ul v-else class="space-y-2 max-h-72 overflow-y-auto scroll-thin">
-                <li
-                  v-for="item in roomCharacterApplications"
-                  :key="item.id"
-                  class="px-3 py-2 rounded-lg bg-base-200 border border-base-300 flex flex-col items-start gap-3"
-                >
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="px-2 py-0.5 rounded text-[11px] font-medium"
-                        :class="roomCharacterStatusClass(item.status)"
-                      >
-                        {{ roomCharacterStatusLabel(item.status) }}
-                      </span>
-                      <span class="text-sm text-base-content truncate">
-                        {{ getCharacterName(item.characterId) }}
-                      </span>
-                    </div>
-                    <div class="text-[11px] text-base-content mt-0.5">
-                      提交时间：{{ formatDateTime(item.createdAt) }}
-                    </div>
-                  </div>
-                  <div class="flex gap-2 ml-1">
-                  <button
-                    type="button"
-                    class="px-2 py-1 rounded-lg text-xs text-accent hover:bg-accent/20"
-                    @click="openCharacterCardModal(item.characterId, true)"
-                  >
-                    查看
-                  </button>
-                  <button
-                      type="button"
-                      class="px-2 py-0.5 rounded text-[11px] text-green-300 border border-green-500/40 hover:bg-green-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                      :disabled="!isOwner || item.status === 'accepted'"
-                      @click="onApproveRoomCharacter(item)"
-                    >
-                      同意
-                  </button>
-                  <button
-                      type="button"
-                      class="px-2 py-0.5 rounded text-[11px] text-red-300 border border-red-500/40 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                      :disabled="!isOwner || item.status === 'rejected'"
-                      @click="onRejectRoomCharacter(item)"
-                    >
-                      拒绝
-                  </button>
-                  </div>
-                </li>
-              </ul>
-            </div>
-          </DialogPanel>
-        </div>
-      </Dialog>
-    </Teleport>
+    <RoomCharacterReviewDialog
+      v-model:open="characterReviewOpen"
+      :room-id="roomId"
+      :is-owner="isOwner"
+    />
 
     <!-- 模组信息弹窗（仅房主会打开）：左侧词条，右侧正文；移动端为列表/正文切换 -->
     <Teleport to="body">
@@ -453,7 +352,7 @@
         <div class="fixed inset-0 bg-black/60 max-md:bg-black/80" aria-hidden="true" />
         <div class="fixed inset-0 flex items-center justify-center p-4 max-md:p-0 max-md:items-stretch" @click.self="closeModuleInfo">
           <DialogPanel
-            class="mx-auto w-full max-w-4xl max-h-[90vh] flex flex-col rounded-xl bg-base-100 border border-base-300 shadow-xl max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0 max-md:border-0"
+            class="mx-auto w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden rounded-xl bg-base-100 border border-base-300 shadow-xl max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0 max-md:border-0"
           >
             <DialogTitle class="sr-only">模组信息</DialogTitle>
             <!-- 顶部栏：标题 + 关闭；移动端正文视图时显示返回 -->
@@ -485,7 +384,7 @@
             <div class="flex-1 min-h-0 flex overflow-hidden flex-col md:flex-row">
               <!-- 左侧：词条列表（移动端在「列表」视图时全宽显示，正文视图时隐藏） -->
               <div
-                class="w-full md:w-56 shrink-0 border-r border-base-300 flex flex-col bg-base-200/50 max-md:border-r-0 max-md:min-h-0"
+                class="w-full md:w-56 shrink-0 min-h-0 border-r border-base-300 flex flex-col bg-base-200/50 max-md:border-r-0"
                 :class="{ 'max-md:hidden': isMobile && moduleInfoMobileView === 'content' }"
               >
                 <div class="p-2 border-b border-base-300 space-y-1 flex-shrink-0">
@@ -544,20 +443,19 @@
                 :class="{ 'max-md:hidden': isMobile && moduleInfoMobileView === 'list' }"
               >
                 <template v-if="selectedEntry">
-                  <div class="shrink-0 p-3 border-b border-base-300">
+                  <div class="flex-1 min-h-0 flex flex-col overflow-y-auto p-4 gap-2 sm:gap-4">
                     <input
                       v-model="selectedEntry.title"
                       type="text"
                       placeholder="词条标题（如：【背景信息】）"
-                      class="w-full px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content placeholder-accent-muted text-sm outline-none focus:border-accent"
+                      class="input input-ghost w-full text-xl sm:text-2xl font-bold px-0 focus:bg-transparent border-none focus:outline-none"
                       @blur="saveModuleEntries"
                     />
-                  </div>
-                  <div class="flex-1 min-h-0 p-3 overflow-hidden">
+                    <div class="divider my-0 opacity-50"></div>
                     <textarea
                       v-model="selectedEntry.content"
                       placeholder="在此填写正文内容…"
-                      class="w-full h-full min-h-[200px] md:min-h-[180px] px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content placeholder-accent-muted text-sm outline-none focus:border-accent resize-none whitespace-pre-wrap"
+                      class="textarea textarea-ghost w-full flex-1 resize-none text-base px-0 focus:bg-transparent border-none focus:outline-none leading-relaxed min-h-[200px]"
                       @blur="saveModuleEntries"
                     />
                   </div>
@@ -671,17 +569,6 @@
     </Teleport>
   </div>
 
-  <!-- Toast 提示 -->
-  <Toast ref="toastRef" />
-  
-  <!-- 确认对话框 -->
-  <ConfirmDialog
-    v-model:visible="confirmDialogVisible"
-    :title="confirmDialogTitle"
-    :message="confirmDialogMessage"
-    @confirm="confirmDialogResolve"
-    @cancel="confirmDialogReject"
-  />
 </template>
 
 <script setup>
@@ -693,8 +580,10 @@ import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import RoomLogView from '../components/RoomLogView.vue'
 import RoomChat from '../components/RoomChat.vue'
-import Toast from '../components/Toast.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import RoomMembersDialog from '../components/RoomMembersDialog.vue'
+import RoomCharacterReviewDialog from '../components/RoomCharacterReviewDialog.vue'
+import { useToast } from '../composables/useToast'
+import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { APP_TITLE } from '../constants/app'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useProfileCache } from '../stores/profileCache'
@@ -715,8 +604,6 @@ const {
   updateModuleEntries,
   deleteRoom,
   fetchMyApprovedCharacters,
-  fetchRoomCharacterApplications,
-  updateRoomCharacterStatus,
   updateRoom,
   availableTags,
   fetchTags,
@@ -728,6 +615,8 @@ const profileCache = useProfileCache()
 const room = ref(null)
 const loading = ref(true)
 const activeTab = ref('info') // 'info' | 'chat' | 'log'
+const infoDescExpanded = ref(false)
+const infoBackstoryExpanded = ref(false)
 const moduleInfoOpen = ref(false)
 const moduleEntriesEdit = ref([])
 const selectedEntryId = ref(null)
@@ -739,35 +628,8 @@ const moduleInfoMobileView = ref('list') // 'list' | 'content'，仅移动端使
 const membersOpen = ref(false)
 const ownerName = ref('')
 
-// Toast 和确认对话框
-const toastRef = ref(null)
-const confirmDialogVisible = ref(false)
-const confirmDialogTitle = ref('确认')
-const confirmDialogMessage = ref('')
-let confirmDialogResolve = null
-let confirmDialogReject = null
-
-function showToast(message, duration = 3000) {
-  if (toastRef.value) {
-    toastRef.value.show(message, duration)
-  }
-}
-
-function showConfirm(title, message) {
-  return new Promise((resolve) => {
-    confirmDialogTitle.value = title
-    confirmDialogMessage.value = message
-    confirmDialogVisible.value = true
-    confirmDialogResolve = () => {
-      resolve(true)
-      confirmDialogVisible.value = false
-    }
-    confirmDialogReject = () => {
-      resolve(false)
-      confirmDialogVisible.value = false
-    }
-  })
-}
+const toast = useToast()
+const { confirm } = useConfirmDialog()
 
 const isOwner = computed(() => {
   const u = auth.user?.value
@@ -782,6 +644,7 @@ const editRoomSaving = ref(false)
 const editRoomForm = ref({
   name: '',
   description: '',
+  backstory: '',
   module: '',
   icon: '',
   maxPlayers: 6,
@@ -832,65 +695,8 @@ const selectableCharacters = computed(() => {
   return characters.value.filter((c) => approvedCharacterIds.value.includes(c.id))
 })
 
-// 房间内角色卡审核列表
+// 房间内角色卡审核弹窗开关
 const characterReviewOpen = ref(false)
-const roomCharacterApplications = ref([])
-const characterReviewLoading = ref(false)
-const characterReviewError = ref('')
-
-async function loadRoomCharacterApplications() {
-  if (!roomId.value) return
-  characterReviewLoading.value = true
-  characterReviewError.value = ''
-  const res = await fetchRoomCharacterApplications(roomId.value)
-  characterReviewLoading.value = false
-  if (!res.ok) {
-    characterReviewError.value = res.message || '加载角色卡审核列表失败'
-    roomCharacterApplications.value = []
-    return
-  }
-  roomCharacterApplications.value = res.list || []
-}
-
-function getCharacterName(characterId) {
-  if (!characterId) return ''
-  const character = getById(characterId)
-  return character?.name || ''
-}
-
-function roomCharacterStatusLabel(status) {
-  if (status === 'pending') return '审核中'
-  if (status === 'accepted') return '已通过'
-  if (status === 'rejected') return '被拒绝'
-  return status || ''
-}
-
-function roomCharacterStatusClass(status) {
-  if (status === 'pending') return 'bg-amber-500/20 text-amber-300'
-  if (status === 'accepted') return 'bg-green-500/20 text-green-300'
-  if (status === 'rejected') return 'bg-red-500/20 text-red-300'
-  return 'bg-accent-muted/20 text-base-content'
-}
-
-async function onApproveRoomCharacter(item) {
-  if (!isOwner.value) return
-  const res = await updateRoomCharacterStatus(item.id, 'accepted')
-  if (!res.ok) {
-    showToast(res.message || '操作失败')
-    return
-  }
-  item.status = 'accepted'
-}
-
-async function onRejectRoomCharacter(item) {
-  if (!isOwner.value) return
-  const res = await updateRoomCharacterStatus(item.id, 'rejected')
-  if (!res.ok) {
-    showToast(res.message || '操作失败')
-    return
-  }
-  item.status = 'rejected'
-}
 
 function selectCharacter(characterId) {
   setRoomCharacter(roomId.value, characterId)
@@ -913,19 +719,6 @@ function getStatusColor(status) {
     started: 'bg-blue-500/20 text-blue-400',
   }
   return map[status] || ''
-}
-
-function formatDateTime(timestamp) {
-  if (!timestamp) return ''
-  const d = new Date(timestamp)
-  return d.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
 }
 
 const displayMembers = computed(() => {
@@ -1015,7 +808,7 @@ function parseModuleImportText(text) {
 function applyModuleImport() {
   const entries = parseModuleImportText(moduleImportText.value)
   if (!entries.length) {
-    showToast('未解析到词条，请粘贴包含【标题】的文本')
+    toast.error('未解析到词条，请粘贴包含【标题】的文本')
     return
   }
   moduleEntriesEdit.value = [...moduleEntriesEdit.value, ...entries]
@@ -1024,7 +817,7 @@ function applyModuleImport() {
   moduleImportOpen.value = false
   moduleImportText.value = ''
   saveModuleEntries()
-  showToast(`已追加 ${entries.length} 个词条`)
+  toast.success(`已追加 ${entries.length} 个词条`)
 }
 
 function addModuleEntry() {
@@ -1050,7 +843,7 @@ async function saveModuleEntries() {
   const list = moduleEntriesEdit.value.map((e) => ({ id: e.id, title: e.title || '', content: e.content || '' }))
   const res = await updateModuleEntries(roomId.value, list)
   if (res?.ok && room.value) room.value.moduleEntries = list
-  else if (!res?.ok) showToast(res?.message || '保存失败')
+  else if (!res?.ok) toast.error(res?.message || '保存失败')
 }
 
 function openEditModal() {
@@ -1060,6 +853,7 @@ function openEditModal() {
   editRoomForm.value = {
     name: room.value.title || '',
     description: room.value.description || '',
+    backstory: room.value.backstory || '',
     module: room.value.module || '',
     icon: '',
     maxPlayers: room.value.maxPlayers ?? 6,
@@ -1081,6 +875,7 @@ async function submitEditRoom() {
   const payload = {
     title: name,
     description: (v.description || '').trim(),
+    backstory: (v.backstory || '').trim(),
     tags: Array.isArray(v.tags) ? [...v.tags] : [],
   }
 
@@ -1096,17 +891,17 @@ async function submitEditRoom() {
     }
     editRoomOpen.value = false
   } else {
-    showToast(res?.message || '保存失败')
+    toast.error(res?.message || '保存失败')
   }
 }
 
 async function onDeleteRoom() {
   if (!room.value) return
-  const confirmed = await showConfirm('确认删除', `确定要删除房间「${room.value.title}」吗？此操作不可恢复。`)
+  const confirmed = await confirm({ title: '确认删除', message: `确定要删除房间「${room.value.title}」吗？此操作不可恢复。` })
   if (!confirmed) return
   const res = await deleteRoom(roomId.value)
   if (res?.ok) router.push({ name: 'game-rooms' })
-  else showToast(res?.message || '删除失败')
+  else toast.error(res?.message || '删除失败')
 }
 
 async function load() {

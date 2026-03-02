@@ -14,6 +14,10 @@
       <label class="label"><span class="label-text">房间描述</span></label>
       <textarea v-model="localForm.description" rows="4" placeholder="介绍一下你的房间..." class="textarea textarea-bordered w-full text-sm resize-none" />
     </div>
+    <div class="form-control">
+      <label class="label"><span class="label-text">背景故事</span></label>
+      <textarea v-model="localForm.backstory" rows="4" placeholder="可选：写下房间的背景故事，供玩家阅读..." class="textarea textarea-bordered w-full text-sm resize-none" />
+    </div>
     <div v-if="showMaxPlayers" class="form-control">
       <label class="label"><span class="label-text">最大人数</span></label>
       <input v-model.number="localForm.maxPlayers" type="number" min="2" max="10" class="input input-bordered w-full text-sm" />
@@ -76,6 +80,7 @@ function createDefaultForm() {
   return {
     name: '',
     description: '',
+    backstory: '',
     module: '',
     icon: '',
     maxPlayers: 6,

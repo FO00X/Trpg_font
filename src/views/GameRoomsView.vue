@@ -8,8 +8,32 @@
       </template>
     </PageHeader>
 
-    <!-- 搜索和筛选栏 -->
-    <div class="shrink-0 px-4 py-3">
+    <!-- 顶部 Tab：房间 / 跑团日志 -->
+    <div class="shrink-0 px-4 pt-3">
+      <div class="inline-flex bg-base-200 p-1 rounded-xl">
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm border-none rounded-lg"
+          :class="activeTab === 'rooms' ? 'btn-primary' : 'btn-ghost text-base-content/70'"
+          @click="activeTab = 'rooms'"
+        >
+          <Icon icon="mdi:view-grid-outline" class="text-lg mr-1" />
+          房间
+        </button>
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm border-none rounded-lg"
+          :class="activeTab === 'logs' ? 'btn-primary' : 'btn-ghost text-base-content/70'"
+          @click="activeTab = 'logs'"
+        >
+          <Icon icon="mdi:book-open-variant" class="text-lg mr-1" />
+          跑团日志
+        </button>
+      </div>
+    </div>
+
+    <!-- 房间 Tab：搜索和筛选栏 -->
+    <div v-if="activeTab === 'rooms'" class="shrink-0 px-4 py-3">
       <div class="flex items-center gap-2">
         <div class="flex-1 relative">
           <Icon icon="mdi:magnify" class="absolute left-4 top-1/2 -translate-y-1/2 text-base-content/40 text-lg pointer-events-none" />
@@ -67,7 +91,8 @@
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto scroll-thin p-4">
+    <!-- 房间 Tab：房间列表 -->
+    <div v-if="activeTab === 'rooms'" class="flex-1 overflow-y-auto scroll-thin p-4">
       <div v-if="filteredRooms.length === 0" class="flex flex-col items-center justify-center h-full text-center text-base-content/60">
         <Icon icon="mdi:dice-multiple-outline" class="text-6xl mb-4 opacity-50" />
         <p class="text-lg mb-2">{{ rooms.length === 0 ? '暂无房间' : '未找到匹配的房间' }}</p>
@@ -92,9 +117,9 @@
             <span
               class="px-2.5 py-1 rounded-full text-[11px] font-medium shrink-0 mt-1"
               :class="{
-                'bg-success/10 text-success': room.status === 'recruiting',
-                'bg-base-content/10 text-base-content/60': room.status === 'full',
-                'bg-info/10 text-info': room.status === 'started',
+                'bg-success/10 text-success': room.status === ROOM_STATUS.RECRUITING,
+                'bg-base-content/10 text-base-content/60': room.status === ROOM_STATUS.FULL,
+                'bg-info/10 text-info': room.status === ROOM_STATUS.STARTED,
               }"
             >
               {{ getStatusLabel(room.status) }}
@@ -130,23 +155,103 @@
             </span>
             <span class="flex items-center gap-1.5">
               <Icon icon="mdi:calendar-blank-outline" class="text-sm" />
-              {{ formatDate(room.created_at) }}
+              {{ formatDate(room.created_at) || '—' }}
             </span>
           </div>
 
           <div class="flex gap-2  border-t border-base-200/50 mt-auto">
-            <template v-if="room.status === 'recruiting'">
+            <template v-if="room.status === ROOM_STATUS.RECRUITING">
               <button v-if="canEnterRoom(room)" type="button" class="flex-1 py-2.5 bg-primary text-primary-content rounded-xl font-medium text-sm active:scale-95 transition-all shadow-sm shadow-primary/20" @click="onEnterRoom(room)">进入房间</button>
               <button v-else-if="room.myApplicationStatus === 'pending'" type="button" class="flex-1 py-2.5 bg-base-200 text-base-content/40 rounded-xl font-medium text-sm" disabled>等待审核</button>
               <button v-else type="button" class="flex-1 py-2.5 bg-primary/10 text-primary rounded-xl font-medium text-sm active:scale-95 transition-all" @click="onApplyToRoom(room.id)">申请加入</button>
             </template>
-            <button v-else-if="room.status === 'full'" type="button" class="flex-1 py-2.5 bg-base-200 text-base-content/40 rounded-xl font-medium text-sm" disabled>已满员</button>
-            <button v-else-if="room.status === 'started'" type="button" class="flex-1 py-2.5 bg-base-200 text-base-content/40 rounded-xl font-medium text-sm" disabled>进行中</button>
+            <button v-else-if="room.status === ROOM_STATUS.FULL" type="button" class="flex-1 py-2.5 bg-base-200 text-base-content/40 rounded-xl font-medium text-sm" disabled>已满员</button>
+            <button v-else-if="room.status === ROOM_STATUS.STARTED" type="button" class="flex-1 py-2.5 bg-base-200 text-base-content/40 rounded-xl font-medium text-sm" disabled>进行中</button>
             
             <button type="button" class="w-10 flex items-center justify-center bg-base-200 text-base-content/60 rounded-xl hover:bg-base-300 active:scale-95 transition-all" title="查看成员" @click="openRoomDetails(room)">
               <Icon icon="mdi:account-group-outline" class="text-xl" />
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 跑团日志 Tab：以书本形式展示房间小说记录 -->
+    <div v-if="activeTab === 'logs'" class="flex-1 overflow-y-auto scroll-thin px-4 pb-4">
+      <div class="max-w-3xl mx-auto pt-3 space-y-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <Icon icon="mdi:book-open-page-variant-outline" class="text-xl text-primary" />
+            <div>
+              <div class="text-sm font-semibold text-base-content">跑团日志（小说）</div>
+              <div class="text-xs text-base-content/60">由各房间 KP 生成的小说片段，按时间倒序排列</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs rounded-xl gap-1"
+            :disabled="logsLoading"
+            @click="fetchRoomLogs"
+          >
+            <Icon :icon="logsLoading ? 'mdi:loading' : 'mdi:refresh'" :class="logsLoading ? 'animate-spin text-sm' : 'text-sm'" />
+            刷新
+          </button>
+        </div>
+
+        <LoadingSpinner v-if="logsLoading" message="加载跑团日志中…" />
+        <div v-else-if="logsError" class="alert alert-error text-xs sm:text-sm">
+          {{ logsError }}
+        </div>
+        <div v-else-if="!roomLogs.length" class="flex flex-col items-center justify-center py-16 text-base-content/60 text-center">
+          <Icon icon="mdi:book-outline" class="text-5xl mb-3 opacity-50" />
+          <p class="text-sm sm:text-base">暂时还没有任何已生成的小说日志。</p>
+          <p class="text-xs mt-1">当各房间 KP 在「日志记录」中生成小说后，会在这里以书本的形式汇总展示。</p>
+        </div>
+        <div v-else class="space-y-3">
+          <article
+            v-for="log in roomLogs"
+            :key="log.id"
+            class="bg-base-100 rounded-2xl border border-base-300/80 shadow-sm hover:shadow-md transition-shadow p-4 sm:p-5"
+          >
+            <header class="flex items-start justify-between gap-3 mb-3">
+              <div class="min-w-0">
+                <div class="text-xs font-medium text-primary/80 flex items-center gap-1">
+                  <Icon icon="mdi:dice-multiple" class="text-sm" />
+                  {{ log.roomTitle || '未知房间' }}
+                </div>
+                <h2 class="mt-1 text-base sm:text-lg font-semibold text-base-content truncate">
+                  {{ log.title }}
+                </h2>
+                <div class="mt-1 text-[11px] text-base-content/60 flex items-center gap-2">
+                  <Icon icon="mdi:calendar-blank-outline" class="text-xs" />
+                  <span>{{ log.date }}</span>
+                </div>
+              </div>
+            </header>
+            <div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap">
+              <span v-if="!log.expanded">
+                {{ log.preview }}
+                <button
+                  v-if="log.hasMore"
+                  type="button"
+                  class="ml-1 text-xs text-primary hover:underline"
+                  @click="toggleLogExpanded(log.id)"
+                >
+                  展开全文
+                </button>
+              </span>
+              <span v-else>
+                {{ log.content }}
+                <button
+                  type="button"
+                  class="ml-1 text-xs text-primary hover:underline"
+                  @click="toggleLogExpanded(log.id)"
+                >
+                  收起
+                </button>
+              </span>
+            </div>
+          </article>
         </div>
       </div>
     </div>
@@ -184,8 +289,6 @@
     </ul>
   </BottomSheet>
 
-  <!-- Toast 提示 -->
-  <Toast ref="toastRef" />
 </template>
 
 <script setup>
@@ -195,8 +298,10 @@ import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems } from '@headlessui/vue'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
-import Toast from '../components/Toast.vue'
 import BottomSheet from '../components/BottomSheet.vue'
+import { useToast } from '../composables/useToast'
+import { formatDate } from '../utils/date'
+import { ROOM_STATUS, ROOM_STATUS_LABELS, ROOM_CHARACTER_STATUS } from '../constants/enums'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useAuthStore } from '../stores/auth'
 import { useProfileCache } from '../stores/profileCache'
@@ -207,14 +312,16 @@ const profileCache = useProfileCache()
 const { rooms, availableModules, fetchRooms, fetchModules, fetchTags, applyToRoom } = useGameRoomsStore()
 const authStore = useAuthStore()
 const myId = computed(() => authStore.user?.value?.id)
+const toast = useToast()
 
-// Toast
-const toastRef = ref(null)
-function showToast(message, duration = 3000) {
-  if (toastRef.value) {
-    toastRef.value.show(message, duration)
-  }
-}
+// 顶部 Tab：'rooms' | 'logs'
+const activeTab = ref('rooms')
+
+// 跑团日志（小说）列表
+const roomLogs = ref([])
+const logsLoading = ref(false)
+const logsError = ref('')
+const expandedLogIds = ref(new Set())
 
 const roomDetailsOpen = ref(false)
 const roomMembers = ref([])
@@ -251,9 +358,9 @@ function toggleDesc(roomId) {
 
 /** 招募中时：房主或已通过申请的用户显示「进入房间」 */
 function canEnterRoom(room) {
-  if (room.status !== 'recruiting') return false
+  if (room.status !== ROOM_STATUS.RECRUITING) return false
   if (room.ownerId === myId.value) return true
-  return room.myApplicationStatus === 'accepted'
+  return room.myApplicationStatus === ROOM_CHARACTER_STATUS.ACCEPTED
 }
 
 function onEnterRoom(room) {
@@ -268,15 +375,21 @@ onMounted(() => {
   nextTick(checkOverflows)
 })
 
+watch(activeTab, (tab) => {
+  if (tab === 'logs' && !roomLogs.value.length && !logsLoading.value) {
+    fetchRoomLogs()
+  }
+})
+
 // 搜索和筛选
 const searchQuery = ref('')
-const selectedStatuses = ref(['recruiting', 'full', 'started'])
+const selectedStatuses = ref([ROOM_STATUS.RECRUITING, ROOM_STATUS.FULL, ROOM_STATUS.STARTED])
 const selectedModules = ref([])
 
 const statusFilters = [
-  { value: 'recruiting', label: '招募中' },
-  { value: 'full', label: '已满员' },
-  { value: 'started', label: '进行中' },
+  { value: ROOM_STATUS.RECRUITING, label: ROOM_STATUS_LABELS[ROOM_STATUS.RECRUITING] },
+  { value: ROOM_STATUS.FULL, label: ROOM_STATUS_LABELS[ROOM_STATUS.FULL] },
+  { value: ROOM_STATUS.STARTED, label: ROOM_STATUS_LABELS[ROOM_STATUS.STARTED] },
 ]
 
 // 筛选后的房间列表
@@ -316,7 +429,7 @@ const filteredRooms = computed(() => {
 watch(filteredRooms, () => nextTick(checkOverflows), { deep: true })
 
 function resetFilters() {
-  selectedStatuses.value = ['recruiting', 'full', 'started']
+  selectedStatuses.value = [ROOM_STATUS.RECRUITING, ROOM_STATUS.FULL, ROOM_STATUS.STARTED]
   selectedModules.value = []
   searchQuery.value = ''
 }
@@ -327,22 +440,17 @@ function goCreateRoomPage() {
 
 async function onApplyToRoom(roomId) {
   const room = rooms.value.find((r) => r.id === roomId)
-  if (!room || room.status !== 'recruiting') return
+  if (!room || room.status !== ROOM_STATUS.RECRUITING) return
   const res = await applyToRoom(roomId)
   if (res?.ok) {
-    showToast(res.message || `已申请加入「${room.title}」，等待 KP 审核`)
+    toast.success(res.message || `已申请加入「${room.title}」，等待 KP 审核`)
   } else {
-    showToast(res?.message || '申请失败，请稍后重试')
+    toast.error(res?.message || '申请失败，请稍后重试')
   }
 }
 
 function getStatusLabel(status) {
-  const map = {
-    recruiting: '招募中',
-    full: '已满员',
-    started: '进行中',
-  }
-  return map[status] || status
+  return ROOM_STATUS_LABELS[status] || status
 }
 
 function getStatusColor(status) {
@@ -367,11 +475,6 @@ function ownerDisplay(room) {
   return ownerId.slice(0, 8) + '…'
 }
 
-function formatDate(isoString) {
-  if (!isoString) return '—'
-  const d = new Date(isoString)
-  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
-}
 
 async function openRoomDetails(room) {
   currentRoomForDetails.value = room
@@ -395,7 +498,7 @@ async function openRoomDetails(room) {
       .from('game_room_applications')
       .select('user_id')
       .eq('room_id', room.id)
-      .eq('status', 'accepted')
+      .eq('status', ROOM_CHARACTER_STATUS.ACCEPTED)
     
     if (applications && applications.length > 0) {
       const memberIds = applications.map((a) => a.user_id).filter((id) => id !== room.ownerId)
@@ -431,5 +534,61 @@ async function loadOwnerNames() {
   } catch {
     // 忽略错误，保持回退为 ID
   }
+}
+
+// 跑团日志：从 room_log_novels 汇总为“书本”列表
+async function fetchRoomLogs() {
+  logsLoading.value = true
+  logsError.value = ''
+  try {
+    const { data, error } = await supabase
+      .from('room_log_novels')
+      .select('room_id, date, content')
+      .order('date', { ascending: false })
+
+    if (error) throw error
+    const rows = data || []
+    const roomIds = Array.from(new Set(rows.map((r) => r.room_id).filter(Boolean)))
+    let roomTitleById = {}
+    if (roomIds.length) {
+      const { data: roomRows, error: roomErr } = await supabase
+        .from('game_rooms')
+        .select('id, title')
+        .in('id', roomIds)
+      if (!roomErr && roomRows) {
+        roomTitleById = Object.fromEntries(roomRows.map((r) => [r.id, r.title || '未命名房间']))
+      }
+    }
+
+    const next = rows.map((r) => {
+      const full = r.content || ''
+      const preview = full.length > 160 ? `${full.slice(0, 160)}…` : full
+      return {
+        id: `${r.room_id}-${r.date}`,
+        roomId: r.room_id,
+        roomTitle: roomTitleById[r.room_id] || '未知房间',
+        date: r.date,
+        content: full,
+        preview,
+        hasMore: full.length > 160,
+        expanded: expandedLogIds.value.has(`${r.room_id}-${r.date}`),
+      }
+    })
+    roomLogs.value = next
+  } catch (e) {
+    logsError.value = e.message || '加载跑团日志失败'
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+function toggleLogExpanded(id) {
+  const next = new Set(expandedLogIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedLogIds.value = next
+  roomLogs.value = roomLogs.value.map((log) =>
+    log.id === id ? { ...log, expanded: next.has(id) } : log
+  )
 }
 </script>

@@ -42,6 +42,7 @@
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
 import { useChatStore } from '../stores/chat'
+import { formatRelativeShort } from '../utils/date'
 
 const props = defineProps({
   message: {
@@ -53,13 +54,7 @@ const props = defineProps({
 const { currentUser, currentChannelId, dmPeerProfile } = useChatStore()
 const isSelf = computed(() => props.message.userId === currentUser.value?.id)
 const isDirectChannel = computed(() => (currentChannelId.value || '').startsWith('dm:'))
-const timeStr = computed(() => {
-  const d = new Date(props.message.time)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  if (isToday) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-})
+const timeStr = computed(() => formatRelativeShort(props.message.time))
 const isSystem = computed(() => props.message.type === 'system')
 
 const senderAvatar = computed(() => {

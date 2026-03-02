@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { APP_TITLE } from '../constants/app'
 import { useAuthStore } from '../stores/auth'
-import { supabase } from '../lib/supabase'
 
 const routes = [
   {
@@ -105,6 +104,12 @@ const routes = [
     meta: { title: '用户列表（管理员）', requiresAuth: true },
   },
   {
+    path: '/admin/ai',
+    name: 'admin-ai',
+    component: () => import('../views/AdminAIView.vue'),
+    meta: { title: 'AI管理（管理员）', requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('../views/NotFoundView.vue'),
@@ -118,13 +123,10 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  const authStore = useAuthStore()
+  await authStore.ensureInitialized()
   const requiresAuth = to.meta.requiresAuth !== false
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session) {
-    const authStore = useAuthStore()
-    if (!authStore.user) await authStore.setSession(session)
-  }
-  const loggedIn = !!session
+  const loggedIn = !!authStore.user?.value
   if (requiresAuth && !loggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }

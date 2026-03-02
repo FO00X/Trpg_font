@@ -1,13 +1,23 @@
 <script setup>
-import { ref, provide, watch, computed } from 'vue'
+import { ref, provide, watch, computed, onMounted } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
 import CharacterCardModal from './components/CharacterCardModal.vue'
+import Toast from './components/Toast.vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useChatStore } from './stores/chat'
 import { useCharacterCardModal } from './composables/useCharacterCardModal'
 import { useSwipe } from '@vueuse/core'
+import { registerToastRef } from './composables/useToast'
+import { useConfirmDialog } from './composables/useConfirmDialog'
 
 const route = useRoute()
+const globalToastRef = ref(null)
+const { state: confirmState, onConfirm, onCancel } = useConfirmDialog()
+
+onMounted(() => {
+  if (globalToastRef.value) registerToastRef(globalToastRef.value)
+})
 const router = useRouter()
 const sidebarOpen = ref(false)
 const transitionName = ref('fade')
@@ -74,6 +84,17 @@ watch(isLoginPage, (isLogin) => {
       :character-id="characterId"
       :is-own="isOwn"
       @close="closeCharacterCard"
+    />
+    <Toast v-if="!isLoginPage" ref="globalToastRef" />
+    <ConfirmDialog
+      v-if="!isLoginPage"
+      v-model:visible="confirmState.visible"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirm-text="confirmState.confirmText"
+      :cancel-text="confirmState.cancelText"
+      @confirm="onConfirm"
+      @cancel="onCancel"
     />
   </div>
 </template>
