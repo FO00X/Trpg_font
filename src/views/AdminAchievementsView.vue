@@ -44,7 +44,7 @@
             v-if="editing"
             class="card card-bordered bg-base-200/60"
           >
-            <div class="card-body space-y-4">
+            <div class="p-2">
               <div class="flex items-center justify-between gap-2">
                 <h2 class="card-title text-base-content text-base">
                   {{ creating ? '新建成就' : '编辑成就' }}
@@ -198,8 +198,7 @@
 
           <!-- 列表 -->
           <LoadingSpinner v-if="loading" message="加载中…" />
-          <div
-            v-else
+          <div            v-else-if="!editing && !creating && !loading"
             class="card card-bordered bg-base-200/40 overflow-hidden"
           >
             <div class="overflow-x-auto">
