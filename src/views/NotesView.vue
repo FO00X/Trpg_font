@@ -50,7 +50,7 @@ function openNew() {
           class="card card-bordered bg-base-200 hover:border-primary/40 transition-colors text-left w-full"
           @click="openNote(n)"
         >
-          <div class="card-body flex-row items-start gap-3 p-3">
+          <div class="w-full flex gap-4 p-4 rounded-2xl text-left transition-all active:scale-[0.99] bg-base-100 shadow-sm opacity-70 cursor-default">
             <div class="w-10 h-10 rounded-lg bg-base-300 flex items-center justify-center shrink-0">
               <Icon icon="mdi:note-text" class="text-xl text-primary" />
             </div>

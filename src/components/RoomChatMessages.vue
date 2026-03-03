@@ -38,7 +38,7 @@
           <!-- KP：环境描写/叙事风格；PL：角色对话（他人消息加「」） -->
           <div
             :class="[
-              'px-4 py-2.5 text-sm break-words whitespace-pre-wrap shadow-sm leading-relaxed',
+              'px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap shadow-sm leading-relaxed',
               m.speakerRole === 'kp'
                 ? 'rounded-2xl bg-base-200 text-base-content/80 border-l-4 border-primary rounded-tl-sm'
                 : m.isSelf
@@ -46,11 +46,10 @@
                   : 'rounded-3xl rounded-bl-sm bg-base-100 border border-base-200',
             ]"
           >
-            <template v-if="m.speakerRole !== 'kp' && !m.isSelf">
-              <span class="text-base-content">「</span>{{ getMessageContent(m) }}<span class="text-base-content">」</span>
-            </template>
-            <template v-else>
-              {{ getMessageContent(m) }}
+            <template v-for="(p, idx) in getRenderableParts(m)" :key="idx">
+              <span v-if="p.type === 'ooc'" class="inline-block px-1.5 py-0.5 mx-0.5 rounded-md bg-base-content/10 text-base-content/75 text-[0.9em] italic">（{{ p.text }}）</span>
+              <span v-else-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40">「{{ p.text }}」</span>
+              <span v-else>{{ p.text }}</span>
             </template>
           </div>
         </div>
@@ -70,6 +69,7 @@ import { Icon } from '@iconify/vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 import { formatTime } from '../utils/date'
 import { MESSAGE_TYPES } from '../constants/enums'
+import { parseRpText, toRenderableRpTokens } from '../utils/rpText'
 
 const props = defineProps({
   messages: {
@@ -129,6 +129,13 @@ function getMessageContent(msg) {
     }
   }
   return msg.content
+}
+
+function getRenderableParts(msg) {
+  const raw = getMessageContent(msg)
+  const base = parseRpText(raw)
+  const isSpeakerDialogue = msg?.speakerRole !== 'kp'
+  return toRenderableRpTokens(base, { defaultDialogue: isSpeakerDialogue })
 }
 
 function getSpeakerName(msg) {

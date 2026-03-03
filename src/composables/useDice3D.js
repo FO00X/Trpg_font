@@ -1,38 +1,93 @@
 import { ref, shallowRef } from 'vue'
 import DiceBox from '@3d-dice/dice-box'
+import { useDiceConfig } from '../stores/diceConfig'
 
 const diceBoxRef = shallowRef(null)
 const isInitialized = ref(false)
 let clearTimer = null
+let pendingConfigUpdate = null
 
 export function useDice3D() {
+  const { boxOptions, loadFromServer } = useDiceConfig()
+
   async function initDiceBox(containerSelector) {
     if (diceBoxRef.value) return
-    const box = new DiceBox(containerSelector, {
-      assetPath: '/assets/',
-      theme: 'default',
-      themeColor: '#4826F2',
-      scale: 3, // 骰子缩放比例
-      spinForce: 3, // 骰子旋转力度
-      throwForce: 2, // 骰子投掷力度
-      startingHeight: 8, // 骰子起始高度
-      gravity: 3, // 骰子重力
-      mass: 3, // 骰子质量
-      friction: 0.4, // 骰子与桌面的摩擦系数
-      restitution: 0.3, // 骰子弹性，碰撞后的反弹力度
-      linearDamping: 0.5, // 骰子线性阻尼，直线运动的减速速度
-      angularDamping: 0.4, // 骰子角阻尼，旋转的减速速度
-      spinForceSpread: 3, // 骰子旋转力度分散
-      throwForceSpread: 0, // 骰子投掷力度分散
-      lightIntensity: 0.8, // 骰子光效强度
-      shadows: true, // 骰子阴影
-      delay: 50, // 骰子延迟
-      offscreen: true // 骰子离屏渲染
-    })
-    
+    await loadFromServer()
+    const opts = boxOptions.value
+    const config = {
+      container: containerSelector,
+      assetPath: opts.assetPath,
+      theme: opts.theme,
+      themeColor: opts.themeColor,
+      scale: opts.scale,
+      spinForce: opts.spinForce,
+      throwForce: opts.throwForce,
+      startingHeight: opts.startingHeight,
+      gravity: opts.gravity,
+      mass: opts.mass,
+      friction: opts.friction,
+      restitution: opts.restitution,
+      linearDamping: opts.linearDamping,
+      angularDamping: opts.angularDamping,
+      lightIntensity: opts.lightIntensity,
+      enableShadows: opts.enableShadows,
+      delay: opts.delay,
+      offscreen: opts.offscreen,
+    }
+    if (opts.spinForceSpread != null) config.spinForceSpread = opts.spinForceSpread
+    if (opts.throwForceSpread != null) config.throwForceSpread = opts.throwForceSpread
+    const box = new DiceBox(config)
+
     await box.init()
     diceBoxRef.value = box
     isInitialized.value = true
+
+    // 若在初始化完成前有人请求更新配置，则在这里补一次
+    if (pendingConfigUpdate && typeof diceBoxRef.value?.updateConfig === 'function') {
+      try {
+        diceBoxRef.value.updateConfig(pendingConfigUpdate)
+      } catch (e) {
+        console.warn('DiceBox updateConfig failed', e)
+      } finally {
+        pendingConfigUpdate = null
+      }
+    }
+  }
+
+  /** 临时更新当前 DiceBox 配置（不会写入数据库） */
+  function updateConfig(overrides = {}) {
+    if (diceBoxRef.value && typeof diceBoxRef.value.updateConfig === 'function') {
+      diceBoxRef.value.updateConfig(overrides)
+    } else {
+      pendingConfigUpdate = { ...(pendingConfigUpdate || {}), ...(overrides || {}) }
+    }
+  }
+
+  /** 从数据库重新加载并应用配置（用于离开预览后恢复） */
+  async function reloadConfigFromServer() {
+    await loadFromServer()
+    const opts = boxOptions.value
+    updateConfig({
+      assetPath: opts.assetPath,
+      theme: opts.theme,
+      themeColor: opts.themeColor,
+      scale: opts.scale,
+      spinForce: opts.spinForce,
+      throwForce: opts.throwForce,
+      startingHeight: opts.startingHeight,
+      gravity: opts.gravity,
+      mass: opts.mass,
+      friction: opts.friction,
+      restitution: opts.restitution,
+      linearDamping: opts.linearDamping,
+      angularDamping: opts.angularDamping,
+      lightIntensity: opts.lightIntensity,
+      enableShadows: opts.enableShadows,
+      delay: opts.delay,
+      offscreen: opts.offscreen,
+      spinForceSpread: opts.spinForceSpread,
+      throwForceSpread: opts.throwForceSpread,
+    })
   }
 
   async function roll(notation) {
@@ -58,6 +113,8 @@ export function useDice3D() {
   return {
     initDiceBox,
     roll,
-    isInitialized
+    isInitialized,
+    updateConfig,
+    reloadConfigFromServer,
   }
 }

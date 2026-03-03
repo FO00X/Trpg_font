@@ -129,6 +129,7 @@
       
       <div class="flex items-end gap-2">
         <textarea
+          ref="inputEl"
           v-model="input"
           rows="1"
           placeholder="请输入内容... (输入 / 可使用指令)"
@@ -143,6 +144,19 @@
         >
           <Icon v-if="sending" icon="mdi:loading" class="text-xl animate-spin" />
           <Icon v-else icon="mdi:send" class="text-xl" />
+        </button>
+      </div>
+
+      <!-- 文本快捷键：场外、说话 -->
+      <div class="flex items-center gap-2 text-[11px] text-base-content/60 px-1 overflow-x-auto scroll-thin">
+        <button
+          v-for="s in textShortcuts"
+          :key="s.label"
+          type="button"
+          class="shrink-0 px-2.5 py-1 rounded-lg bg-base-200 hover:bg-base-300 transition-colors active:scale-95"
+          @click="wrapSelection(s.open, s.close, s.placeholder)"
+        >
+          {{ s.label }}
         </button>
       </div>
     </div>
@@ -166,13 +180,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch, computed, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import BottomSheet from './BottomSheet.vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../stores/auth'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useCharactersStore } from '../stores/characters'
+import { useAchievementsStore } from '../stores/achievements'
 import { IMMEDIATE_INSANITY_TABLE } from '../data/madnessTable'
 import { useChannelMessages } from '../composables/useChannelMessages'
 import { useToast } from '../composables/useToast'
@@ -191,11 +206,18 @@ const props = defineProps({
 const auth = useAuthStore()
 const gameRoomsStore = useGameRoomsStore()
 const charactersStore = useCharactersStore()
+const achievementsStore = useAchievementsStore()
 const { roll: roll3D, isInitialized: isDice3DInitialized } = useDice3D()
 const activeTool = ref(null) // 'dice' | 'request' | 'stat' | null
 const loading = ref(false)
 const sending = ref(false)
 const input = ref('')
+const inputEl = ref(null)
+
+const textShortcuts = [
+  { open: '(', close: ')', placeholder: '场外', label: '() 场外' },
+  { open: '"', close: '"', placeholder: '说话', label: '"" 说话' },
+]
 
 // 是否为房主（用于显示掷骰/检定中的 KP 名称）
 const isOwner = ref(false)
@@ -395,6 +417,7 @@ async function send() {
       .single()
     if (!error) {
       input.value = ''
+      achievementsStore.onMessageSent()
     }
   } finally {
     sending.value = false
@@ -406,6 +429,37 @@ function onKeydown(e) {
     e.preventDefault()
     send()
   }
+}
+
+function wrapSelection(open, close, placeholder = '') {
+  const el = inputEl.value
+  const value = String(input.value ?? '')
+  if (!el || typeof el.selectionStart !== 'number' || typeof el.selectionEnd !== 'number') {
+    // 回退：直接追加
+    input.value = value + open + (placeholder || '') + close
+    return
+  }
+
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  const selected = value.slice(start, end)
+  const inner = selected || placeholder || ''
+  input.value = value.slice(0, start) + open + inner + close + value.slice(end)
+
+  nextTick(() => {
+    try {
+      el.focus()
+      if (selected) {
+        el.setSelectionRange(start + open.length, start + open.length + inner.length)
+      } else {
+        // 没选中时把光标放到中间，方便继续输入
+        const pos = start + open.length
+        el.setSelectionRange(pos, pos + inner.length)
+      }
+    } catch {
+      // ignore
+    }
+  })
 }
 
 const randomD100 = () => utilsRandomD100(roll3D, isDice3DInitialized)
@@ -507,6 +561,7 @@ async function rollDice(diceType = '1d100') {
     const name = await getSpeakerNameForMessage()
     const text = `【掷骰】${name} 掷出 ${rollResult.expr}${rollResult.detail}`
     await sendSystemMessage(text)
+    achievementsStore.onDiceRolled()
     selectedDice.value = '1d100'
   } finally {
     diceRolling.value = false

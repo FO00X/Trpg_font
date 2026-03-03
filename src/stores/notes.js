@@ -1,11 +1,13 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from './auth'
+import { useAchievementsStore } from './achievements'
 
 const list = ref([])
 
 export function useNotesStore() {
   const auth = useAuthStore()
+  const achievements = useAchievementsStore()
 
   async function ensureUid() {
     let uid = auth.user?.value?.id
@@ -28,7 +30,7 @@ export function useNotesStore() {
     if (!uid) return { ok: false, message: '未登录' }
     const { data, error } = await supabase
       .from('notes')
-      .select('id, title, content, created_at, updated_at')
+      .select('id, title, content, images, created_at, updated_at')
       .eq('user_id', uid)
       .order('updated_at', { ascending: false })
     if (error) return { ok: false, message: error.message }
@@ -36,6 +38,7 @@ export function useNotesStore() {
       id: r.id,
       title: r.title || '',
       content: r.content || '',
+      images: r.images || [],
       created_at: r.created_at,
       updated_at: r.updated_at,
     }))
@@ -47,7 +50,7 @@ export function useNotesStore() {
     if (!uid) return { ok: false, message: '未登录', data: null }
     const { data, error } = await supabase
       .from('notes')
-      .select('id, title, content, created_at, updated_at')
+      .select('id, title, content, images, created_at, updated_at')
       .eq('id', id)
       .eq('user_id', uid)
       .single()
@@ -58,6 +61,7 @@ export function useNotesStore() {
         id: data.id,
         title: data.title || '',
         content: data.content || '',
+        images: data.images || [],
         created_at: data.created_at,
         updated_at: data.updated_at,
       },
@@ -71,42 +75,48 @@ export function useNotesStore() {
       user_id: uid,
       title: payload.title ?? '',
       content: payload.content ?? '',
+      images: Array.isArray(payload.images) ? payload.images : [],
     }
-    const { data, error } = await supabase.from('notes').insert(row).select('id, title, content, created_at, updated_at').single()
+    const { data, error } = await supabase.from('notes').insert(row).select('id, title, content, images, created_at, updated_at').single()
     if (error) return { ok: false, message: error.message, data: null }
     const note = {
       id: data.id,
       title: data.title || '',
       content: data.content || '',
+      images: data.images || [],
       created_at: data.created_at,
       updated_at: data.updated_at,
     }
     list.value.unshift(note)
+    achievements.onNoteCreated()
     return { ok: true, data: note }
   }
 
   async function update(id, payload) {
     const uid = auth.user?.value?.id
     if (!uid) return { ok: false, message: '未登录' }
+    const updates = {
+      title: payload.title ?? undefined,
+      content: payload.content ?? undefined,
+      updated_at: new Date().toISOString(),
+    }
+    if (Array.isArray(payload.images)) updates.images = payload.images
     const { data, error } = await supabase
       .from('notes')
-      .update({
-        title: payload.title ?? undefined,
-        content: payload.content ?? undefined,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', id)
       .eq('user_id', uid)
-      .select('id, title, content, created_at, updated_at')
+      .select('id, title, content, images, created_at, updated_at')
       .single()
     if (error) return { ok: false, message: error.message }
     const note = list.value.find((n) => n.id === id)
     if (note) {
       note.title = data.title ?? note.title
       note.content = data.content ?? note.content
+      note.images = data.images ?? note.images
       note.updated_at = data.updated_at
     }
-    return { ok: true, data: { id: data.id, title: data.title, content: data.content, created_at: data.created_at, updated_at: data.updated_at } }
+    return { ok: true, data: { id: data.id, title: data.title, content: data.content, images: data.images || [], created_at: data.created_at, updated_at: data.updated_at } }
   }
 
   async function remove(id) {

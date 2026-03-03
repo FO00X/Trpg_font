@@ -194,50 +194,87 @@
               </DisclosurePanel>
             </Transition>
           </Disclosure>
+
+          <!-- 管理后台：仅管理员可见，可收起展开，位于跑团下方 -->
+          <Disclosure v-if="isAdminUser" v-slot="{ open: adminOpen }" as="div" class="mt-3">
+            <DisclosureButton
+              type="button"
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-all active:scale-95 text-base-content/70 hover:bg-base-200 hover:text-base-content"
+            >
+              <Icon icon="mdi:cog-outline" class="text-xl shrink-0" />
+              <span class="flex-1 truncate text-sm">管理后台</span>
+              <Icon
+                :icon="adminOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'"
+                class="text-lg shrink-0 text-base-content/40"
+              />
+            </DisclosureButton>
+            <Transition
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="opacity-0 -translate-y-1"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 -translate-y-1"
+            >
+              <DisclosurePanel class="pl-3 pr-1 py-1 space-y-1 mt-1">
+                <button
+                  type="button"
+                  :class="[
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all active:scale-95 text-xs',
+                    currentPath.startsWith('/admin/users')
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-base-content/70 hover:bg-base-200 hover:text-base-content',
+                  ]"
+                  @click="router.push('/admin/users'); close()"
+                >
+                  <Icon icon="mdi:account-supervisor" class="text-base shrink-0" />
+                  <span class="flex-1 truncate">人员信息</span>
+                </button>
+                <button
+                  type="button"
+                  :class="[
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all active:scale-95 text-xs',
+                    currentPath.startsWith('/admin/ai')
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-base-content/70 hover:bg-base-200 hover:text-base-content',
+                  ]"
+                  @click="router.push('/admin/ai'); close()"
+                >
+                  <Icon icon="mdi:robot-outline" class="text-base shrink-0" />
+                  <span class="flex-1 truncate">AI 配置</span>
+                </button>
+                <button
+                  type="button"
+                  :class="[
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all active:scale-95 text-xs',
+                    currentPath.startsWith('/admin/dice')
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-base-content/70 hover:bg-base-200 hover:text-base-content',
+                  ]"
+                  @click="router.push('/admin/dice'); close()"
+                >
+                  <Icon icon="mdi:dice-multiple-outline" class="text-base shrink-0" />
+                  <span class="flex-1 truncate">骰子设置</span>
+                </button>
+                <button
+                  type="button"
+                  :class="[
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all active:scale-95 text-xs',
+                    currentPath.startsWith('/admin/achievements')
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'text-base-content/70 hover:bg-base-200 hover:text-base-content',
+                  ]"
+                  @click="router.push('/admin/achievements'); close()"
+                >
+                  <Icon icon="mdi:trophy-outline" class="text-base shrink-0" />
+                  <span class="flex-1 truncate">成就管理</span>
+                </button>
+              </DisclosurePanel>
+            </Transition>
+          </Disclosure>
         </div>
       </div>
       
-      <!-- 私聊模块 -->
-      <div v-if="directChannels && directChannels.length">
-        <button
-          type="button"
-          class="w-full flex items-center gap-2 px-3 mb-2 text-[11px] font-bold text-base-content/40 uppercase tracking-wider hover:text-base-content/70 transition-all active:scale-95"
-          @click="dmOpen = !dmOpen"
-        >
-          <span class="flex-1 text-left">私聊</span>
-          <span class="px-1.5 py-0.5 rounded bg-base-200 text-[9px]">{{ directChannels.length }}</span>
-          <Icon :icon="dmOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="text-sm shrink-0" />
-        </button>
-        <Transition
-          enter-active-class="transition duration-200 ease-out"
-          enter-from-class="opacity-0 -translate-y-2"
-          enter-to-class="opacity-100 translate-y-0"
-          leave-active-class="transition duration-150 ease-in"
-          leave-from-class="opacity-100 translate-y-0"
-          leave-to-class="opacity-0 -translate-y-2"
-        >
-          <div v-if="dmOpen" class="space-y-1">
-            <button
-              v-for="dm in directChannels"
-              :key="dm.id"
-              type="button"
-              :class="[
-                'w-full flex items-center gap-3 px-3 py-2 rounded-2xl text-left transition-all active:scale-95',
-                currentPath === '/friends' && dmChannelQuery === dm.id
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-base-content/70 hover:bg-base-200 hover:text-base-content',
-              ]"
-              @click="selectDirectMessage(dm)"
-            >
-              <div class="w-8 h-8 rounded-full bg-base-200 flex items-center justify-center shrink-0 overflow-hidden border border-base-300">
-                <img v-if="getDirectChannelAvatar(dm)" :src="getDirectChannelAvatar(dm)" alt="" class="w-full h-full object-cover" />
-                <Icon v-else :icon="dm.icon || 'mdi:account'" class="text-lg text-base-content/40" />
-              </div>
-              <span class="flex-1 truncate text-sm">{{ dm.name }}</span>
-            </button>
-          </div>
-        </Transition>
-      </div>
     </div>
 
     <!-- 用户信息 + 设置 (底部卡片) -->
@@ -568,12 +605,10 @@ const navItems = computed(() => {
   const items = [
     { path: '/friends', name: '好友', icon: 'mdi:account-group-outline' },
     { path: '/characters', name: '角色卡', icon: 'mdi:card-account-details-outline' },
-    { path: '/notifications', name: '消息', icon: 'mdi:bell-outline' },
     { path: '/notes', name: '笔记', icon: 'mdi:note-text-outline' },
+    { path: '/achievements', name: '成就', icon: 'mdi:trophy-outline' },
+    { path: '/notifications', name: '消息', icon: 'mdi:bell-outline' },
   ]
-  if (isAdminUser.value) {
-    items.push({ path: '/admin', name: '管理后台', icon: 'mdi:cog-outline' })
-  }
   return items
 })
 

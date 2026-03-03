@@ -499,3 +499,76 @@ alter table public.room_log_novels enable row level security;
 create policy "room_log_novels_select_all" on public.room_log_novels for select using (auth.uid() is not null);
 create policy "room_log_novels_insert_auth" on public.room_log_novels for insert with check (auth.uid() is not null);
 create policy "room_log_novels_update_auth" on public.room_log_novels for update using (auth.uid() is not null);
+
+-- ---------- 23. 成就系统：用户成就解锁记录 ----------
+create table if not exists public.user_achievements (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  achievement_id text not null,
+  unlocked_at timestamptz not null default now(),
+  primary key (user_id, achievement_id)
+);
+
+comment on table public.user_achievements is '用户已解锁成就记录，仅本人可见';
+
+alter table public.user_achievements enable row level security;
+
+create policy "user_achievements_all_own"
+  on public.user_achievements
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create index if not exists user_achievements_user_id_idx on public.user_achievements(user_id);
+
+-- ---------- 24. 成就系统：成就配置（仅管理员可管理） ----------
+create table if not exists public.achievements (
+  id text primary key,
+  title text not null,
+  description text not null default '',
+  category text not null default '其他',
+  icon text not null default 'mdi:trophy-outline',
+  stat_key text not null,
+  threshold integer not null default 1,
+  enabled boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+comment on table public.achievements is '成就配置：由管理员维护，普通用户只读';
+
+alter table public.achievements enable row level security;
+
+create policy "achievements_select_all"
+  on public.achievements
+  for select
+  using (auth.uid() is not null);
+
+create policy "achievements_insert_admin"
+  on public.achievements
+  for insert
+  with check ((select role from public.profiles where id = auth.uid()) = 'admin');
+
+create policy "achievements_update_admin"
+  on public.achievements
+  for update
+  using ((select role from public.profiles where id = auth.uid()) = 'admin');
+
+create policy "achievements_delete_admin"
+  on public.achievements
+  for delete
+  using ((select role from public.profiles where id = auth.uid()) = 'admin');
+
+create index if not exists achievements_enabled_sort_idx
+  on public.achievements(enabled, sort_order, created_at desc);
+
+-- 默认成就种子数据（若已存在则跳过）
+insert into public.achievements (id, title, description, category, icon, stat_key, threshold, enabled, sort_order)
+values
+  ('first_message', '开口说话', '在任意房间发送第一条聊天消息', '聊天', 'mdi:chat-processing-outline', 'messagesSent', 1, true, 10),
+  ('chatty', '话唠', '累计发送 50 条聊天消息', '聊天', 'mdi:chat-outline', 'messagesSent', 50, true, 20),
+  ('first_dice', '第一次掷骰', '完成一次公开掷骰', '掷骰', 'mdi:dice-5-outline', 'diceRolls', 1, true, 30),
+  ('dice_master', '骰运加护', '累计掷骰 100 次', '掷骰', 'mdi:dice-multiple-outline', 'diceRolls', 100, true, 40),
+  ('first_note', '记录员', '创建第一篇个人笔记', '笔记', 'mdi:note-text-outline', 'notesCreated', 1, true, 50),
+  ('first_room', '开团者', '成功创建第一个跑团房间', '跑团', 'mdi:dice-multiple', 'roomsCreated', 1, true, 60)
+on conflict (id) do nothing;

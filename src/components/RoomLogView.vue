@@ -5,6 +5,7 @@ import LoadingSpinner from './LoadingSpinner.vue'
 import { supabase } from '../lib/supabase'
 import { formatDateTime, formatDate, formatTime } from '../utils/date'
 import { MESSAGE_TYPES } from '../constants/enums'
+import { parseRpText, toRenderableRpTokens } from '../utils/rpText'
 
 const props = defineProps({
   roomId: { type: String, required: true },
@@ -206,6 +207,13 @@ function getMessageContent(msg) {
   return msg.content
 }
 
+function getRenderableParts(msg) {
+  const raw = getMessageContent(msg)
+  const base = parseRpText(raw)
+  const isSpeakerDialogue = msg?.speakerRole !== 'kp'
+  return toRenderableRpTokens(base, { defaultDialogue: isSpeakerDialogue })
+}
+
 function getSpeakerName(msg) {
   if (msg.speakerRole === 'kp') return 'KP'
   if (msg.speakerRole === 'npc' && msg.speakerNpcName) return msg.speakerNpcName
@@ -333,8 +341,12 @@ watch(() => props.roomId, () => {
                       {{ isSelectedForNovel(msg) ? '已选入小说' : '选入小说' }}
                     </button>
                   </div>
-                  <div class="pl-1 text-sm break-words whitespace-pre-wrap text-base-content">
-                    <span class="text-base-content">「</span>{{ msg.content }}<span class="text-base-content">」</span>
+                  <div class="pl-1 text-sm wrap-break-word whitespace-pre-wrap text-base-content">
+                    <template v-for="(p, idx) in getRenderableParts(msg)" :key="idx">
+                      <span v-if="p.type === 'ooc'" class="inline-block px-1.5 py-0.5 mx-0.5 rounded-md bg-base-content/10 text-base-content/75 text-[0.9em] italic">（{{ p.text }}）</span>
+                      <span v-else-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40 not-italic">「{{ p.text }}」</span>
+                      <span v-else class="not-italic">{{ p.text }}</span>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -361,8 +373,12 @@ watch(() => props.roomId, () => {
                       {{ isSelectedForNovel(msg) ? '已选入小说' : '选入小说' }}
                     </button>
                   </div>
-                  <div class="pl-3 text-sm break-words whitespace-pre-wrap text-[#a6adc8] italic border-l-2 border-blue-500/30">
-                    {{ msg.content }}
+                  <div class="pl-3 text-sm wrap-break-word whitespace-pre-wrap text-[#a6adc8] italic border-l-2 border-blue-500/30">
+                    <template v-for="(p, idx) in getRenderableParts(msg)" :key="idx">
+                      <span v-if="p.type === 'ooc'" class="inline-block px-1.5 py-0.5 mx-0.5 rounded-md bg-base-content/10 text-base-content/70 text-[0.9em] italic">（{{ p.text }}）</span>
+                      <span v-else-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40 not-italic text-base-content">「{{ p.text }}」</span>
+                      <span v-else>{{ p.text }}</span>
+                    </template>
                   </div>
                 </div>
               </div>

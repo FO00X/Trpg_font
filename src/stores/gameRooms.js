@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from './auth'
+import { useAchievementsStore } from './achievements'
 import { ROOM_STATUS, ROOM_CHARACTER_STATUS } from '../constants/enums'
 
 const rooms = ref([])
@@ -10,6 +11,7 @@ const availableTagGroups = ref([])
 const roomCharacterSelection = ref({})
 
 export function useGameRoomsStore() {
+  const achievements = useAchievementsStore()
   async function fetchRooms(params = {}) {
     const auth = useAuthStore()
     const myId = auth.user?.value?.id
@@ -144,6 +146,7 @@ export function useGameRoomsStore() {
       updated_at: data.updated_at,
     }
     rooms.value.unshift(room)
+    achievements.onRoomCreated()
     return room
   }
 

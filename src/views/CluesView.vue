@@ -60,7 +60,7 @@
         </ul>
       </div>
 
-      <!-- 右侧：当前线索正文（桌面端）；移动端点击线索会跳转到 ClueEditView -->
+      <!-- 右侧：当前线索正文（桌面端）；移动端点击线索会跳转到编辑页 -->
       <div
         class="flex-1 min-w-0 flex flex-col overflow-hidden min-h-0 bg-base-100 relative hidden md:flex"
       >

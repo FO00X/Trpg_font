@@ -265,7 +265,7 @@
                   <button
                     type="button"
                     class="flex items-center gap-2 px-3 py-2 rounded-xl bg-base-200 text-base-content/80 text-sm hover:bg-base-300 hover:text-base-content transition-colors active:scale-[0.98]"
-                    @click="openModuleInfo"
+                    @click="router.push({ name: 'room-module', params: { roomId } })"
                   >
                     <Icon icon="mdi:file-document-multiple-outline" class="text-base shrink-0" />
                     <span>模组信息</span>
@@ -346,170 +346,6 @@
       :is-owner="isOwner"
     />
 
-    <!-- 模组信息弹窗（仅房主会打开）：左侧词条，右侧正文；移动端为列表/正文切换 -->
-    <Teleport to="body">
-      <Dialog :open="moduleInfoOpen" class="relative z-50" @close="closeModuleInfo">
-        <div class="fixed inset-0 bg-black/60 max-md:bg-black/80" aria-hidden="true" />
-        <div class="fixed inset-0 flex items-center justify-center p-4 max-md:p-0 max-md:items-stretch" @click.self="closeModuleInfo">
-          <DialogPanel
-            class="mx-auto w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden rounded-xl bg-base-100 border border-base-300 shadow-xl max-md:max-w-none max-md:max-h-none max-md:rounded-none max-md:m-0 max-md:border-0"
-          >
-            <DialogTitle class="sr-only">模组信息</DialogTitle>
-            <!-- 顶部栏：标题 + 关闭；移动端正文视图时显示返回 -->
-            <div class="flex items-center justify-between shrink-0 p-4 border-b border-base-300 max-md:py-3">
-              <div class="flex items-center gap-2 min-w-0">
-                <button
-                  v-if="isMobile && moduleInfoMobileView === 'content'"
-                  type="button"
-                  class="p-2 -ml-2 rounded-lg text-base-content hover:text-base-content hover:bg-base-content/10 shrink-0"
-                  aria-label="返回词条列表"
-                  @click="moduleInfoMobileView = 'list'"
-                >
-                  <Icon icon="mdi:arrow-left" class="text-xl" />
-                </button>
-                <h2 class="text-lg font-semibold text-base-content flex items-center gap-2 truncate">
-                  <Icon icon="mdi:file-document-multiple-outline" class="text-xl text-accent shrink-0" />
-                  <span class="truncate">{{ isMobile && moduleInfoMobileView === 'content' && selectedEntry ? (selectedEntry.title || '正文') : '模组信息' }}</span>
-                </h2>
-              </div>
-              <button
-                type="button"
-                class="p-2 rounded-lg text-base-content hover:text-base-content hover:bg-base-content/10 shrink-0"
-                @click="closeModuleInfo"
-              >
-                <Icon icon="mdi:close" class="text-xl" />
-              </button>
-            </div>
-            <p class="shrink-0 px-4 pb-2 text-sm text-base-content max-md:hidden">供 KP 查阅：左侧选择词条，右侧查看/编辑正文。</p>
-            <div class="flex-1 min-h-0 flex overflow-hidden flex-col md:flex-row">
-              <!-- 左侧：词条列表（移动端在「列表」视图时全宽显示，正文视图时隐藏） -->
-              <div
-                class="w-full md:w-56 shrink-0 min-h-0 border-r border-base-300 flex flex-col bg-base-200/50 max-md:border-r-0"
-                :class="{ 'max-md:hidden': isMobile && moduleInfoMobileView === 'content' }"
-              >
-                <div class="p-2 border-b border-base-300 space-y-1 flex-shrink-0">
-                  <button
-                    type="button"
-                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-accent hover:bg-accent/20"
-                    @click="addModuleEntry"
-                  >
-                    <Icon icon="mdi:plus" class="text-lg" />
-                    添加词条
-                  </button>
-                  <button
-                    type="button"
-                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-base-content hover:bg-base-content/10 hover:text-base-content"
-                    @click="moduleImportOpen = true"
-                  >
-                    <Icon icon="mdi:file-import-outline" class="text-lg" />
-                    导入
-                  </button>
-                </div>
-                <ul class="flex-1 overflow-y-auto scroll-thin p-2 space-y-1 min-h-0">
-                  <li
-                    v-for="entry in moduleEntriesEdit"
-                    :key="entry.id"
-                    class="flex items-center gap-1 group"
-                  >
-                    <button
-                      type="button"
-                      :class="[
-                        'flex-1 min-w-0 text-left px-3 py-2.5 md:py-2 rounded-lg text-sm truncate transition-colors touch-manipulation',
-                        selectedEntryId === entry.id
-                          ? 'bg-accent/30 text-accent'
-                          : 'text-base-content/60 hover:bg-base-content/10 hover:text-base-content active:bg-white/10',
-                      ]"
-                      @click="selectModuleEntry(entry.id)"
-                    >
-                      {{ entry.title || '未命名' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="p-1.5 rounded text-base-content md:opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 touch-manipulation"
-                      title="删除词条"
-                      @click.stop="removeModuleEntry(entry.id)"
-                    >
-                      <Icon icon="mdi:delete-outline" class="text-base" />
-                    </button>
-                  </li>
-                  <li v-if="!moduleEntriesEdit.length" class="py-6 text-center text-sm text-base-content">
-                    暂无词条，点击上方「添加词条」
-                  </li>
-                </ul>
-              </div>
-              <!-- 右侧：当前词条标题 + 正文（移动端在「正文」视图时全宽显示） -->
-              <div
-                class="flex-1 min-w-0 flex flex-col overflow-hidden min-h-0"
-                :class="{ 'max-md:hidden': isMobile && moduleInfoMobileView === 'list' }"
-              >
-                <template v-if="selectedEntry">
-                  <div class="flex-1 min-h-0 flex flex-col overflow-y-auto p-4 gap-2 sm:gap-4">
-                    <input
-                      v-model="selectedEntry.title"
-                      type="text"
-                      placeholder="词条标题（如：【背景信息】）"
-                      class="input input-ghost w-full text-xl sm:text-2xl font-bold px-0 focus:bg-transparent border-none focus:outline-none"
-                      @blur="saveModuleEntries"
-                    />
-                    <div class="divider my-0 opacity-50"></div>
-                    <textarea
-                      v-model="selectedEntry.content"
-                      placeholder="在此填写正文内容…"
-                      class="textarea textarea-ghost w-full flex-1 resize-none text-base px-0 focus:bg-transparent border-none focus:outline-none leading-relaxed min-h-[200px]"
-                      @blur="saveModuleEntries"
-                    />
-                  </div>
-                </template>
-                <div v-else class="flex-1 flex items-center justify-center text-sm text-base-content px-4">
-                  <span class="max-md:hidden">请从左侧选择或添加词条</span>
-                  <span class="md:hidden">点击上方词条查看正文</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 导入浮层：粘贴全文，按【标题】自动拆成词条 -->
-            <div
-              v-if="moduleImportOpen"
-              class="absolute inset-0 z-10 flex flex-col rounded-xl bg-base-100 border border-base-300"
-            >
-              <div class="flex items-center justify-between shrink-0 p-3 border-b border-base-300">
-                <span class="text-sm font-medium text-base-content">导入：粘贴全文，将按【词条标题】自动拆分</span>
-                <button
-                  type="button"
-                  class="p-2 rounded-lg text-base-content hover:text-base-content hover:bg-base-content/10"
-                  @click="moduleImportOpen = false"
-                >
-                  <Icon icon="mdi:close" class="text-lg" />
-                </button>
-              </div>
-              <div class="flex-1 min-h-0 flex flex-col p-3 gap-3">
-                <textarea
-                  v-model="moduleImportText"
-                  placeholder="将整份模组内容粘贴到此处。以【标题】开头的行会识别为新词条，例如：&#10;【背景信息】&#10;这里是背景正文……&#10;【PC 信息】&#10;这里是 PC 信息……"
-                  class="flex-1 min-h-[120px] w-full px-3 py-2 rounded-lg bg-base-100 border border-base-300 text-base-content placeholder-accent-muted text-sm outline-none focus:border-accent resize-none whitespace-pre-wrap"
-                />
-                <div class="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    class="px-4 py-2 rounded-lg text-base-content hover:text-base-content border border-base-300"
-                    @click="moduleImportOpen = false"
-                  >
-                    取消
-                  </button>
-                  <button
-                    type="button"
-                    class="px-4 py-2 rounded-lg bg-accent text-base-100 font-medium hover:opacity-90"
-                    @click="applyModuleImport"
-                  >
-                    解析并导入
-                  </button>
-                </div>
-              </div>
-            </div>
-          </DialogPanel>
-        </div>
-      </Dialog>
-    </Teleport>
     <!-- 修改房间信息弹窗（仅房主） -->
     <Teleport to="body">
       <Dialog :open="editRoomOpen" class="relative z-50" @close="closeEditModal">
@@ -572,7 +408,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { Menu, MenuButton, MenuItems, MenuItem, Dialog, DialogPanel, DialogTitle } from '@headlessui/vue'
@@ -601,7 +437,6 @@ const {
   fetchRoom,
   setRoomCharacter,
   getRoomCharacter,
-  updateModuleEntries,
   deleteRoom,
   fetchMyApprovedCharacters,
   updateRoom,
@@ -617,14 +452,6 @@ const loading = ref(true)
 const activeTab = ref('info') // 'info' | 'chat' | 'log'
 const infoDescExpanded = ref(false)
 const infoBackstoryExpanded = ref(false)
-const moduleInfoOpen = ref(false)
-const moduleEntriesEdit = ref([])
-const selectedEntryId = ref(null)
-const moduleImportOpen = ref(false)
-const moduleImportText = ref('')
-const isMobile = ref(false)
-const moduleInfoMobileView = ref('list') // 'list' | 'content'，仅移动端使用
-
 const membersOpen = ref(false)
 const ownerName = ref('')
 
@@ -655,12 +482,6 @@ const canSubmitEdit = computed(() => {
   const v = editRoomForm.value || {}
   const nameOk = typeof v.name === 'string' && v.name.trim().length > 0
   return nameOk
-})
-
-const selectedEntry = computed(() => {
-  const id = selectedEntryId.value
-  if (!id) return null
-  return moduleEntriesEdit.value.find((e) => e.id === id) || null
 })
 
 const approvedCharacterIds = ref([])
@@ -755,97 +576,6 @@ function goBack() {
   router.push({ name: 'game-rooms' })
 }
 
-function openModuleInfo() {
-  if (!room.value || !isOwner.value) return
-  moduleEntriesEdit.value = (room.value.moduleEntries || []).map((e) => ({
-    id: e.id || crypto.randomUUID?.() || `e-${Date.now()}`,
-    title: e.title ?? '',
-    content: e.content ?? '',
-  }))
-  selectedEntryId.value = moduleEntriesEdit.value[0]?.id ?? null
-  moduleInfoMobileView.value = 'list'
-  moduleInfoOpen.value = true
-}
-
-function closeModuleInfo() {
-  moduleInfoOpen.value = false
-  moduleImportOpen.value = false
-  moduleImportText.value = ''
-  moduleInfoMobileView.value = 'list'
-  selectedEntryId.value = null
-}
-
-function selectModuleEntry(entryId) {
-  selectedEntryId.value = entryId
-  if (isMobile.value) moduleInfoMobileView.value = 'content'
-}
-
-/** 按【标题】拆分全文为词条列表 */
-function parseModuleImportText(text) {
-  const raw = (text || '').trim()
-  if (!raw) return []
-  const regex = /【[^】]*】/g
-  const matches = [...raw.matchAll(regex)]
-  if (matches.length === 0) {
-    return [{ id: crypto.randomUUID?.() || `e-${Date.now()}`, title: '导入内容', content: raw }]
-  }
-  const entries = []
-  for (let i = 0; i < matches.length; i++) {
-    const title = matches[i][0]
-    const contentStart = matches[i].index + matches[i][0].length
-    const contentEnd = i + 1 < matches.length ? matches[i + 1].index : raw.length
-    let content = raw.slice(contentStart, contentEnd)
-    content = content.replace(/^\s*\n+/, '').trim()
-    entries.push({
-      id: crypto.randomUUID?.() || `e-${Date.now()}-${i}`,
-      title,
-      content,
-    })
-  }
-  return entries
-}
-
-function applyModuleImport() {
-  const entries = parseModuleImportText(moduleImportText.value)
-  if (!entries.length) {
-    toast.error('未解析到词条，请粘贴包含【标题】的文本')
-    return
-  }
-  moduleEntriesEdit.value = [...moduleEntriesEdit.value, ...entries]
-  selectedEntryId.value = entries[0].id
-  if (isMobile.value) moduleInfoMobileView.value = 'content'
-  moduleImportOpen.value = false
-  moduleImportText.value = ''
-  saveModuleEntries()
-  toast.success(`已追加 ${entries.length} 个词条`)
-}
-
-function addModuleEntry() {
-  const id = crypto.randomUUID?.() || `e-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  moduleEntriesEdit.value.push({ id, title: '新词条', content: '' })
-  selectedEntryId.value = id
-  if (isMobile.value) moduleInfoMobileView.value = 'content'
-  saveModuleEntries()
-}
-
-function removeModuleEntry(entryId) {
-  const idx = moduleEntriesEdit.value.findIndex((e) => e.id === entryId)
-  if (idx === -1) return
-  moduleEntriesEdit.value.splice(idx, 1)
-  if (selectedEntryId.value === entryId) {
-    selectedEntryId.value = moduleEntriesEdit.value[idx]?.id ?? moduleEntriesEdit.value[0]?.id ?? null
-  }
-  saveModuleEntries()
-}
-
-async function saveModuleEntries() {
-  if (!roomId.value || !isOwner.value) return
-  const list = moduleEntriesEdit.value.map((e) => ({ id: e.id, title: e.title || '', content: e.content || '' }))
-  const res = await updateModuleEntries(roomId.value, list)
-  if (res?.ok && room.value) room.value.moduleEntries = list
-  else if (!res?.ok) toast.error(res?.message || '保存失败')
-}
-
 function openEditModal() {
   if (!room.value || !isOwner.value) return
   editRoomOpen.value = true
@@ -918,26 +648,12 @@ async function load() {
   }
 }
 
-function updateIsMobile() {
-  isMobile.value = typeof window !== 'undefined' && window.innerWidth < 768
-}
-
 onMounted(async () => {
-  updateIsMobile()
-  if (typeof window !== 'undefined') {
-    window.addEventListener('resize', updateIsMobile)
-  }
   fetchList()
   await load()
   // 非房主加载自己在本房间已被审核通过的角色卡
   if (!isOwner.value && roomId.value) {
     approvedCharacterIds.value = await fetchMyApprovedCharacters(roomId.value)
-  }
-})
-
-onUnmounted(() => {
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', updateIsMobile)
   }
 })
 
