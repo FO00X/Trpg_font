@@ -5,7 +5,7 @@
       icon="mdi:dice-multiple"
     >
       <template #actions>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
           <!-- 查看房间用户 / 角色列表 -->
           <!-- 玩家：没有角色卡时，显示“暂无角色卡，去创建” -->
           <button
@@ -19,13 +19,13 @@
           </button>
 
           <!-- 切换角色卡（房主 + 有角色卡的玩家） -->
-          <Menu v-else-if="room" as="div" class="relative">
+          <Menu v-else-if="room" as="div" class="relative min-w-0 max-w-[220px]">
             <MenuButton
               type="button"
-              class="flex items-center gap-1 p-2 rounded-lg bg-base-100-active text-base-content hover:bg-base-200 transition-colors text-sm"
+              class="flex items-center gap-1 p-2 rounded-lg bg-base-100-active text-base-content hover:bg-base-200 transition-colors text-sm min-w-0 w-full"
             >
               <Icon icon="mdi:card-account-details-outline" class="text-lg shrink-0" />
-              <span class="max-w-[160px] truncate">{{ characterMenuLabel }}</span>
+              <span class="min-w-0 flex-1 truncate" :title="characterMenuLabel">{{ characterMenuLabel }}</span>
               <Icon icon="mdi:chevron-down" class="text-lg shrink-0 opacity-70" />
             </MenuButton>
             <transition
@@ -492,6 +492,8 @@ const currentCharacter = computed(() => {
   const id = selectedCharacterId.value
   return id ? getById(id) : null
 })
+
+const currentCharacterAvatar = computed(() => currentCharacter.value?.portrait || '')
 
 const currentCharacterName = computed(() => {
   const c = currentCharacter.value

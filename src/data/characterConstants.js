@@ -43,7 +43,7 @@ export const CHAR_LABELS = {
   siz: '体型SIZ',
   app: '外貌APP',
   con: '体质CON',
-  int: '智力INT',
+  int: '灵感INT',
   pow: '意志POW',
   edu: '教育EDU',
   luc: '幸运LUC',

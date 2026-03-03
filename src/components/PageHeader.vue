@@ -40,7 +40,7 @@ const toggleSidebar = inject('toggleSidebar')
       <Icon v-if="icon" :icon="icon" class="text-xl text-primary shrink-0" />
       <h1 class="font-bold text-lg text-base-content truncate min-w-0">{{ title }}</h1>
     </div>
-    <div className="flex-none">
+    <div class="flex-none min-w-0">
       <slot name="actions" />
     </div>
   </header>

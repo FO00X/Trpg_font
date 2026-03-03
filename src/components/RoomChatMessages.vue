@@ -1,5 +1,12 @@
 <template>
-  <div ref="listEl" class="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-2">
+  <div
+    ref="listEl"
+    class="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-2"
+    @scroll.passive="onScroll"
+    @touchstart="onTouchStart"
+    @touchmove="onTouchMove"
+    @touchend="onTouchEnd"
+  >
     <template v-for="m in messages" :key="m.id">
       <!-- 系统通知：掷骰、暗骰、技能检定等，不作为说话人展示 -->
       <div
@@ -20,10 +27,23 @@
           m.isSelf ? 'flex-row-reverse' : 'flex-row',
         ]"
       >
-        <div class="w-8 h-8 rounded-full bg-base-100-active flex items-center justify-center shrink-0 overflow-hidden">
-          <img v-if="m.userAvatar" :src="m.userAvatar" alt="" class="w-full h-full object-cover" />
-          <span v-else class="text-accent text-xs font-medium">{{ m.userName.slice(0, 1).toUpperCase() }}</span>
-        </div>
+        <button
+          type="button"
+          class="w-8 h-8 rounded-full bg-base-100-active flex items-center justify-center shrink-0 overflow-hidden active:scale-95 transition-transform"
+          :title="canOpenCharacterCard(m) ? '查看角色卡' : ''"
+          :aria-label="canOpenCharacterCard(m) ? '查看角色卡' : '头像'"
+          @click="onAvatarClick(m)"
+        >
+          <img
+            v-if="getAvatar(m)"
+            :src="getAvatar(m)"
+            alt=""
+            class="w-full h-full object-cover"
+          />
+          <span v-else class="text-accent text-xs font-medium">
+            {{ m.userName.slice(0, 1).toUpperCase() }}
+          </span>
+        </button>
         <div :class="['max-w-[75%] flex flex-col', m.isSelf ? 'items-end' : 'items-start']">
           <div class="flex items-baseline gap-2 mb-1">
             <span
@@ -47,8 +67,9 @@
             ]"
           >
             <template v-for="(p, idx) in getRenderableParts(m)" :key="idx">
-              <span v-if="p.type === 'ooc'" class="inline-block px-1.5 py-0.5 mx-0.5 rounded-md bg-base-content/10 text-base-content/75 text-[0.9em] italic">（{{ p.text }}）</span>
-              <span v-else-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40">「{{ p.text }}」</span>
+              <!-- 场外：仅内容斜体显示，括号样式保持普通文本 -->
+              <span v-if="p.type === 'ooc'" class="italic">({{ p.text }})</span>
+              <!-- 其余文本（包括含引号的对白）按原样展示 -->
               <span v-else>{{ p.text }}</span>
             </template>
           </div>
@@ -60,11 +81,45 @@
       暂无消息，开始在房间里说点什么吧～
     </div>
     <LoadingSpinner v-if="loading" :block="false" size="sm" message="加载中…" className="justify-center py-4" />
+
+    <!-- 底部上拉刷新 -->
+    <div
+      class="sticky bottom-0 left-0 right-0 pointer-events-none -mx-4"
+      :style="{ height: indicatorHeight + 'px', opacity: indicatorOpacity }"
+      aria-hidden="true"
+    >
+      <div class="h-full flex items-end justify-center pb-2">
+        <div
+          class="px-3 py-2 rounded-2xl border border-base-300/60 bg-base-100/70 backdrop-blur shadow-sm"
+          :class="isReady ? 'text-primary' : 'text-base-content/60'"
+        >
+          <div class="flex items-center gap-2 text-[11px] font-medium">
+            <Icon
+              v-if="isRefreshing"
+              icon="mdi:loading"
+              class="text-sm animate-spin"
+            />
+            <Icon
+              v-else
+              icon="mdi:arrow-up"
+              class="text-sm transition-transform duration-150"
+              :style="{ transform: `rotate(${isReady ? 180 : Math.floor(progress * 180)}deg)` }"
+            />
+            <span>
+              {{ isRefreshing ? '刷新中…' : (isReady ? '松手刷新' : '上拉刷新') }}
+            </span>
+            <span v-if="!isRefreshing" class="opacity-60 tabular-nums">
+              {{ Math.min(100, Math.floor(progress * 100)) }}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import LoadingSpinner from './LoadingSpinner.vue'
 import { formatTime } from '../utils/date'
@@ -84,9 +139,39 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selfCharacterAvatar: {
+    type: String,
+    default: '',
+  },
 })
 
 const listEl = ref(null)
+const pullingUp = ref(false)
+const pullDistance = ref(0)
+const touchStartY = ref(0)
+const atBottom = ref(false)
+const PULL_THRESHOLD = 46
+const MAX_PULL = 96
+const refreshTriggered = ref(false)
+
+const emit = defineEmits(['refresh', 'avatar-click'])
+
+const progress = computed(() => Math.max(0, Math.min(1, pullDistance.value / PULL_THRESHOLD)))
+const isReady = computed(() => pullDistance.value >= PULL_THRESHOLD)
+const isRefreshing = computed(() => refreshTriggered.value && props.loading)
+const indicatorHeight = computed(() => {
+  if (isRefreshing.value) return 46
+  if (!pullingUp.value) return 0
+  // 弹性：前半段线性，后半段逐渐变慢
+  const d = pullDistance.value
+  const eased = d <= PULL_THRESHOLD ? d : (PULL_THRESHOLD + (d - PULL_THRESHOLD) * 0.35)
+  return Math.max(0, Math.min(60, Math.floor(eased)))
+})
+const indicatorOpacity = computed(() => {
+  if (isRefreshing.value) return 1
+  if (!pullingUp.value) return 0
+  return Math.max(0.15, Math.min(1, progress.value * 1.15))
+})
 
 function scrollToBottom() {
   nextTick(() => {
@@ -101,6 +186,84 @@ watch(
     scrollToBottom()
   },
   { immediate: true }
+)
+
+function getAvatar(msg) {
+  // 自己的发言：若当前房间已选择角色卡且有头像，则优先用角色头像
+  if (msg.isSelf && props.selfCharacterAvatar) {
+    return props.selfCharacterAvatar
+  }
+  return msg.userAvatar || null
+}
+
+function canOpenCharacterCard(msg) {
+  // 仅对普通用户消息开放；系统/骰娘消息在模板层已过滤
+  return !!(msg && msg.userId && msg.userId !== 'system')
+}
+
+function onAvatarClick(msg) {
+  if (!canOpenCharacterCard(msg)) return
+  emit('avatar-click', {
+    userId: msg.userId,
+    isSelf: !!msg.isSelf,
+    speakerRole: msg.speakerRole || null,
+    speakerNpcId: msg.speakerNpcId || null,
+  })
+}
+
+function onScroll() {
+  const el = listEl.value
+  if (!el) return
+  const { scrollTop, scrollHeight, clientHeight } = el
+  atBottom.value = scrollTop + clientHeight >= scrollHeight - 2
+}
+
+function onTouchStart(e) {
+  if (!listEl.value) return
+  touchStartY.value = e.touches[0].clientY
+  pullDistance.value = 0
+  pullingUp.value = false
+}
+
+function onTouchMove(e) {
+  const el = listEl.value
+  if (!el) return
+  if (!atBottom.value) return
+  if (props.loading) return
+  const currentY = e.touches[0].clientY
+  const deltaY = currentY - touchStartY.value
+  // 在底部时，手指向上滑动（deltaY < 0）视为“上拉刷新”手势
+  if (deltaY < 0) {
+    pullingUp.value = true
+    pullDistance.value = Math.min(-deltaY, MAX_PULL)
+  }
+}
+
+function onTouchEnd() {
+  if (pullingUp.value && isReady.value && !props.loading) {
+    refreshTriggered.value = true
+    // 触发后先保持一个固定高度，等 loading 结束再收起
+    pullDistance.value = PULL_THRESHOLD
+    emit('refresh')
+  } else {
+    pullingUp.value = false
+    pullDistance.value = 0
+  }
+}
+
+watch(
+  () => props.loading,
+  (val) => {
+    // 刷新结束后自然收起提示
+    if (!val && refreshTriggered.value) {
+      refreshTriggered.value = false
+      pullingUp.value = false
+      // 轻微延迟让“刷新中…”有一个收尾
+      setTimeout(() => {
+        pullDistance.value = 0
+      }, 120)
+    }
+  }
 )
 
 function getMessageContent(msg) {

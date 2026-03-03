@@ -5,6 +5,9 @@
       :messages="messages"
       :loading="loading"
       :is-owner="isOwner"
+      :self-character-avatar="selfCharacterAvatar"
+      @refresh="reloadMessages"
+      @avatar-click="handleAvatarClick"
     />
 
     <div class="border-t border-base-200/50 bg-base-100 px-3 py-2 flex flex-col gap-2 pb-safe">
@@ -192,6 +195,7 @@ import { IMMEDIATE_INSANITY_TABLE } from '../data/madnessTable'
 import { useChannelMessages } from '../composables/useChannelMessages'
 import { useToast } from '../composables/useToast'
 import { useDice3D } from '../composables/useDice3D'
+import { useCharacterCardModal } from '../composables/useCharacterCardModal'
 import { parseAndRollDice as utilsParseAndRollDice, randomD100 as utilsRandomD100, rollAmount as utilsRollAmount } from '../utils/dice'
 import { MESSAGE_TYPES, ROOM_CHARACTER_STATUS } from '../constants/enums'
 import RoomChatMessages from './RoomChatMessages.vue'
@@ -207,6 +211,7 @@ const auth = useAuthStore()
 const gameRoomsStore = useGameRoomsStore()
 const charactersStore = useCharactersStore()
 const achievementsStore = useAchievementsStore()
+const { openCharacterCard } = useCharacterCardModal()
 const { roll: roll3D, isInitialized: isDice3DInitialized } = useDice3D()
 const activeTool = ref(null) // 'dice' | 'request' | 'stat' | null
 const loading = ref(false)
@@ -224,6 +229,74 @@ const isOwner = ref(false)
 
 // 房间玩家列表（通过 room_characters 表的已通过记录）
 const roomMembers = ref([])
+const roomUserCharacterMap = ref({})
+
+const selectedRoomCharacterId = computed(() => gameRoomsStore.getRoomCharacter(props.roomId))
+const selfCharacterAvatar = computed(() => {
+  const id = selectedRoomCharacterId.value
+  if (!id) return ''
+  const raw = charactersStore.getById(id)
+  const sheet = raw ? charactersStore.normalizeCharacter(raw) : null
+  return sheet?.portrait || ''
+})
+
+async function loadRoomAcceptedMembers() {
+  // 用于：点击头像查看角色卡（需要 userId -> characterId 映射）
+  try {
+    const res = await gameRoomsStore.fetchRoomCharacterApplications(props.roomId)
+    if (!res?.ok) return
+    const accepted = (res.list || []).filter((x) => x.status === ROOM_CHARACTER_STATUS.ACCEPTED)
+
+    // 预拉取角色卡数据（避免点开弹窗时再等一轮）
+    const ids = [...new Set(accepted.map((x) => x.characterId).filter(Boolean))]
+    if (ids.length && charactersStore.fetchCharactersByIds) {
+      await charactersStore.fetchCharactersByIds(ids)
+    }
+
+    const map = {}
+    for (const item of accepted) {
+      if (!item.userId || !item.characterId) continue
+      if (!map[item.userId]) map[item.userId] = []
+      // 同一个用户可能有多张被接受的角色卡，这里都记录，默认取第一张
+      if (!map[item.userId].includes(item.characterId)) {
+        map[item.userId].push(item.characterId)
+      }
+    }
+    roomUserCharacterMap.value = map
+  } catch {
+    // ignore
+  }
+}
+
+function handleAvatarClick(payload) {
+  const userId = payload?.userId
+  if (!userId) return
+
+  // NPC 发言：消息已携带 speakerNpcId，优先直接打开对应角色卡
+  if (payload?.speakerRole === 'npc' && payload?.speakerNpcId) {
+    // KP 查看 NPC 默认按 own=true（不隐藏 tab）；其他人查看按 own=false
+    openCharacterCard(payload.speakerNpcId, !!payload?.isSelf)
+    return
+  }
+
+  // KP 文本（speakerRole === 'kp'）通常没有对应角色卡，直接忽略
+  if (payload?.speakerRole === 'kp') return
+
+  let charId = null
+  if (payload?.isSelf) {
+    // 自己：优先使用房间当前选择的角色卡
+    charId = selectedRoomCharacterId.value || (roomUserCharacterMap.value[userId]?.[0] ?? null)
+  } else {
+    charId = roomUserCharacterMap.value[userId]?.[0] ?? null
+  }
+
+  if (!charId) {
+    showToast('该玩家在本房间未绑定角色卡。')
+    return
+  }
+
+  openCharacterCard(charId, !!payload?.isSelf)
+}
 
 // 房主侧：请求检定面板状态
 const requestKind = ref('skill') // 'skill' | 'sanity' | 'madness'
@@ -259,6 +332,7 @@ const channelId = computed(() => `room:${props.roomId}`)
 const {
   messages,
   loading: messagesLoading,
+  reload: reloadMessages,
 } = useChannelMessages(channelId, {
   onNewMessage(msg) {
     if (msg.type === MESSAGE_TYPES.CHECK_REQUEST) {
@@ -273,6 +347,13 @@ watch(
     loading.value = val
   },
   { immediate: true }
+)
+
+watch(
+  () => props.roomId,
+  async () => {
+    await loadRoomAcceptedMembers()
+  }
 )
 
 // ==================== 工具函数 ====================
@@ -382,6 +463,7 @@ async function send() {
   sending.value = true
   try {
     let speakerRole = null
+    let speakerNpcId = null
     let speakerNpcName = null
 
     if (isOwner.value) {
@@ -393,6 +475,7 @@ async function send() {
         const sheet = await getCharacterSheet(charId)
         if (sheet) {
           speakerRole = 'npc'
+          speakerNpcId = charId
           speakerNpcName = sheet.name?.trim() || null
         } else {
           speakerRole = 'kp'
@@ -407,7 +490,7 @@ async function send() {
       content: text,
       type: MESSAGE_TYPES.TEXT,
       speaker_role: speakerRole,
-      speaker_npc_id: null,
+      speaker_npc_id: speakerNpcId,
       speaker_npc_name: speakerNpcName,
     }
     const { error } = await supabase
@@ -600,18 +683,42 @@ async function getCurrentSkillListForPicker() {
   const skills = Array.isArray(sheet.skills) ? sheet.skills : []
   if (!skills.length) {
     showToast('该角色没有技能数据，请先在角色卡中填写技能。')
-    return null
+    // 没有技能也允许做属性检定，先不直接返回
   }
 
-  const list = skills
+  const skillList = (skills || [])
     .map((s) => ({
       raw: s,
       displayName: skillDisplayName(s),
     }))
     .filter((x) => x.displayName)
 
+  // 追加属性检定选项（力量、体质、敏捷、外貌、意志、灵感、教育、幸运）
+  const attrDefs = [
+    { key: 'str', name: '力量' },
+    { key: 'con', name: '体质' },
+    { key: 'dex', name: '敏捷' },
+    { key: 'app', name: '外貌' },
+    { key: 'pow', name: '意志' },
+    { key: 'int', name: '灵感' },
+    { key: 'edu', name: '教育' },
+    { key: 'luc', name: '幸运' },
+  ]
+  const attrList = attrDefs
+    .map(({ key, name }) => {
+      const value = Number(sheet[key] ?? 0) || 0
+      if (!value) return null
+      return {
+        raw: { kind: 'attribute', key, value },
+        displayName: name,
+      }
+    })
+    .filter(Boolean)
+
+  const list = [...attrList, ...skillList]
+
   if (!list.length) {
-    showToast('当前角色没有可用的技能名称。')
+    showToast('当前角色没有可用的技能或属性名称。')
     return null
   }
 
@@ -730,9 +837,10 @@ async function skillCheckByName(keyword, modifier = 0, hidden = false) {
   const skills = Array.isArray(sheet.skills) ? sheet.skills : []
   if (!skills.length) {
     showToast('该角色没有技能数据，请先在角色卡中填写技能。')
-    return
+    // 继续尝试属性检定
   }
 
+  // 先尝试在技能列表中匹配
   let chosen = skills.find((s) => {
     const d = skillDisplayName(s)
     const baseName = (s.name || '').replace(/\d$/, '')
@@ -741,33 +849,68 @@ async function skillCheckByName(keyword, modifier = 0, hidden = false) {
   if (!chosen) {
     chosen = skills.find((s) => skillDisplayName(s).includes(keyword))
   }
-  if (!chosen) {
-    showToast('未在当前角色技能中找到对应技能，请检查名称。')
+
+  if (chosen) {
+    const baseTarget = skillSuccess(chosen, sheet)
+    const target = baseTarget + (modifier || 0)
+    const value = await randomD100()
+    let result = '失败'
+    if (value <= Math.floor(target / 5)) result = '极难成功'
+    else if (value <= Math.floor(target / 2)) result = '困难成功'
+    else if (value <= target) result = '成功'
+
+    const charName = sheet.name?.trim() || '未命名角色'
+    const displaySkillName = skillDisplayName(chosen)
+    const modText = modifier
+      ? `（基础${baseTarget}${modifier > 0 ? `+${modifier}` : modifier} → 最终${target}）`
+      : `（${target}）`
+    const prefix = hidden ? '【暗中技能检定】' : '【技能检定】'
+    const text = `${prefix}「${charName}」使用「${displaySkillName}」${modText}：1d100 = ${value}，${result}`
+    if (hidden) {
+      await sendHiddenMessage(text, 'hidden_skill')
+    } else {
+      await sendSystemMessage(text)
+    }
     return
   }
 
-  const baseTarget = skillSuccess(chosen, sheet)
-  const target = baseTarget + (modifier || 0)
-  const value = await randomD100()
-  let result = '失败'
-  if (value <= Math.floor(target / 5)) result = '极难成功'
-  else if (value <= Math.floor(target / 2)) result = '困难成功'
-  else if (value <= target) result = '成功'
-
-  const me = auth.user?.value
-  const playerName = me?.username || me?.email?.split?.('@')[0] || '我'
-  const charName = sheet.name?.trim() || '未命名角色'
-  const displaySkillName = skillDisplayName(chosen)
-  const modText = modifier
-    ? `（基础${baseTarget}${modifier > 0 ? `+${modifier}` : modifier} → 最终${target}）`
-    : `（${target}）`
-  const prefix = hidden ? '【暗中技能检定】' : '【技能检定】'
-  const text = `${prefix}「${charName}」使用「${displaySkillName}」${modText}：1d100 = ${value}，${result}`
-  if (hidden) {
-    await sendHiddenMessage(text, 'hidden_skill')
-  } else {
-    await sendSystemMessage(text)
+  // 再尝试属性检定（力量/体质/敏捷/外貌/意志/灵感/教育/幸运）
+  const attrMap = {
+    力量: 'str',
+    体质: 'con',
+    敏捷: 'dex',
+    外貌: 'app',
+    意志: 'pow',
+    灵感: 'int',
+    教育: 'edu',
+    幸运: 'luc',
   }
+  const attrKey = attrMap[keyword]
+  if (attrKey) {
+    const baseTarget = Number(sheet[attrKey] ?? 0) || 0
+    const target = baseTarget + (modifier || 0)
+    const value = await randomD100()
+    let result = '失败'
+    if (value <= Math.floor(target / 5)) result = '极难成功'
+    else if (value <= Math.floor(target / 2)) result = '困难成功'
+    else if (value <= target) result = '成功'
+
+    const charName = sheet.name?.trim() || '未命名角色'
+    const attrName = keyword
+    const modText = modifier
+      ? `（基础${baseTarget}${modifier > 0 ? `+${modifier}` : modifier} → 最终${target}）`
+      : `（${target}）`
+    const prefix = hidden ? '【暗中属性检定】' : '【属性检定】'
+    const text = `${prefix}「${charName}」进行「${attrName}」检定${modText}：1d100 = ${value}，${result}`
+    if (hidden) {
+      await sendHiddenMessage(text, 'hidden_skill')
+    } else {
+      await sendSystemMessage(text)
+    }
+    return
+  }
+
+  showToast('未在当前角色技能或属性中找到对应项目，请检查名称。')
 }
 
 // ==================== 指令处理函数 ====================
@@ -1038,6 +1181,7 @@ async function handleLocalSkillCheck(meta, value) {
   const keyword = meta.skillName || ''
   if (!keyword) return
 
+  // 先尝试按技能处理
   let chosen = skills.find((s) => {
     const d = skillDisplayName(s)
     const baseName = (s.name || '').replace(/\d$/, '')
@@ -1046,10 +1190,51 @@ async function handleLocalSkillCheck(meta, value) {
   if (!chosen) {
     chosen = skills.find((s) => skillDisplayName(s).includes(keyword))
   }
-  if (!chosen) return
 
-  const baseTarget = skillSuccess(chosen, sheet)
+  const sheetName = sheet.name?.trim() || '未命名角色'
   const modifier = Number(meta.modifier || 0) || 0
+
+  if (chosen) {
+    const baseTarget = skillSuccess(chosen, sheet)
+    const target = baseTarget + modifier
+
+    let result = '失败'
+    if (value === 1) {
+      result = '大成功'
+    } else if (value === 100 || (value >= 96 && target < 50)) {
+      result = '大失败'
+    } else if (value <= Math.floor(target / 5)) {
+      result = '极难成功'
+    } else if (value <= Math.floor(target / 2)) {
+      result = '困难成功'
+    } else if (value <= target) {
+      result = '成功'
+    }
+
+    const displaySkillName = skillDisplayName(chosen)
+    const modText = modifier
+      ? `（基础${baseTarget}${modifier > 0 ? `+${modifier}` : modifier} → 最终${target}）`
+      : `（${target}）`
+    const text = `【被请求技能检定】「${sheetName}」使用「${displaySkillName}」${modText}：1d100 = ${value}，${result}`
+    await sendSystemMessage(text)
+    return
+  }
+
+  // 若未找到对应技能，则尝试按属性检定处理
+  const attrMap = {
+    力量: 'str',
+    体质: 'con',
+    敏捷: 'dex',
+    外貌: 'app',
+    意志: 'pow',
+    灵感: 'int',
+    教育: 'edu',
+    幸运: 'luc',
+  }
+  const attrKey = attrMap[keyword]
+  if (!attrKey) return
+
+  const baseTarget = Number(sheet[attrKey] ?? 0) || 0
   const target = baseTarget + modifier
 
   let result = '失败'
@@ -1065,12 +1250,11 @@ async function handleLocalSkillCheck(meta, value) {
     result = '成功'
   }
 
-  const sheetName = sheet.name?.trim() || '未命名角色'
-  const displaySkillName = skillDisplayName(chosen)
+  const attrName = keyword
   const modText = modifier
     ? `（基础${baseTarget}${modifier > 0 ? `+${modifier}` : modifier} → 最终${target}）`
     : `（${target}）`
-  const text = `【被请求技能检定】「${sheetName}」使用「${displaySkillName}」${modText}：1d100 = ${value}，${result}`
+  const text = `【被请求属性检定】「${sheetName}」进行「${attrName}」检定${modText}：1d100 = ${value}，${result}`
   await sendSystemMessage(text)
 }
 
@@ -1172,6 +1356,9 @@ onMounted(async () => {
       // ignore
     }
   }
+
+  // 无论是否房主，都加载已通过的绑定关系，用于“点头像看角色卡”
+  await loadRoomAcceptedMembers()
 })
 
 </script>

@@ -392,7 +392,7 @@ export function useCharacterForm(options = {}) {
     occupationPickerOpen.value = false
   }
 
-  const CHAR_MIN = 30
+  const CHAR_MIN = 0
   const CHAR_MAX = 90
   const CHAR_ATTRS = ['str', 'dex', 'siz', 'app', 'con', 'int', 'pow', 'edu']
   const CHAR_POINTS_TOTAL = 480
@@ -402,7 +402,7 @@ export function useCharacterForm(options = {}) {
     { notation: '2d6+6', key: 'siz', label: '体型SIZ', multiply: 5 },
     { notation: '3d6', key: 'app', label: '外貌APP', multiply: 5 },
     { notation: '3d6', key: 'con', label: '体质CON', multiply: 5 },
-    { notation: '2d6+6', key: 'int', label: '智力INT', multiply: 5 },
+    { notation: '2d6+6', key: 'int', label: '灵感INT', multiply: 5 },
     { notation: '3d6', key: 'pow', label: '意志POW', multiply: 5 },
     { notation: '2d6+6', key: 'edu', label: '教育EDU', multiply: 5 },
     { notation: '3d6', key: 'luc', label: '幸运LUC', multiply: 5 },
@@ -494,7 +494,17 @@ export function useCharacterForm(options = {}) {
   }
 
   async function openRollLuckOnly() {
-    await rollByBatch(CHAR_ROLL_BATCH.filter((b) => b.key === 'luc'))
+    if (rollRolling.value) return
+    rollRolling.value = true
+    try {
+      const list = await rollBatchOnce(CHAR_ROLL_BATCH.filter((b) => b.key === 'luc'))
+      if (!list.length) return
+      const item = list[0]
+      const value = (Number(item.base) || 0) * (item.multiply || 1)
+      form.value.luc = Math.min(CHAR_MAX, Math.max(0, Number(value) || 0))
+    } finally {
+      rollRolling.value = false
+    }
   }
   const charPointsRemaining = computed(() => {
     if (form.value.attributesSource !== 'manual') return 0

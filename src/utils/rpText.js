@@ -2,11 +2,10 @@
  * 解析跑团文本中的标记。
  *
  * 约定：
- * - () 或 （）: 场外话（OOC）
- * - "" 或 “” : 对白（dialogue/说话）
+ * - () 或 （）: 场外话（OOC），括号外观保持不变，仅内容作斜体展示
  *
- * 返回 token 列表：{ type: 'text' | 'ooc' | 'dialogue', text: string }
- * 注意：token.text 不含包裹符号本身。
+ * 返回 token 列表：{ type: 'text' | 'ooc', text: string }
+ * 注意：ooc 的 token.text 不含包裹符号本身。
  */
 export function parseRpText(input) {
   const s = String(input ?? '')
@@ -33,24 +32,11 @@ export function parseRpText(input) {
       // 没找到闭合，按普通文本处理
     }
 
-    // 对白："..." 或 “...”
-    if (ch === '"' || ch === '“') {
-      const closeChar = ch === '"' ? '"' : '”'
-      const j = s.indexOf(closeChar, i + 1)
-      if (j !== -1) {
-        push('dialogue', s.slice(i + 1, j))
-        i = j + 1
-        continue
-      }
-    }
-
     // 普通文本：吃到下一个标记为止
     let next = s.length
     const idxParen = s.indexOf('(', i)
     const idxParenFull = s.indexOf('（', i)
-    const idxQuote = s.indexOf('"', i)
-    const idxQuoteFull = s.indexOf('“', i)
-    for (const v of [idxParen, idxParenFull, idxQuote, idxQuoteFull]) {
+    for (const v of [idxParen, idxParenFull]) {
       if (v !== -1 && v < next) next = v
     }
     push('text', s.slice(i, next))

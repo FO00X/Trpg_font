@@ -32,15 +32,22 @@ export function useDice3D() {
       lightIntensity: opts.lightIntensity,
       enableShadows: opts.enableShadows,
       delay: opts.delay,
-      offscreen: opts.offscreen,
+      // 关闭 offscreen / worker 模式，避免部分环境下 DiceBox 内部 setValue 报错
+      offscreen: false,
     }
     if (opts.spinForceSpread != null) config.spinForceSpread = opts.spinForceSpread
     if (opts.throwForceSpread != null) config.throwForceSpread = opts.throwForceSpread
-    const box = new DiceBox(config)
-
-    await box.init()
-    diceBoxRef.value = box
-    isInitialized.value = true
+    try {
+      const box = new DiceBox(config)
+      await box.init()
+      diceBoxRef.value = box
+      isInitialized.value = true
+    } catch (e) {
+      console.error('DiceBox init failed', e)
+      diceBoxRef.value = null
+      isInitialized.value = false
+      return
+    }
 
     // 若在初始化完成前有人请求更新配置，则在这里补一次
     if (pendingConfigUpdate && typeof diceBoxRef.value?.updateConfig === 'function') {
@@ -84,7 +91,8 @@ export function useDice3D() {
       lightIntensity: opts.lightIntensity,
       enableShadows: opts.enableShadows,
       delay: opts.delay,
-      offscreen: opts.offscreen,
+      // 始终关闭 offscreen，维持与 initDiceBox 一致，防止部分浏览器报错
+      offscreen: false,
       spinForceSpread: opts.spinForceSpread,
       throwForceSpread: opts.throwForceSpread,
     })
