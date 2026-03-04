@@ -283,6 +283,14 @@
         {{ avatarMessage }}
       </div>
       <div class="bg-base-200 rounded-2xl p-2.5 flex items-center gap-3 shadow-sm border border-base-300">
+        <input
+          ref="avatarInputRef"
+          type="file"
+          accept="image/*"
+          class="sr-only"
+          aria-hidden="true"
+          @change="onAvatarFileChange"
+        />
         <div class="w-10 h-10 rounded-full bg-base-100 flex items-center justify-center shrink-0 overflow-hidden border border-base-300 shadow-sm relative group cursor-pointer" @click="triggerAvatarInput">
           <img v-if="authUser?.avatar" :src="authUser.avatar" alt="" class="w-full h-full object-cover" />
           <Icon v-else icon="mdi:account" class="text-xl text-base-content/40" />

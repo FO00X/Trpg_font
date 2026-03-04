@@ -62,7 +62,7 @@
               m.speakerRole === 'kp'
                 ? 'rounded-2xl bg-base-200 text-base-content/80 border-l-4 border-primary rounded-tl-sm'
                 : m.isSelf
-                  ? 'rounded-3xl rounded-br-sm bg-primary text-primary-content shadow-primary/20'
+                  ? 'rounded-3xl rounded-br-sm bg-primary/10 text-base-content shadow-primary/20'
                   : 'rounded-3xl rounded-bl-sm bg-base-100 border border-base-200',
             ]"
           >
