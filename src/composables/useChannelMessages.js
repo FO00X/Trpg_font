@@ -98,7 +98,33 @@ export function useChannelMessages(channelIdRef, options = {}) {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `channel_id=eq.${channelId}`,
+        },
+        (payload) => {
+          const old = payload.old
+          if (old?.id) {
+            messages.value = messages.value.filter((m) => m.id !== old.id)
+          }
+        }
+      )
       .subscribe()
+  }
+
+  /**
+   * 撤回消息：从数据库删除并在本地列表中移除（仅允许撤回自己发的消息，由 RLS 校验）
+   */
+  async function deleteMessage(messageId) {
+    if (!messageId) return { ok: false, message: '无效消息' }
+    const { error } = await supabase.from('messages').delete().eq('id', messageId)
+    if (error) return { ok: false, message: error.message }
+    messages.value = messages.value.filter((m) => m.id !== messageId)
+    return { ok: true }
   }
 
   function cleanupRealtime() {
@@ -135,6 +161,7 @@ export function useChannelMessages(channelIdRef, options = {}) {
     loading,
     error,
     reload,
+    deleteMessage,
   }
 }
 

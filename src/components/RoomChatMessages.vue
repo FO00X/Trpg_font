@@ -3,8 +3,8 @@
     ref="listEl"
     class="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-2"
     @scroll.passive="onScroll"
-    @touchstart="onTouchStart"
-    @touchmove="onTouchMove"
+    @touchstart.passive="onTouchStart"
+    @touchmove.passive="onTouchMove"
     @touchend="onTouchEnd"
   >
     <template v-for="m in messages" :key="m.id">
@@ -29,7 +29,7 @@
       >
         <button
           type="button"
-          class="w-8 h-8 rounded-full bg-base-100-active flex items-center justify-center shrink-0 overflow-hidden active:scale-95 transition-transform"
+          class="w-8 h-8 rounded-full bg-base-100 flex items-center justify-center shrink-0 overflow-hidden active:scale-95 transition-transform"
           :title="canOpenCharacterCard(m) ? '查看角色卡' : ''"
           :aria-label="canOpenCharacterCard(m) ? '查看角色卡' : '头像'"
           @click="onAvatarClick(m)"
@@ -56,6 +56,17 @@
             <span class="text-[10px] text-base-content/40">{{ formatTime(m.time) }}</span>
           </div>
           <!-- KP：环境描写/叙事风格；PL：角色对话（他人消息加「」） -->
+         <div class="flex items-end">
+          <button
+              v-if="m.isSelf"
+              type="button"
+              class="ml-1 p-1 rounded text-base-content/40 hover:text-error hover:bg-error/10 text-[10px] transition-colors"
+              title="撤回消息"
+              aria-label="撤回消息"
+              @click="onRecall(m)"
+            >
+              <Icon icon="mdi:undo" class="text-sm" />
+            </button>
           <div
             :class="[
               'px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap shadow-sm leading-relaxed',
@@ -67,11 +78,10 @@
             ]"
           >
             <template v-for="(p, idx) in getRenderableParts(m)" :key="idx">
-              <!-- 场外：仅内容斜体显示，括号样式保持普通文本 -->
               <span v-if="p.type === 'ooc'" class="italic">({{ p.text }})</span>
-              <!-- 其余文本（包括含引号的对白）按原样展示 -->
               <span v-else>{{ p.text }}</span>
             </template>
+          </div>
           </div>
         </div>
       </div>
@@ -80,7 +90,6 @@
     <div v-if="!messages.length && !loading" class="text-center text-xs text-base-content py-6">
       暂无消息，开始在房间里说点什么吧～
     </div>
-    <LoadingSpinner v-if="loading" :block="false" size="sm" message="加载中…" className="justify-center py-4" />
 
     <!-- 底部上拉刷新 -->
     <div
@@ -154,7 +163,7 @@ const PULL_THRESHOLD = 46
 const MAX_PULL = 96
 const refreshTriggered = ref(false)
 
-const emit = defineEmits(['refresh', 'avatar-click'])
+const emit = defineEmits(['refresh', 'avatar-click', 'recall'])
 
 const progress = computed(() => Math.max(0, Math.min(1, pullDistance.value / PULL_THRESHOLD)))
 const isReady = computed(() => pullDistance.value >= PULL_THRESHOLD)
@@ -189,10 +198,9 @@ watch(
 )
 
 function getAvatar(msg) {
-  // 自己的发言：若当前房间已选择角色卡且有头像，则优先用角色头像
-  if (msg.isSelf && props.selfCharacterAvatar) {
-    return props.selfCharacterAvatar
-  }
+  // 有 speaker_portrait 时（KP 以 NPC 身份发言），直接使用记录中的头像
+  if (msg.speakerPortrait) return msg.speakerPortrait
+  // 其余情况：使用消息记录里的用户头像，不随右上角选择变化
   return msg.userAvatar || null
 }
 
@@ -207,8 +215,13 @@ function onAvatarClick(msg) {
     userId: msg.userId,
     isSelf: !!msg.isSelf,
     speakerRole: msg.speakerRole || null,
-    speakerNpcId: msg.speakerNpcId || null,
+    speakerId: msg.speakerId || null,
   })
+}
+
+function onRecall(msg) {
+  if (!msg?.id || !msg.isSelf) return
+  emit('recall', msg.id)
 }
 
 function onScroll() {
@@ -305,7 +318,8 @@ function getSpeakerName(msg) {
   if ([MESSAGE_TYPES.SYSTEM, MESSAGE_TYPES.HIDDEN_ROLL, MESSAGE_TYPES.HIDDEN_SKILL, MESSAGE_TYPES.CHECK_REQUEST].includes(msg.type))
     return '骰娘'
   if (msg.speakerRole === 'kp') return 'KP'
-  if (msg.speakerRole === 'npc' && msg.speakerNpcName) return msg.speakerNpcName
+  // 其余情况优先展示 speaker_name（角色名），没有则退回 user_name（账号名）
+  if (msg.speakerName) return msg.speakerName
   return msg.userName || '未知'
 }
 

@@ -27,9 +27,16 @@ export function normalizeMessageRow(row, currentUserId) {
     content: row.content,
     time: typeof createdAt === 'number' ? createdAt : new Date(createdAt).getTime(),
     type: row.type || MESSAGE_TYPES.TEXT,
+    // 新字段优先，兼容旧字段（speaker_npc_*）
     speakerRole: row.speaker_role ?? row.speakerRole ?? null,
-    speakerNpcId: row.speaker_npc_id ?? row.speakerNpcId ?? null,
-    speakerNpcName: row.speaker_npc_name ?? row.speakerNpcName ?? null,
+    speakerId: row.speaker_id ?? row.speakerId ?? row.speaker_npc_id ?? row.speakerNpcId ?? null,
+    speakerName: row.speaker_name ?? row.speakerName ?? row.speaker_npc_name ?? row.speakerNpcName ?? null,
+    speakerPortrait:
+      row.speaker_portrait ??
+      row.speakerPortrait ??
+      row.speaker_npc_portrait ??
+      row.speakerNpcPortrait ??
+      null,
     isSelf: currentUserId ? currentUserId === userId : false,
   }
 }
@@ -44,8 +51,8 @@ export async function sendUserMessage({
   content,
   type = MESSAGE_TYPES.TEXT,
   speakerRole = null,
-  speakerNpcId = null,
-  speakerNpcName = null,
+  speakerId = null,
+  speakerName = null,
 }) {
   const payload = {
     channel_id: channelId,
@@ -54,14 +61,14 @@ export async function sendUserMessage({
     content,
     type,
     speaker_role: speakerRole,
-    speaker_npc_id: speakerNpcId,
-    speaker_npc_name: speakerNpcName,
+    speaker_id: speakerId,
+    speaker_name: speakerName,
   }
 
   const { data, error } = await supabase
     .from('messages')
     .insert(payload)
-    .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
+    .select('id, user_id, user_name, content, type, speaker_role, speaker_id, speaker_name, created_at')
     .single()
 
   if (error) {
@@ -106,7 +113,7 @@ export async function sendSystemMessageRaw({
 export async function fetchChannelMessagesRaw(channelId, { limit = 200 } = {}) {
   const { data, error } = await supabase
     .from('messages')
-    .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
+    .select('id, user_id, user_name, content, type, speaker_role, speaker_id, speaker_name, speaker_portrait, created_at')
     .eq('channel_id', channelId)
     .order('created_at', { ascending: true })
     .limit(limit)

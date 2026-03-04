@@ -302,6 +302,21 @@ export function useGameRoomsStore() {
     }
   }
 
+  /** 按用户查询其在某房间内已通过审核的角色卡 ID（点头像看角色卡时按需用） */
+  async function fetchAcceptedCharacterIdForUser(roomId, userId) {
+    if (!roomId || !userId) return null
+    const { data, error } = await supabase
+      .from('room_characters')
+      .select('character_id')
+      .eq('room_id', roomId)
+      .eq('user_id', userId)
+      .eq('status', ROOM_CHARACTER_STATUS.ACCEPTED)
+      .limit(1)
+      .maybeSingle()
+    if (error || !data?.character_id) return null
+    return data.character_id
+  }
+
   // 房主更新某条角色卡审核状态（同意 / 拒绝）
   async function updateRoomCharacterStatus(id, status) {
     const auth = useAuthStore()
@@ -494,6 +509,7 @@ export function useGameRoomsStore() {
     updateApplicationStatus,
     fetchMyApprovedCharacters,
     fetchRoomCharacterApplications,
+    fetchAcceptedCharacterIdForUser,
     updateRoomCharacterStatus,
     fetchMyCharacterReviewStatuses,
     fetchMyJoinedRooms,

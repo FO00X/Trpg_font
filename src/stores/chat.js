@@ -218,7 +218,7 @@ export function useChatStore() {
       const limit = params.limit ?? 50
       let q = supabase
         .from('messages')
-        .select('id, channel_id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
+        .select('id, channel_id, user_id, user_name, content, type, speaker_role, speaker_id, speaker_name, created_at')
         .eq('channel_id', channelId)
         .order('created_at', { ascending: true })
         .limit(limit)
@@ -236,8 +236,8 @@ export function useChatStore() {
         time: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
         type: m.type || 'text',
         speakerRole: m.speaker_role,
-        speakerNpcId: m.speaker_npc_id,
-        speakerNpcName: m.speaker_npc_name,
+        speakerId: m.speaker_id || null,
+        speakerName: m.speaker_name || null,
       }))
       return { ok: true, messages: messagesByChannel.value[channelId] }
     } catch {
@@ -287,8 +287,8 @@ export function useChatStore() {
             time: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
             type: row.type || 'text',
             speakerRole: row.speaker_role,
-            speakerNpcId: row.speaker_npc_id,
-            speakerNpcName: row.speaker_npc_name,
+            speakerId: row.speaker_id || null,
+            speakerName: row.speaker_name || null,
           })
         }
       )
@@ -317,8 +317,10 @@ export function useChatStore() {
         const npcs = mod ? moduleNPCs.value[mod.id] || [] : []
         const npc = npcs.find((n) => n.id === role)
         payload.speaker_role = 'npc'
-        payload.speaker_npc_id = npc?.id
-        payload.speaker_npc_name = npc?.name || 'NPC'
+        // 在私聊/子频道中，speaker_id 用于存储 NPC 的自定义 ID（例如 'npc-xxx'），
+        // speaker_name 存储 NPC 名称，前端展示时只关心这两个字段。
+        payload.speaker_id = npc?.id || role
+        payload.speaker_name = npc?.name || 'NPC'
       }
     }
     const { data, error } = await supabase.from('messages').insert(payload).select('id, created_at').single()
@@ -331,8 +333,8 @@ export function useChatStore() {
       time: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
       type: 'text',
       speakerRole: payload.speaker_role,
-      speakerNpcId: payload.speaker_npc_id,
-      speakerNpcName: payload.speaker_npc_name,
+      speakerId: payload.speaker_id || null,
+      speakerName: payload.speaker_name || null,
     }
     if (!messagesByChannel.value[channelId]) messagesByChannel.value[channelId] = []
     messagesByChannel.value[channelId].push(msg)

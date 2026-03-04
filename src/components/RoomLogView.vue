@@ -133,7 +133,7 @@ async function fetchLogs() {
   try {
     const { data, error: err } = await supabase
       .from('messages')
-      .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
+      .select('id, user_id, user_name, content, type, speaker_role, speaker_id, speaker_name, created_at')
       .eq('channel_id', channelId.value)
       .order('created_at', { ascending: true })
     if (err) throw err
@@ -145,8 +145,8 @@ async function fetchLogs() {
       time: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
       type: m.type || 'text',
       speakerRole: m.speaker_role,
-      speakerNpcId: m.speaker_npc_id,
-      speakerNpcName: m.speaker_npc_name,
+      speakerId: m.speaker_id || null,
+      speakerName: m.speaker_name || null,
     }))
   } catch (e) {
     error.value = e.message || '加载失败'

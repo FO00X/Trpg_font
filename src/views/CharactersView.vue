@@ -17,7 +17,7 @@
     <div class="flex-1 overflow-y-auto scroll-thin px-4 py-2">
       <div class="max-w-2xl mx-auto space-y-3 pb-4">
         <div
-          v-for="c in characters"
+          v-for="c in myCharacters"
           :key="c.id"
           class="bg-base-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow cursor-pointer active:scale-95 touch-target p-4 flex items-center gap-4"
           @click="onCardClick(c)"
@@ -75,7 +75,7 @@
             </ul>
           </div>
         </div>
-        <div v-if="!characters.length" class="flex flex-col items-center justify-center py-20 text-base-content/40">
+        <div v-if="!myCharacters.length" class="flex flex-col items-center justify-center py-20 text-base-content/40">
           <Icon icon="mdi:card-account-details-outline" class="text-6xl mb-4 opacity-50" />
           <p>暂无角色卡</p>
           <p class="text-sm mt-1">点击右上角「+」开始创建</p>
@@ -128,11 +128,12 @@
 
 </template>
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useCharactersStore } from '../stores/characters'
 import { useGameRoomsStore } from '../stores/gameRooms'
+import { useAuthStore } from '../stores/auth'
 import PageHeader from '../components/PageHeader.vue'
 import { useToast } from '../composables/useToast'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
@@ -141,6 +142,7 @@ import { ROOM_CHARACTER_STATUS, ROOM_CHARACTER_STATUS_LABELS } from '../constant
 import { useCharacterCardModal } from '../composables/useCharacterCardModal'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const { characters, remove, fetchList, getById, update, uploadCharacterPortrait } = useCharactersStore()
 const gameRoomsStore = useGameRoomsStore()
 const { openCharacterCard } = useCharacterCardModal()
@@ -160,6 +162,14 @@ const reviewSuccess = ref('')
 const reviewSelectedRoomId = ref(null)
 
 const reviewStatusByCharacterId = ref({})
+
+// 只显示当前登录用户自己创建的角色卡
+const myUserId = computed(() => authStore.user?.value?.id || null)
+const myCharacters = computed(() => {
+  const uid = myUserId.value
+  if (!uid) return characters.value
+  return characters.value.filter((c) => !c.user_id || c.user_id === uid)
+})
 
 function formatUpdated(isoString) {
   return formatShortDateTime(isoString)

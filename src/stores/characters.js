@@ -275,14 +275,18 @@ import { useAuthStore } from './auth'
 function rowToCharacter(r) {
   if (!r) return null
   const data = r.data == null ? {} : (typeof r.data === 'string' ? JSON.parse(r.data) : r.data)
-  return { ...data, id: r.id, updated_at: r.updated_at }
+  // 保留原有 sheet 字段，同时附带基础元信息（包括创建者 user_id）
+  return { ...data, id: r.id, updated_at: r.updated_at, user_id: r.user_id ?? null }
 }
 
 export function useCharactersStore() {
   const characters = ref([])
 
   async function fetchList() {
-    const { data, error } = await supabase.from('characters').select('id, data, updated_at').order('updated_at', { ascending: false })
+    const { data, error } = await supabase
+      .from('characters')
+      .select('id, user_id, data, updated_at')
+      .order('updated_at', { ascending: false })
     if (error) return { ok: false, message: error.message }
     characters.value = (data || []).map(rowToCharacter)
     return { ok: true, list: characters.value }
@@ -290,7 +294,11 @@ export function useCharactersStore() {
 
   /** 拉取单条并写入列表，供直接打开编辑页时使用 */
   async function fetchCharacter(characterId) {
-    const { data, error } = await supabase.from('characters').select('id, data, updated_at').eq('id', characterId).single()
+    const { data, error } = await supabase
+      .from('characters')
+      .select('id, user_id, data, updated_at')
+      .eq('id', characterId)
+      .maybeSingle()
     if (error || !data) return null
     const character = rowToCharacter(data)
     const i = characters.value.findIndex((c) => c.id === characterId)
@@ -311,7 +319,7 @@ export function useCharactersStore() {
     }
     const { data, error } = await supabase
       .from('characters')
-      .select('id, data, updated_at')
+      .select('id, user_id, data, updated_at')
       .in('id', uniqueIds)
     if (error) {
       return { ok: false, list: [], message: error.message }
@@ -361,7 +369,11 @@ export function useCharactersStore() {
     const payload = { ...getDefaultSheet(), ...draft }
     delete payload.id
     delete payload.updated_at
-    const { data, error } = await supabase.from('characters').insert({ user_id: uid, data: payload }).select('id, data, updated_at').single()
+    const { data, error } = await supabase
+      .from('characters')
+      .insert({ user_id: uid, data: payload })
+      .select('id, user_id, data, updated_at')
+      .single()
     if (error) return null
     const character = rowToCharacter(data)
     characters.value.push(character)
@@ -369,7 +381,12 @@ export function useCharactersStore() {
   }
 
   async function update(id, draft) {
-    const { data, error } = await supabase.from('characters').update({ data: draft, updated_at: new Date().toISOString() }).eq('id', id).select('id, data, updated_at').single()
+    const { data, error } = await supabase
+      .from('characters')
+      .update({ data: draft, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, user_id, data, updated_at')
+      .single()
     if (error) return false
     const character = rowToCharacter(data)
     const i = characters.value.findIndex((c) => c.id === id)

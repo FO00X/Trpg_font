@@ -421,6 +421,7 @@ import RoomCharacterReviewDialog from '../components/RoomCharacterReviewDialog.v
 import { useToast } from '../composables/useToast'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { APP_TITLE } from '../constants/app'
+import { ROOM_CHARACTER_STATUS } from '../constants/enums'
 import { useGameRoomsStore } from '../stores/gameRooms'
 import { useProfileCache } from '../stores/profileCache'
 import { useCharactersStore } from '../stores/characters'
@@ -439,11 +440,12 @@ const {
   getRoomCharacter,
   deleteRoom,
   fetchMyApprovedCharacters,
+  fetchRoomCharacterApplications,
   updateRoom,
   availableTags,
   fetchTags,
 } = useGameRoomsStore()
-const { characters, fetchList, getById } = useCharactersStore()
+const { characters, fetchList, getById, normalizeCharacter, fetchCharactersByIds } = useCharactersStore()
 const { openCharacterCard: openCharacterCardModal } = useCharacterCardModal()
 const profileCache = useProfileCache()
 
@@ -454,6 +456,8 @@ const infoDescExpanded = ref(false)
 const infoBackstoryExpanded = ref(false)
 const membersOpen = ref(false)
 const ownerName = ref('')
+/** 房间内已通过审核的 PL 列表（用于「房间用户与角色」弹窗） */
+const roomAcceptedMembers = ref([])
 
 const toast = useToast()
 const { confirm } = useConfirmDialog()
@@ -544,10 +548,45 @@ function getStatusColor(status) {
   return map[status] || ''
 }
 
+/** 加载房间内已通过审核的成员列表（KP + 所有 PL），供「房间用户与角色」弹窗展示 */
+async function loadRoomDisplayMembers() {
+  if (!roomId.value) {
+    roomAcceptedMembers.value = []
+    return
+  }
+  try {
+    const res = await fetchRoomCharacterApplications(roomId.value)
+    if (!res?.ok) {
+      roomAcceptedMembers.value = []
+      return
+    }
+    const accepted = (res.list || []).filter((x) => x.status === ROOM_CHARACTER_STATUS.ACCEPTED)
+    const ids = [...new Set(accepted.map((x) => x.characterId).filter(Boolean))]
+    if (ids.length && fetchCharactersByIds) {
+      await fetchCharactersByIds(ids)
+    }
+    const userIds = [...new Set(accepted.map((x) => x.userId).filter(Boolean))]
+    const profileMap = userIds.length ? await profileCache.getProfiles(userIds) : new Map()
+    roomAcceptedMembers.value = accepted.map((item) => {
+      const raw = item.characterId ? getById(item.characterId) : null
+      const sheet = raw ? normalizeCharacter(raw) : null
+      const profile = item.userId ? profileMap.get(item.userId) : null
+      const userName = profile?.username ?? (item.userId === auth.user?.value?.id ? (auth.user?.value?.username || auth.user?.value?.email?.split?.('@')[0] || '我') : '未知')
+      return {
+        userId: item.userId,
+        characterId: item.characterId,
+        characterName: sheet?.name?.trim() || '未命名角色',
+        userName,
+      }
+    })
+  } catch {
+    roomAcceptedMembers.value = []
+  }
+}
+
 const displayMembers = computed(() => {
   const list = []
   const r = room.value
-  const me = auth.user?.value
 
   if (r) {
     list.push({
@@ -559,15 +598,13 @@ const displayMembers = computed(() => {
     })
   }
 
-  const c = currentCharacter.value
-  if (c && me) {
-    const userDisplay = me.username || me.email?.split?.('@')[0] || '我'
+  for (const m of roomAcceptedMembers.value) {
     list.push({
       kind: 'pc',
-      label: c.name || '未命名',
-      display: c.name || '未命名',
-      user: userDisplay,
-      characterId: c.id,
+      label: m.characterName,
+      display: m.characterName,
+      user: m.userName,
+      characterId: m.characterId,
     })
   }
 
@@ -653,18 +690,36 @@ async function load() {
 onMounted(async () => {
   fetchList()
   await load()
-  // 非房主加载自己在本房间已被审核通过的角色卡
+  // 非房主加载自己在本房间已被审核通过的角色卡，若仅有一张则默认绑定
   if (!isOwner.value && roomId.value) {
     approvedCharacterIds.value = await fetchMyApprovedCharacters(roomId.value)
+    if (approvedCharacterIds.value.length === 1 && !getRoomCharacter(roomId.value)) {
+      setRoomCharacter(roomId.value, approvedCharacterIds.value[0])
+    }
   }
+  await loadRoomDisplayMembers()
 })
 
 watch(roomId, async () => {
   await load()
   if (!isOwner.value && roomId.value) {
     approvedCharacterIds.value = await fetchMyApprovedCharacters(roomId.value)
+    if (approvedCharacterIds.value.length === 1 && !getRoomCharacter(roomId.value)) {
+      setRoomCharacter(roomId.value, approvedCharacterIds.value[0])
+    }
   } else {
     approvedCharacterIds.value = []
   }
+  await loadRoomDisplayMembers()
+})
+
+// 审核弹窗关闭后刷新成员列表，使新通过的 PL 立即显示
+watch(characterReviewOpen, (open) => {
+  if (!open) loadRoomDisplayMembers()
+})
+
+// 打开「房间用户与角色」弹窗时刷新一次，保证看到最新名单
+watch(membersOpen, (open) => {
+  if (open) loadRoomDisplayMembers()
 })
 </script>

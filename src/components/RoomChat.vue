@@ -8,6 +8,7 @@
       :self-character-avatar="selfCharacterAvatar"
       @refresh="reloadMessages"
       @avatar-click="handleAvatarClick"
+      @recall="handleRecall"
     />
 
     <div class="border-t border-base-200/50 bg-base-100 px-3 py-2 flex flex-col gap-2 pb-safe">
@@ -194,6 +195,7 @@ import { useAchievementsStore } from '../stores/achievements'
 import { IMMEDIATE_INSANITY_TABLE } from '../data/madnessTable'
 import { useChannelMessages } from '../composables/useChannelMessages'
 import { useToast } from '../composables/useToast'
+import { useConfirmDialog } from '../composables/useConfirmDialog'
 import { useDice3D } from '../composables/useDice3D'
 import { useCharacterCardModal } from '../composables/useCharacterCardModal'
 import { parseAndRollDice as utilsParseAndRollDice, randomD100 as utilsRandomD100, rollAmount as utilsRollAmount } from '../utils/dice'
@@ -268,34 +270,28 @@ async function loadRoomAcceptedMembers() {
   }
 }
 
-function handleAvatarClick(payload) {
-  const userId = payload?.userId
-  if (!userId) return
-
-  // NPC 发言：消息已携带 speakerNpcId，优先直接打开对应角色卡
-  if (payload?.speakerRole === 'npc' && payload?.speakerNpcId) {
-    // KP 查看 NPC 默认按 own=true（不隐藏 tab）；其他人查看按 own=false
-    openCharacterCard(payload.speakerNpcId, !!payload?.isSelf)
-    return
-  }
+async function handleAvatarClick(payload) {
+  const speakerId = payload?.speakerId
 
   // KP 文本（speakerRole === 'kp'）通常没有对应角色卡，直接忽略
   if (payload?.speakerRole === 'kp') return
 
-  let charId = null
-  if (payload?.isSelf) {
-    // 自己：优先使用房间当前选择的角色卡
-    charId = selectedRoomCharacterId.value || (roomUserCharacterMap.value[userId]?.[0] ?? null)
-  } else {
-    charId = roomUserCharacterMap.value[userId]?.[0] ?? null
-  }
-
-  if (!charId) {
-    showToast('该玩家在本房间未绑定角色卡。')
+  // 只使用消息中自带的 speakerId（即角色卡 id）
+  if (!speakerId) {
+    showToast('该消息未绑定角色卡。')
     return
   }
 
-  openCharacterCard(charId, !!payload?.isSelf)
+  // 如有需要，可预拉取角色卡数据，避免打开时再等待
+  if (charactersStore.fetchCharactersByIds) {
+    try {
+      await charactersStore.fetchCharactersByIds([speakerId])
+    } catch {
+      // ignore
+    }
+  }
+
+  openCharacterCard(speakerId, !!payload?.isSelf)
 }
 
 // 房主侧：请求检定面板状态
@@ -322,6 +318,7 @@ const skillPickerSkills = ref([]) // { raw, displayName }[]
 const skillPickerLoading = ref(false)
 
 const toast = useToast()
+const { confirm } = useConfirmDialog()
 function showToast(message, duration = 3000) {
   toast.show(message, duration, 'warning')
 }
@@ -333,6 +330,7 @@ const {
   messages,
   loading: messagesLoading,
   reload: reloadMessages,
+  deleteMessage,
 } = useChannelMessages(channelId, {
   onNewMessage(msg) {
     if (msg.type === MESSAGE_TYPES.CHECK_REQUEST) {
@@ -355,6 +353,28 @@ watch(
     await loadRoomAcceptedMembers()
   }
 )
+
+// 预拉取消息中出现的 NPC 角色卡（用于展示 KP 以 NPC 身份发言时的头像）
+watch(
+  () => messages.value,
+  async (msgs) => {
+    const ids = [...new Set((msgs || []).map((m) => m.speakerId).filter(Boolean))]
+    if (ids.length && charactersStore.fetchCharactersByIds) {
+      await charactersStore.fetchCharactersByIds(ids)
+    }
+  },
+  { immediate: true }
+)
+
+async function handleRecall(messageId) {
+  if (!messageId || !deleteMessage) return
+  const ok = await confirm('确定要撤回这条消息吗？')
+  if (!ok) return
+  const res = await deleteMessage(messageId)
+  if (!res?.ok) {
+    showToast(res?.message || '撤回失败')
+  }
+}
 
 // ==================== 工具函数 ====================
 
@@ -463,40 +483,56 @@ async function send() {
   sending.value = true
   try {
     let speakerRole = null
-    let speakerNpcId = null
-    let speakerNpcName = null
+    let speakerId = null
+    let speakerName = null
+    let speakerPortrait = null
 
+    let displayName = me.username || me.email?.split?.('@')[0] || '我'
     if (isOwner.value) {
       const { getRoomCharacter } = gameRoomsStore
       const charId = getRoomCharacter(props.roomId)
       if (!charId) {
+        // KP 以自身身份发言
         speakerRole = 'kp'
       } else {
+        // KP 以选中角色卡作为 NPC 发言
         const sheet = await getCharacterSheet(charId)
         if (sheet) {
           speakerRole = 'npc'
-          speakerNpcId = charId
-          speakerNpcName = sheet.name?.trim() || null
+          speakerId = charId
+          speakerName = sheet.name?.trim() || null
+          speakerPortrait = sheet.portrait || null
         } else {
           speakerRole = 'kp'
         }
+      }
+    } else {
+      // PL：若已选择角色卡，用角色信息写入 speaker_* 字段（账号名仍放在 user_name）
+      const charId = gameRoomsStore.getRoomCharacter(props.roomId)
+      const sheet = await getCurrentRoomCharacter()
+      if (charId && sheet) {
+        const name = (sheet.name || '').trim()
+        speakerRole = 'pl'
+        speakerId = charId
+        speakerName = name || null
       }
     }
 
     const payload = {
       channel_id: channelId.value,
       user_id: me.id,
-      user_name: me.username || me.email?.split?.('@')[0] || '我',
+      user_name: displayName,
       content: text,
       type: MESSAGE_TYPES.TEXT,
       speaker_role: speakerRole,
-      speaker_npc_id: speakerNpcId,
-      speaker_npc_name: speakerNpcName,
+      speaker_id: speakerId,
+      speaker_name: speakerName,
+      speaker_portrait: speakerPortrait,
     }
     const { error } = await supabase
       .from('messages')
       .insert(payload)
-      .select('id, user_id, user_name, content, type, speaker_role, speaker_npc_id, speaker_npc_name, created_at')
+      .select('id, user_id, user_name, content, type, speaker_role, speaker_id, speaker_name, speaker_portrait, created_at')
       .single()
     if (!error) {
       input.value = ''

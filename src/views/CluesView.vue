@@ -144,6 +144,13 @@ const error = ref('')
 const selectedClueId = ref(null)
 const isMobile = ref(false)
 
+// 媒体查询对象与监听函数，需在 setup 同一上下文中注册生命周期钩子
+let mql = null
+function handleResize() {
+  if (!mql) return
+  isMobile.value = mql.matches
+}
+
 const clueList = computed(() => cluesStore.getList(roomId.value))
 const selectedClue = computed(() => {
   const id = selectedClueId.value
@@ -157,14 +164,18 @@ onMounted(async () => {
   if (!res.ok) error.value = res.message || '加载失败'
   const list = cluesStore.getList(roomId.value)
   if (list.length && !selectedClueId.value) selectedClueId.value = list[0].id
-  isMobile.value = typeof window !== 'undefined' && window.innerWidth < 768
-  const mql = typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)') : null
+
+  if (typeof window !== 'undefined') {
+    mql = window.matchMedia('(max-width: 767px)')
+    handleResize()
+    mql.addEventListener('change', handleResize)
+  }
+})
+
+onUnmounted(() => {
   if (mql) {
-    const onResize = () => {
-      isMobile.value = mql.matches
-    }
-    mql.addEventListener('change', onResize)
-    onUnmounted(() => mql.removeEventListener('change', onResize))
+    mql.removeEventListener('change', handleResize)
+    mql = null
   }
 })
 
