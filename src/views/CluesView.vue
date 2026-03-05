@@ -41,8 +41,14 @@
               ]"
               @click="selectClue(c)"
             >
-              <div class="w-full flex items-center justify-between mb-1.5">
-                <span class="font-bold truncate pr-2 text-sm">{{ c.title || '无标题' }}</span>
+              <div class="w-full flex items-center justify-between gap-2 mb-1.5">
+                <span class="font-bold truncate text-sm min-w-0">{{ c.title || '无标题' }}</span>
+                <span
+                  v-if="roomOwnerId && c.userId === roomOwnerId"
+                  class="shrink-0 px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-400"
+                >
+                  KP
+                </span>
               </div>
               <div class="flex items-center gap-3 w-full text-[11px]" :class="selectedClueId === c.id ? 'text-primary/70' : 'text-base-content/40'">
                 <span>{{ formatDateTime(c.created_at) }}</span>
@@ -67,7 +73,15 @@
         <template v-if="selectedClue">
           <div class="shrink-0 px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="flex-1 min-w-0">
-              <h2 class="text-2xl font-bold text-base-content mb-1.5 truncate">{{ selectedClue.title || '无标题' }}</h2>
+              <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                <h2 class="text-2xl font-bold text-base-content truncate">{{ selectedClue.title || '无标题' }}</h2>
+                <span
+                  v-if="roomOwnerId && selectedClue.userId === roomOwnerId"
+                  class="shrink-0 px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400"
+                >
+                  KP
+                </span>
+              </div>
               <div class="flex items-center gap-4 text-xs font-medium text-base-content/40">
                 <span class="flex items-center gap-1.5"><Icon icon="mdi:clock-outline" class="text-sm"/> {{ formatDateTime(selectedClue.created_at) }}</span>
               </div>
@@ -132,17 +146,21 @@ import { Icon } from '@iconify/vue'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import { useCluesStore } from '../stores/clues'
+import { useGameRoomsStore } from '../stores/gameRooms'
 import { formatDateTime } from '../utils/date'
 
 const route = useRoute()
 const router = useRouter()
 const roomId = computed(() => route.params.roomId)
 const cluesStore = useCluesStore()
+const gameRoomsStore = useGameRoomsStore()
 
 const loading = ref(true)
 const error = ref('')
 const selectedClueId = ref(null)
 const isMobile = ref(false)
+/** 当前房间房主 ID，用于标记 KP 创建的线索 */
+const roomOwnerId = ref(null)
 
 // 媒体查询对象与监听函数，需在 setup 同一上下文中注册生命周期钩子
 let mql = null
@@ -159,10 +177,14 @@ const selectedClue = computed(() => {
 })
 
 onMounted(async () => {
-  const res = await cluesStore.fetchList(roomId.value)
+  const rid = roomId.value
+  const room = gameRoomsStore.getRoomById?.(rid) ?? (await gameRoomsStore.fetchRoom?.(rid)) ?? null
+  roomOwnerId.value = room?.ownerId ?? null
+
+  const res = await cluesStore.fetchList(rid)
   loading.value = false
   if (!res.ok) error.value = res.message || '加载失败'
-  const list = cluesStore.getList(roomId.value)
+  const list = cluesStore.getList(rid)
   if (list.length && !selectedClueId.value) selectedClueId.value = list[0].id
 
   if (typeof window !== 'undefined') {

@@ -214,9 +214,24 @@ function getRenderableParts(msg) {
   return toRenderableRpTokens(base, { defaultDialogue: isSpeakerDialogue })
 }
 
+// 判断一条消息是否“纯场外”（只有 OOC，没有正式内容）
+function isPureOoc(msg) {
+  const parts = getRenderableParts(msg) || []
+  if (!parts.length) return false
+  return parts.every((p) => {
+    const text = String(p.text || '').trim()
+    if (!text) return true
+    return p.type === 'ooc'
+  })
+}
+
 function getSpeakerName(msg) {
+  // 与聊天区域保持一致的命名规则
+  if ([MESSAGE_TYPES.SYSTEM, MESSAGE_TYPES.HIDDEN_ROLL, MESSAGE_TYPES.HIDDEN_SKILL, MESSAGE_TYPES.CHECK_REQUEST].includes(msg.type))
+    return '骰娘'
   if (msg.speakerRole === 'kp') return 'KP'
-  if (msg.speakerRole === 'npc' && msg.speakerNpcName) return msg.speakerNpcName
+  // 其余情况优先展示角色名（speakerName），没有则退回账号名（userName）
+  if (msg.speakerName) return msg.speakerName
   return msg.userName || '未知'
 }
 
@@ -240,7 +255,7 @@ watch(() => props.roomId, () => {
     <!-- 顶部控制栏 -->
     <div class="shrink-0 px-4 py-2 flex justify-between items-center">
       <span class="text-sm font-medium text-base-content/70">日志记录</span>
-      <div class="join bg-base-200 p-1 rounded-xl">
+      <!-- <div class="join bg-base-200 p-1 rounded-xl">
         <button
           type="button"
           class="join-item btn btn-sm border-none"
@@ -257,7 +272,7 @@ watch(() => props.roomId, () => {
         >
           <Icon icon="mdi:book-open-page-variant-outline" class="text-lg mr-1" />小说模式
         </button>
-      </div>
+      </div> -->
     </div>
 
     <div class="flex-1 overflow-y-auto scroll-thin p-4">
@@ -306,6 +321,8 @@ watch(() => props.roomId, () => {
           <!-- 对话模式 -->
           <div v-else class="space-y-3">
             <template v-for="msg in group.messages" :key="msg.id">
+              <!-- 只在消息不是纯场外内容时才展示（纯场外整条在日志中隐藏） -->
+              <template v-if="!isPureOoc(msg)">
               <!-- 系统通知：掷骰、暗骰、技能检定、理智检定等，不作为说话人 -->
               <div
                 v-if="isSystemNotification(msg)"
@@ -318,7 +335,7 @@ watch(() => props.roomId, () => {
                 </div>
               </div>
 
-              <!-- 角色说话（PL）：对话气泡 -->
+              <!-- 角色说话（PL / NPC）：对话气泡 -->
               <div
                 v-else-if="msg.speakerRole !== 'kp'"
                 class="flex gap-3 group"
@@ -329,8 +346,15 @@ watch(() => props.roomId, () => {
                 </div>
                 <div class="flex-1 min-w-0 pb-2">
                   <div class="flex items-baseline gap-2 mb-1">
-                    <span class="px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">PL</span>
-                    <span class="font-medium text-base-content">{{ getSpeakerName(msg) }}</span>
+                    <span
+                      class="px-2 py-0.5 rounded text-xs font-medium"
+                      :class="getSpeakerBadge(msg).class"
+                    >
+                      {{ getSpeakerBadge(msg).text }}
+                    </span>
+                    <span class="font-medium text-base-content">
+                      {{ getSpeakerName(msg) }}
+                    </span>
                     <span class="text-xs text-base-content">{{ formatTime(msg.time) }}</span>
                     <button
                       v-if="isOwner && viewMode === 'dialogue'"
@@ -343,9 +367,9 @@ watch(() => props.roomId, () => {
                   </div>
                   <div class="pl-1 text-sm wrap-break-word whitespace-pre-wrap text-base-content">
                     <template v-for="(p, idx) in getRenderableParts(msg)" :key="idx">
-                      <span v-if="p.type === 'ooc'" class="inline-block px-1.5 py-0.5 mx-0.5 rounded-md bg-base-content/10 text-base-content/75 text-[0.9em] italic">（{{ p.text }}）</span>
-                      <span v-else-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40 not-italic">「{{ p.text }}」</span>
-                      <span v-else class="not-italic">{{ p.text }}</span>
+                      <!-- 日志中隐藏场外话（ooc），仅保留正式对话与描写 -->
+                      <span v-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40 not-italic">「{{ p.text }}」</span>
+                      <span v-else-if="p.type !== 'ooc'" class="not-italic">{{ p.text }}</span>
                     </template>
                   </div>
                 </div>
@@ -362,7 +386,12 @@ watch(() => props.roomId, () => {
                 </div>
                 <div class="flex-1 min-w-0 pb-2">
                   <div class="flex items-baseline gap-2 mb-1">
-                    <span class="px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400">KP</span>
+                    <span
+                      class="px-2 py-0.5 rounded text-xs font-medium"
+                      :class="getSpeakerBadge(msg).class"
+                    >
+                      {{ getSpeakerBadge(msg).text }}
+                    </span>
                     <span class="text-xs text-base-content italic">{{ formatTime(msg.time) }}</span>
                     <button
                       v-if="isOwner && viewMode === 'dialogue'"
@@ -375,13 +404,14 @@ watch(() => props.roomId, () => {
                   </div>
                   <div class="pl-3 text-sm wrap-break-word whitespace-pre-wrap text-[#a6adc8] italic border-l-2 border-blue-500/30">
                     <template v-for="(p, idx) in getRenderableParts(msg)" :key="idx">
-                      <span v-if="p.type === 'ooc'" class="inline-block px-1.5 py-0.5 mx-0.5 rounded-md bg-base-content/10 text-base-content/70 text-[0.9em] italic">（{{ p.text }}）</span>
-                      <span v-else-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40 not-italic text-base-content">「{{ p.text }}」</span>
-                      <span v-else>{{ p.text }}</span>
+                      <!-- 日志中隐藏场外话（ooc），仅保留正式对话与描写 -->
+                      <span v-if="p.type === 'dialogue'" class="inline-block pl-2 ml-1 border-l-2 border-primary/40 not-italic text-base-content">「{{ p.text }}」</span>
+                      <span v-else-if="p.type !== 'ooc'">{{ p.text }}</span>
                     </template>
                   </div>
                 </div>
               </div>
+              </template>
             </template>
           </div>
         </div>

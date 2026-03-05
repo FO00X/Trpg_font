@@ -11,6 +11,7 @@ const loading = ref(true)
 
 onMounted(async () => {
   await achievementsStore.ensureInitialized()
+  await achievementsStore.refreshUserAchievements()
   loading.value = false
 })
 

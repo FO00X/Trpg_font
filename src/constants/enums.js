@@ -10,6 +10,7 @@ export const MESSAGE_TYPES = {
   HIDDEN_ROLL: 'hidden_roll',
   HIDDEN_SKILL: 'hidden_skill',
   CHECK_REQUEST: 'check_request',
+  IMAGE: 'image',
 }
 
 /** 房间状态 */

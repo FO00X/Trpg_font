@@ -3,7 +3,7 @@
     <PageHeader
       :title="pageTitle"
       :icon="pageIcon"
-      show-back="true"
+      :show-back="true"
       @back="back"
     />
     <div
@@ -53,10 +53,10 @@
   <div v-if="!isNew">删除<button class="btn btn-lg btn-circle" :disabled="saving" @click="onRemove()">          
     <Icon icon="mdi:delete-outline" class="text-xl" />
   </button></div>
-  <div v-if="isEditing">取消<button class="btn btn-lg btn-circle" :disabled="saving" @click="cancelEdit()">
+  <div v-if="isEditing || isNew">取消<button class="btn btn-lg btn-circle" :disabled="saving" @click="cancelEdit()">
     <Icon icon="mdi:close" class="text-xl" />
   </button></div>
-  <div v-if="isEditing">保存<button class="btn btn-lg btn-circle" :disabled="saving" @click="onSave()">
+  <div v-if="isEditing || isNew">保存<button class="btn btn-lg btn-circle" :disabled="saving" @click="onSave()">
     <Icon icon="mdi:content-save-outline" class="text-xl" />
   </button></div>
   <div v-if="!isNew && !isEditing">编辑 <button class="btn btn-lg btn-circle" :disabled="saving" @click="startEdit()">

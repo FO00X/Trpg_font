@@ -17,6 +17,8 @@ export function useChannelMessages(channelIdRef, options = {}) {
   const messages = ref([])
   const loading = ref(false)
   const error = ref(null)
+  const hasMore = ref(true)
+  const loadingMore = ref(false)
 
   const auth = useAuthStore()
   const profileCache = useProfileCache()
@@ -32,22 +34,70 @@ export function useChannelMessages(channelIdRef, options = {}) {
     loading.value = true
     error.value = null
     try {
-      const { ok, rows, error: err } = await fetchChannelMessagesRaw(channelId, { limit: 200 })
+      // 首次加载：取最近一页消息
+      const { ok, rows, error: err } = await fetchChannelMessagesRaw(channelId, { limit: 100 })
       if (!ok) {
         error.value = err?.message || '加载消息失败'
         return
       }
-      const userIds = [...new Set((rows || []).map((r) => r.user_id).filter(Boolean))]
+      const orderedRows = [...(rows || [])].reverse() // 转为时间正序，便于 UI 渲染
+      const userIds = [...new Set(orderedRows.map((r) => r.user_id).filter(Boolean))]
       const profileMap = userIds.length > 0 ? await profileCache.getProfiles(userIds) : new Map()
-      const rowsWithAvatar = (rows || []).map((row) => ({
+      const rowsWithAvatar = orderedRows.map((row) => ({
         ...row,
         user_avatar: row.user_id ? profileMap.get(row.user_id)?.avatar ?? null : null,
       }))
       const me = auth.user?.value
       const currentUserId = me?.id
       messages.value = rowsWithAvatar.map((row) => normalizeMessageRow(row, currentUserId))
+      hasMore.value = (rows || []).length === 100
     } finally {
       loading.value = false
+    }
+  }
+
+  // 向上加载更多历史消息（在当前最早一条之前）
+  async function loadMore() {
+    const channelId = getChannelId()
+    if (!channelId) return
+    if (loadingMore.value || loading.value || !hasMore.value) return
+    const first = messages.value[0]
+    if (!first) return
+
+    loadingMore.value = true
+    error.value = null
+    try {
+      const beforeIso = new Date(first.time).toISOString()
+      const { ok, rows, error: err } = await fetchChannelMessagesRaw(channelId, {
+        limit: 100,
+        before: beforeIso,
+      })
+      if (!ok) {
+        error.value = err?.message || '加载更多消息失败'
+        return
+      }
+      if (!rows || rows.length === 0) {
+        hasMore.value = false
+        return
+      }
+
+      const orderedRows = [...rows].reverse() // 转为时间正序，便于 prepend
+      const userIds = [...new Set(orderedRows.map((r) => r.user_id).filter(Boolean))]
+      const profileMap = userIds.length > 0 ? await profileCache.getProfiles(userIds) : new Map()
+      const rowsWithAvatar = orderedRows.map((row) => ({
+        ...row,
+        user_avatar: row.user_id ? profileMap.get(row.user_id)?.avatar ?? null : null,
+      }))
+      const me = auth.user?.value
+      const currentUserId = me?.id
+      const mapped = rowsWithAvatar.map((row) => normalizeMessageRow(row, currentUserId))
+
+      messages.value = [...mapped, ...messages.value]
+      if (rows.length < 100) {
+        hasMore.value = false
+      }
+    } finally {
+      loadingMore.value = false
     }
   }
 
@@ -151,6 +201,7 @@ export function useChannelMessages(channelIdRef, options = {}) {
     () => getChannelId(),
     () => {
       messages.value = []
+      hasMore.value = true
       loadMessages()
       setupRealtime()
     }
@@ -159,8 +210,11 @@ export function useChannelMessages(channelIdRef, options = {}) {
   return {
     messages,
     loading,
+    loadingMore,
     error,
     reload,
+    hasMore,
+    loadMore,
     deleteMessage,
   }
 }

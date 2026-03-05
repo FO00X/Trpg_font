@@ -599,12 +599,12 @@ function closeNicknameDialog() {
   nicknameDialogOpen.value = false
 }
 
-function handleLogout() {
+async function handleLogout() {
   const auth = useAuthStore()
-  auth.logout()
+  await auth.logout()
   logout()
   emit('update:open', false)
-  router.replace({ path: '/', query: {} })
+  router.replace({ name: 'login', query: {} })
 }
 
 const isAdminUser = computed(() => authStore.user?.value?.role === 'admin')

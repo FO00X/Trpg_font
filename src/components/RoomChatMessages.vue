@@ -7,6 +7,46 @@
     @touchmove.passive="onTouchMove"
     @touchend="onTouchEnd"
   >
+    <!-- 顶部下拉加载历史（显示在聊天内容最顶端） -->
+    <div
+      class="sticky top-0 left-0 right-0 pointer-events-none -mx-4 z-10"
+      :style="{ height: topIndicatorHeight + 'px', opacity: topIndicatorOpacity }"
+      aria-hidden="true"
+    >
+      <div class="h-full flex items-start justify-center pt-2">
+        <div
+          class="px-3 py-2 rounded-2xl border border-base-300/60 bg-base-100/70 backdrop-blur shadow-sm"
+          :class="topIsReady || isRefreshingHistory ? 'text-primary' : 'text-base-content/60'"
+        >
+          <div class="flex items-center gap-2 text-[11px] font-medium">
+            <Icon
+              v-if="isRefreshingHistory"
+              icon="mdi:loading"
+              class="text-sm animate-spin"
+            />
+            <Icon
+              v-else
+              icon="mdi:arrow-down"
+              class="text-sm transition-transform duration-150"
+              :style="{ transform: `rotate(${topIsReady ? 180 : Math.floor(topProgress * 180)}deg)` }"
+            />
+            <span>
+              {{
+                !props.hasMore
+                  ? '没有更多消息'
+                  : isRefreshingHistory
+                    ? '加载历史…'
+                    : (topIsReady ? '松手加载' : '下拉加载历史')
+              }}
+            </span>
+            <span v-if="!isRefreshingHistory && props.hasMore" class="opacity-60 tabular-nums">
+              {{ Math.min(100, Math.floor(topProgress * 100)) }}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <template v-for="m in messages" :key="m.id">
       <!-- 系统通知：掷骰、暗骰、技能检定等，不作为说话人展示 -->
       <div
@@ -67,7 +107,28 @@
             >
               <Icon icon="mdi:undo" class="text-sm" />
             </button>
+          <!-- 文本消息 / 图片消息 -->
           <div
+            v-if="m.type === MESSAGE_TYPES.IMAGE"
+            :class="[
+              'p-1 bg-base-100 shadow-sm border',
+              m.isSelf ? 'rounded-3xl rounded-br-sm border-primary/40' : 'rounded-3xl rounded-bl-sm border-base-200',
+            ]"
+          >
+            <button
+              type="button"
+              class="block w-full text-left focus:outline-none focus:ring-0"
+              @click="previewImageUrl = m.content"
+            >
+              <img
+                :src="m.content"
+                alt="图片消息"
+                class="max-w-[220px] max-h-[260px] object-contain rounded-2xl cursor-pointer"
+              />
+            </button>
+          </div>
+          <div
+            v-else
             :class="[
               'px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap shadow-sm leading-relaxed',
               m.speakerRole === 'kp'
@@ -91,20 +152,20 @@
       暂无消息，开始在房间里说点什么吧～
     </div>
 
-    <!-- 底部上拉刷新 -->
+    <!-- 底部上拉：回到底部 / 检查新消息 -->
     <div
       class="sticky bottom-0 left-0 right-0 pointer-events-none -mx-4"
-      :style="{ height: indicatorHeight + 'px', opacity: indicatorOpacity }"
+      :style="{ height: bottomIndicatorHeight + 'px', opacity: bottomIndicatorOpacity }"
       aria-hidden="true"
     >
       <div class="h-full flex items-end justify-center pb-2">
         <div
           class="px-3 py-2 rounded-2xl border border-base-300/60 bg-base-100/70 backdrop-blur shadow-sm"
-          :class="isReady ? 'text-primary' : 'text-base-content/60'"
+          :class="bottomIsReady || isRefreshingLatest ? 'text-primary' : 'text-base-content/60'"
         >
           <div class="flex items-center gap-2 text-[11px] font-medium">
             <Icon
-              v-if="isRefreshing"
+              v-if="isRefreshingLatest"
               icon="mdi:loading"
               class="text-sm animate-spin"
             />
@@ -112,18 +173,42 @@
               v-else
               icon="mdi:arrow-up"
               class="text-sm transition-transform duration-150"
-              :style="{ transform: `rotate(${isReady ? 180 : Math.floor(progress * 180)}deg)` }"
+              :style="{ transform: `rotate(${bottomIsReady ? 180 : Math.floor(bottomProgress * 180)}deg)` }"
             />
             <span>
-              {{ isRefreshing ? '刷新中…' : (isReady ? '松手刷新' : '上拉刷新') }}
+              {{ isRefreshingLatest ? '检查新消息…' : (bottomIsReady ? '松手回到底部' : '上拉回到底部') }}
             </span>
-            <span v-if="!isRefreshing" class="opacity-60 tabular-nums">
-              {{ Math.min(100, Math.floor(progress * 100)) }}%
+            <span v-if="!isRefreshingLatest" class="opacity-60 tabular-nums">
+              {{ Math.min(100, Math.floor(bottomProgress * 100)) }}%
             </span>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- 图片预览弹层 -->
+    <Teleport to="body">
+      <div
+        v-if="previewImageUrl"
+        class="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 p-4"
+        @click.self="previewImageUrl = null"
+      >
+        <button
+          type="button"
+          class="absolute top-4 right-4 p-2 rounded-lg bg-white/20 text-white hover:bg-white/30"
+          aria-label="关闭"
+          @click="previewImageUrl = null"
+        >
+          <Icon icon="mdi:close" class="text-2xl" />
+        </button>
+        <img
+          :src="previewImageUrl"
+          alt="预览"
+          class="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          @click.stop
+        />
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -134,6 +219,7 @@ import LoadingSpinner from './LoadingSpinner.vue'
 import { formatTime } from '../utils/date'
 import { MESSAGE_TYPES } from '../constants/enums'
 import { parseRpText, toRenderableRpTokens } from '../utils/rpText'
+import { useCharactersStore } from '../stores/characters'
 
 const props = defineProps({
   messages: {
@@ -141,6 +227,14 @@ const props = defineProps({
     required: true,
   },
   loading: {
+    type: Boolean,
+    default: false,
+  },
+  hasMore: {
+    type: Boolean,
+    default: true,
+  },
+  loadingMoreHistory: {
     type: Boolean,
     default: false,
   },
@@ -154,32 +248,60 @@ const props = defineProps({
   },
 })
 
+const charactersStore = useCharactersStore()
 const listEl = ref(null)
+const previewImageUrl = ref(null)
+const pullingDown = ref(false)
 const pullingUp = ref(false)
 const pullDistance = ref(0)
+const pullUpDistance = ref(0)
 const touchStartY = ref(0)
+const atTop = ref(false)
 const atBottom = ref(false)
+const pendingPrependAdjust = ref(false)
+const prevScrollHeight = ref(0)
 const PULL_THRESHOLD = 46
 const MAX_PULL = 96
-const refreshTriggered = ref(false)
+const historyTriggered = ref(false)
+const latestTriggered = ref(false)
 
-const emit = defineEmits(['refresh', 'avatar-click', 'recall'])
+const emit = defineEmits(['load-more', 'refresh-latest', 'avatar-click', 'recall'])
 
-const progress = computed(() => Math.max(0, Math.min(1, pullDistance.value / PULL_THRESHOLD)))
-const isReady = computed(() => pullDistance.value >= PULL_THRESHOLD)
-const isRefreshing = computed(() => refreshTriggered.value && props.loading)
-const indicatorHeight = computed(() => {
-  if (isRefreshing.value) return 46
-  if (!pullingUp.value) return 0
+const topProgress = computed(() => Math.max(0, Math.min(1, pullDistance.value / PULL_THRESHOLD)))
+const topIsReady = computed(() => pullDistance.value >= PULL_THRESHOLD)
+const bottomProgress = computed(() => Math.max(0, Math.min(1, pullUpDistance.value / PULL_THRESHOLD)))
+const bottomIsReady = computed(() => pullUpDistance.value >= PULL_THRESHOLD)
+
+const isRefreshingHistory = computed(() => historyTriggered.value && (props.loading || props.loadingMoreHistory))
+const isRefreshingLatest = computed(() => latestTriggered.value && props.loading)
+
+const topIndicatorHeight = computed(() => {
+  // 加载历史时固定高度，保证“加载中”提示始终可见
+  if (isRefreshingHistory.value) return 56
+  if (!pullingDown.value) return 0
   // 弹性：前半段线性，后半段逐渐变慢
   const d = pullDistance.value
   const eased = d <= PULL_THRESHOLD ? d : (PULL_THRESHOLD + (d - PULL_THRESHOLD) * 0.35)
   return Math.max(0, Math.min(60, Math.floor(eased)))
 })
-const indicatorOpacity = computed(() => {
-  if (isRefreshing.value) return 1
+const topIndicatorOpacity = computed(() => {
+  // 加载历史中时始终完全显示，便于看到“加载中”和滑动条
+  if (isRefreshingHistory.value) return 1
+  if (!pullingDown.value) return 0
+  return Math.max(0.15, Math.min(1, topProgress.value * 1.15))
+})
+
+const bottomIndicatorHeight = computed(() => {
+  if (isRefreshingLatest.value) return 46
   if (!pullingUp.value) return 0
-  return Math.max(0.15, Math.min(1, progress.value * 1.15))
+  const d = pullUpDistance.value
+  const eased = d <= PULL_THRESHOLD ? d : (PULL_THRESHOLD + (d - PULL_THRESHOLD) * 0.35)
+  return Math.max(0, Math.min(60, Math.floor(eased)))
+})
+const bottomIndicatorOpacity = computed(() => {
+  if (isRefreshingLatest.value) return 1
+  if (!pullingUp.value) return 0
+  return Math.max(0.15, Math.min(1, bottomProgress.value * 1.15))
 })
 
 function scrollToBottom() {
@@ -189,23 +311,45 @@ function scrollToBottom() {
   })
 }
 
+const lastMessageId = ref(null)
+// 监听「最后一条消息的 id」，这样父组件 push 新消息（引用不变）时也会触发，能正确滚到底部
+const lastMessageIdFromList = computed(() => {
+  const arr = Array.isArray(props.messages) ? props.messages : []
+  if (!arr.length) return null
+  return arr[arr.length - 1].id
+})
 watch(
-  () => props.messages.length,
-  () => {
-    scrollToBottom()
+  lastMessageIdFromList,
+  (newId) => {
+    if (newId == null) return
+    // 首次有数据：滚到底部
+    if (!lastMessageId.value) {
+      lastMessageId.value = newId
+      scrollToBottom()
+      return
+    }
+    // 新消息追加：仅在用户当前位于底部时自动滚动
+    if (newId !== lastMessageId.value) {
+      lastMessageId.value = newId
+      if (atBottom.value) scrollToBottom()
+    }
   },
   { immediate: true }
 )
 
 function getAvatar(msg) {
-  // 有 speaker_portrait 时（KP 以 NPC 身份发言），直接使用记录中的头像
   if (msg.speakerPortrait) return msg.speakerPortrait
-  // 其余情况：使用消息记录里的用户头像，不随右上角选择变化
+  // PL/NPC：跑团中途上传的角色卡头像用 store 中的最新数据补全，保证正确显示
+  if ((msg.speakerRole === 'pl' || msg.speakerRole === 'npc') && msg.speakerId) {
+    const raw = charactersStore.getById(msg.speakerId)
+    const sheet = raw ? charactersStore.normalizeCharacter(raw) : null
+    if (sheet?.portrait) return sheet.portrait
+  }
+  if (msg.speakerRole === 'pl' || msg.speakerRole === 'npc') return null
   return msg.userAvatar || null
 }
 
 function canOpenCharacterCard(msg) {
-  // 仅对普通用户消息开放；系统/骰娘消息在模板层已过滤
   return !!(msg && msg.userId && msg.userId !== 'system')
 }
 
@@ -228,6 +372,7 @@ function onScroll() {
   const el = listEl.value
   if (!el) return
   const { scrollTop, scrollHeight, clientHeight } = el
+  atTop.value = scrollTop <= 2
   atBottom.value = scrollTop + clientHeight >= scrollHeight - 2
 }
 
@@ -235,45 +380,85 @@ function onTouchStart(e) {
   if (!listEl.value) return
   touchStartY.value = e.touches[0].clientY
   pullDistance.value = 0
+  pullUpDistance.value = 0
+  pullingDown.value = false
   pullingUp.value = false
 }
 
 function onTouchMove(e) {
   const el = listEl.value
   if (!el) return
-  if (!atBottom.value) return
   if (props.loading) return
   const currentY = e.touches[0].clientY
   const deltaY = currentY - touchStartY.value
-  // 在底部时，手指向上滑动（deltaY < 0）视为“上拉刷新”手势
-  if (deltaY < 0) {
+  // 顶部：下拉加载历史
+  if (atTop.value && deltaY > 0) {
+    pullingDown.value = true
+    pullDistance.value = Math.min(deltaY, MAX_PULL)
+  }
+  // 底部：上拉回到底部/检查新消息
+  if (atBottom.value && deltaY < 0) {
     pullingUp.value = true
-    pullDistance.value = Math.min(-deltaY, MAX_PULL)
+    pullUpDistance.value = Math.min(-deltaY, MAX_PULL)
   }
 }
 
 function onTouchEnd() {
-  if (pullingUp.value && isReady.value && !props.loading) {
-    refreshTriggered.value = true
+  // 顶部：加载历史
+  if (pullingDown.value && topIsReady.value && !props.loading && props.hasMore) {
+    historyTriggered.value = true
     // 触发后先保持一个固定高度，等 loading 结束再收起
     pullDistance.value = PULL_THRESHOLD
-    emit('refresh')
+    // 记录高度，加载历史 prepend 后做滚动补偿，避免视窗跳动
+    if (listEl.value) {
+      prevScrollHeight.value = listEl.value.scrollHeight || 0
+      pendingPrependAdjust.value = true
+    }
+    emit('load-more')
+  } else if (pullingUp.value && bottomIsReady.value && !props.loading) {
+    // 底部：回到底部并检查新消息（防断线漏消息）
+    latestTriggered.value = true
+    pullUpDistance.value = PULL_THRESHOLD
+    scrollToBottom()
+    emit('refresh-latest')
   } else {
+    pullingDown.value = false
     pullingUp.value = false
     pullDistance.value = 0
+    pullUpDistance.value = 0
   }
 }
+
+watch(
+  () => props.messages.length,
+  async () => {
+    if (!pendingPrependAdjust.value) return
+    const el = listEl.value
+    if (!el) return
+    await nextTick()
+    const nextHeight = el.scrollHeight || 0
+    const delta = nextHeight - (prevScrollHeight.value || 0)
+    if (delta > 0) {
+      el.scrollTop = (el.scrollTop || 0) + delta
+    }
+    pendingPrependAdjust.value = false
+  }
+)
 
 watch(
   () => props.loading,
   (val) => {
     // 刷新结束后自然收起提示
-    if (!val && refreshTriggered.value) {
-      refreshTriggered.value = false
+    if (!val && (historyTriggered.value || latestTriggered.value)) {
+      historyTriggered.value = false
+      latestTriggered.value = false
+      pullingDown.value = false
       pullingUp.value = false
+      pendingPrependAdjust.value = false
       // 轻微延迟让“刷新中…”有一个收尾
       setTimeout(() => {
         pullDistance.value = 0
+        pullUpDistance.value = 0
       }, 120)
     }
   }
@@ -331,4 +516,21 @@ function getSpeakerBadge(msg) {
   return { text: 'PL', class: 'bg-green-500/20 text-green-400' }
 }
 </script>
+
+<style scoped>
+/* 顶部加载历史时的滑动条：从左滑到右，循环，形成“正在加载”的滑动感 */
+.pull-loading-bar {
+  width: 40%;
+  min-width: 80px;
+  animation: pull-loading-slide 1.2s ease-in-out infinite;
+}
+@keyframes pull-loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+</style>
 

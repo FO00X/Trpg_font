@@ -110,13 +110,23 @@ export async function sendSystemMessageRaw({
  * 注：messages.user_id 引用 auth.users，与 profiles 无直接 FK，故不在此处 join profiles。
  * 头像由调用方通过 profileCache.getProfiles 批量获取后合并。
  */
-export async function fetchChannelMessagesRaw(channelId, { limit = 200 } = {}) {
-  const { data, error } = await supabase
+// 分页拉取某个频道的消息列表。
+// - limit: 每页条数
+// - before: 仅拉取 created_at 小于该时间的消息（用于向上加载历史）
+export async function fetchChannelMessagesRaw(channelId, { limit = 100, before } = {}) {
+  let q = supabase
     .from('messages')
     .select('id, user_id, user_name, content, type, speaker_role, speaker_id, speaker_name, speaker_portrait, created_at')
     .eq('channel_id', channelId)
-    .order('created_at', { ascending: true })
+    // 默认按最新在前，便于“进入房间先看最新 N 条”
+    .order('created_at', { ascending: false })
     .limit(limit)
+
+  if (before) {
+    q = q.lt('created_at', before)
+  }
+
+  const { data, error } = await q
 
   if (error) {
     return { ok: false, error }

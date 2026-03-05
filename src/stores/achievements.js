@@ -279,11 +279,17 @@ export function useAchievementsStore() {
   // 默认在首次使用时尝试同步一次历史成就
   ensureInitialized().catch(() => {})
 
+  /** 从 user_achievements 表刷新当前用户已解锁成就（进入成就页时调用，保证与后端一致） */
+  async function refreshUserAchievements() {
+    await loadFromServer()
+  }
+
   return {
     allAchievements,
     unlockedCount,
     totalCount,
     ensureInitialized,
+    refreshUserAchievements,
     hasAchievement,
     onMessageSent,
     onDiceRolled,

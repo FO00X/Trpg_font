@@ -161,9 +161,9 @@ export function useGameRoomsStore() {
       .from('game_rooms')
       .select(`${baseCols}, module_entries`)
       .eq('id', roomId)
-      .single())
+      .maybeSingle())
     if (error && (error.code === 'PGRST204' || (error.message && /module_entries|schema cache/i.test(error.message)))) {
-      const res = await supabase.from('game_rooms').select(baseCols).eq('id', roomId).single()
+      const res = await supabase.from('game_rooms').select(baseCols).eq('id', roomId).maybeSingle()
       data = res.data
       error = res.error
     }

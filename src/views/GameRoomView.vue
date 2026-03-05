@@ -251,6 +251,7 @@
 
               <!-- 角色卡审核 -->
               <button
+              v-if="isOwner"
                 type="button"
                 class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-primary/40 bg-primary/5 text-primary font-medium hover:bg-primary/15 hover:border-primary/60 transition-colors active:scale-[0.98]"
                 @click="characterReviewOpen = true"

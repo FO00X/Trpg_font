@@ -4,9 +4,12 @@
     <RoomChatMessages
       :messages="messages"
       :loading="loading"
+      :loading-more-history="loadingMoreMessages"
+      :has-more="hasMoreMessages"
       :is-owner="isOwner"
       :self-character-avatar="selfCharacterAvatar"
-      @refresh="reloadMessages"
+      @load-more="loadMoreMessages"
+      @refresh-latest="reloadMessages"
       @avatar-click="handleAvatarClick"
       @recall="handleRecall"
     />
@@ -162,6 +165,20 @@
         >
           {{ s.label }}
         </button>
+        <label
+          class="shrink-0 px-2.5 py-1 rounded-lg bg-base-200 hover:bg-base-300 transition-colors active:scale-95 cursor-pointer"
+          :class="{ 'pointer-events-none opacity-60': imageUploading || sending }"
+          title="发送图片"
+        >
+        发送图片
+          <input
+            type="file"
+            accept="image/*"
+            class="hidden"
+            :disabled="imageUploading || sending"
+            @change="onImageSelected"
+          />
+        </label>
       </div>
     </div>
 
@@ -218,6 +235,7 @@ const { roll: roll3D, isInitialized: isDice3DInitialized } = useDice3D()
 const activeTool = ref(null) // 'dice' | 'request' | 'stat' | null
 const loading = ref(false)
 const sending = ref(false)
+const imageUploading = ref(false)
 const input = ref('')
 const inputEl = ref(null)
 
@@ -329,7 +347,10 @@ const channelId = computed(() => `room:${props.roomId}`)
 const {
   messages,
   loading: messagesLoading,
+  loadingMore: loadingMoreMessages,
   reload: reloadMessages,
+  hasMore: hasMoreMessages,
+  loadMore: loadMoreMessages,
   deleteMessage,
 } = useChannelMessages(channelId, {
   onNewMessage(msg) {
@@ -440,6 +461,65 @@ async function getSpeakerNameForMessage() {
   return me?.username || me?.email?.split?.('@')[0] || '我'
 }
 
+/**
+ * 构造当前消息的发言者元信息（KP / PL / NPC）
+ * 供文本消息和图片消息复用，保证身份一致
+ */
+async function buildSpeakerMeta(me) {
+  const user = me || auth.user?.value
+  if (!user?.id) {
+    showToast('请先登录')
+    return null
+  }
+
+  let speakerRole = null
+  let speakerId = null
+  let speakerName = null
+  let speakerPortrait = null
+
+  const displayName = user.username || user.email?.split?.('@')[0] || '我'
+
+  if (isOwner.value) {
+    const { getRoomCharacter } = gameRoomsStore
+    const charId = getRoomCharacter(props.roomId)
+    if (!charId) {
+      // KP 以自身身份发言
+      speakerRole = 'kp'
+    } else {
+      // KP 以选中角色卡作为 NPC 发言
+      const sheet = await getCharacterSheet(charId)
+      if (sheet) {
+        speakerRole = 'npc'
+        speakerId = charId
+        speakerName = sheet.name?.trim() || null
+        speakerPortrait = sheet.portrait || null
+      } else {
+        speakerRole = 'kp'
+      }
+    }
+  } else {
+    // PL：若已选择角色卡，用角色信息写入 speaker_* 字段（含头像，跑团中途上传头像也会带入）
+    const charId = gameRoomsStore.getRoomCharacter(props.roomId)
+    const sheet = await getCurrentRoomCharacter()
+    if (charId && sheet) {
+      const name = (sheet.name || '').trim()
+      speakerRole = 'pl'
+      speakerId = charId
+      speakerName = name || null
+      speakerPortrait = sheet.portrait || null
+    }
+  }
+
+  return {
+    user,
+    displayName,
+    speakerRole,
+    speakerId,
+    speakerName,
+    speakerPortrait,
+  }
+}
+
 // 统一使用 utils/dice 中的工具函数
 const parseAndRollDice = (expr) => utilsParseAndRollDice(expr, roll3D, isDice3DInitialized)
 
@@ -482,41 +562,9 @@ async function send() {
 
   sending.value = true
   try {
-    let speakerRole = null
-    let speakerId = null
-    let speakerName = null
-    let speakerPortrait = null
-
-    let displayName = me.username || me.email?.split?.('@')[0] || '我'
-    if (isOwner.value) {
-      const { getRoomCharacter } = gameRoomsStore
-      const charId = getRoomCharacter(props.roomId)
-      if (!charId) {
-        // KP 以自身身份发言
-        speakerRole = 'kp'
-      } else {
-        // KP 以选中角色卡作为 NPC 发言
-        const sheet = await getCharacterSheet(charId)
-        if (sheet) {
-          speakerRole = 'npc'
-          speakerId = charId
-          speakerName = sheet.name?.trim() || null
-          speakerPortrait = sheet.portrait || null
-        } else {
-          speakerRole = 'kp'
-        }
-      }
-    } else {
-      // PL：若已选择角色卡，用角色信息写入 speaker_* 字段（账号名仍放在 user_name）
-      const charId = gameRoomsStore.getRoomCharacter(props.roomId)
-      const sheet = await getCurrentRoomCharacter()
-      if (charId && sheet) {
-        const name = (sheet.name || '').trim()
-        speakerRole = 'pl'
-        speakerId = charId
-        speakerName = name || null
-      }
-    }
+    const meta = await buildSpeakerMeta(me)
+    if (!meta) return
+    const { displayName, speakerRole, speakerId, speakerName, speakerPortrait } = meta
 
     const payload = {
       channel_id: channelId.value,
@@ -541,6 +589,103 @@ async function send() {
   } finally {
     sending.value = false
   }
+}
+
+/**
+ * 上传聊天图片到存储并返回公开 URL
+ */
+async function uploadChatImage(file) {
+  imageUploading.value = true
+  try {
+    const me = auth.user?.value
+    if (!me?.id) {
+      showToast('请先登录')
+      return null
+    }
+    const fileExt = file.name.split('.').pop() || 'png'
+    const fileName = `chat/${props.roomId}/${me.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`
+    const { data, error: uploadError } = await supabase.storage
+      .from('room-clues-images')
+      .upload(fileName, file, { cacheControl: '3600', upsert: false })
+    if (uploadError) {
+      showToast('图片上传失败')
+      return null
+    }
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from('room-clues-images').getPublicUrl(data.path)
+    return publicUrl
+  } finally {
+    imageUploading.value = false
+  }
+}
+
+/**
+ * 发送一条图片消息
+ */
+async function sendImageMessage(imageUrl) {
+  if (!imageUrl || sending.value) return
+  const me = auth.user?.value
+  if (!me?.id) {
+    showToast('请先登录')
+    return
+  }
+
+  sending.value = true
+  try {
+    const meta = await buildSpeakerMeta(me)
+    if (!meta) return
+    const { displayName, speakerRole, speakerId, speakerName, speakerPortrait } = meta
+
+    const payload = {
+      channel_id: channelId.value,
+      user_id: me.id,
+      user_name: displayName,
+      content: imageUrl,
+      type: MESSAGE_TYPES.IMAGE,
+      speaker_role: speakerRole,
+      speaker_id: speakerId,
+      speaker_name: speakerName,
+      speaker_portrait: speakerPortrait,
+    }
+    const { error } = await supabase
+      .from('messages')
+      .insert(payload)
+      .select(
+        'id, user_id, user_name, content, type, speaker_role, speaker_id, speaker_name, speaker_portrait, created_at'
+      )
+      .single()
+    if (!error) {
+      achievementsStore.onMessageSent()
+    }
+  } finally {
+    sending.value = false
+  }
+}
+
+/**
+ * 处理图片选择并发送为图片消息
+ */
+async function onImageSelected(e) {
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) {
+      showToast('请选择图片文件')
+      continue
+    }
+    try {
+      const url = await uploadChatImage(file)
+      if (url) {
+        await sendImageMessage(url)
+      }
+    } catch (err) {
+      showToast(err?.message || '图片上传失败')
+    }
+  }
+  // 允许再次选择同一文件
+  e.target.value = ''
 }
 
 function onKeydown(e) {
