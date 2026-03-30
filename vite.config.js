@@ -12,4 +12,5 @@ export default defineConfig({
     port: 8089,
     host: true,
   },
+  base: '/trpg/' 
 })

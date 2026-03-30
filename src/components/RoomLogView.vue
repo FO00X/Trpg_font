@@ -21,8 +21,6 @@ const channelId = computed(() => `room:${props.roomId}`)
 const viewMode = ref('dialogue') // 'dialogue' | 'novel'
 const novels = ref({})
 const generatingNovels = ref({})
-// KP 手动选择要生成小说的消息 id 集合
-const selectedForNovelIds = ref(new Set())
 
 async function fetchNovels() {
   const { data } = await supabase
@@ -44,24 +42,11 @@ watch(viewMode, (val) => {
   }
 })
 
-function toggleNovelSelection(msg) {
-  const next = new Set(selectedForNovelIds.value)
-  if (next.has(msg.id)) next.delete(msg.id)
-  else next.add(msg.id)
-  selectedForNovelIds.value = next
-}
-
-function isSelectedForNovel(msg) {
-  return selectedForNovelIds.value.has(msg.id)
-}
-
 async function generateNovel(group) {
-  // 只使用当前日期组中被 KP 选中的对话
-  const selectedMessages = group.messages.filter(
-    (m) => !isSystemNotification(m) && isSelectedForNovel(m)
-  )
+  // 不再依赖“选入小说”按钮：直接使用当前日期组中全部非系统对话
+  const selectedMessages = group.messages.filter((m) => !isSystemNotification(m))
   if (!selectedMessages.length) {
-    alert('请先在对话模式中点击“选入小说”，选择要生成小说的对话。')
+    alert('该日期没有可用于生成小说的对话内容。')
     return
   }
 
@@ -78,9 +63,9 @@ async function generateNovel(group) {
     }
     const config = configData.value
 
-    const textToProcess = selectedMessages.map(m => {
+    const textToProcess = selectedMessages.map((m) => {
       const speaker = getSpeakerName(m)
-      return `[${speaker}] ${m.content}`
+      return `[${speaker}] ${getMessageContent(m)}`
     }).join('\n')
 
     const prompt = `你是一个小说家，请将以下跑团（TRPG）的文字日志转换为生动流畅的小说格式。
@@ -214,7 +199,93 @@ function getRenderableParts(msg) {
   return toRenderableRpTokens(base, { defaultDialogue: isSpeakerDialogue })
 }
 
-// 判断一条消息是否“纯场外”（只有 OOC，没有正式内容）
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function renderMsgForExport(msg) {
+  // 与页面展示保持一致：隐藏纯场外消息（ooc），ooc 片段不输出
+  if (isPureOoc(msg)) return ''
+
+  if (isSystemNotification(msg)) {
+    const content = getMessageContent(msg)
+    return `【系统】${content}\n`
+  }
+
+  const badge = getSpeakerBadge(msg).text
+  const speaker = getSpeakerName(msg)
+
+  const parts = getRenderableParts(msg) || []
+  const rendered = parts
+    .filter((p) => p.type !== 'ooc')
+    .map((p) => (p.type === 'dialogue' ? `「${p.text}」` : String(p.text)))
+    .join('')
+
+  const header = `【${badge}】${speaker}：`
+  // body 可能为空（极少见），兜底不输出冒号后半段
+  if (!rendered) return `${header}\n`
+  return `${header}\n${rendered}\n`
+}
+
+function buildExportText() {
+  const lines = []
+  lines.push('房间日志导出')
+  lines.push(`房间 ID：${props.roomId}`)
+  lines.push('') 
+  for (const group of groupedMessages.value || []) {
+    lines.push(`===== ${group.date} =====`)
+    for (const msg of group.messages || []) {
+      const block = renderMsgForExport(msg)
+      if (!block) continue
+      lines.push(block.trimEnd())
+      lines.push('')
+    }
+    // 每个日期段落之间留一行
+    lines.push('')
+  }
+  return lines.join('\n').trimEnd() + '\n'
+}
+
+function downloadBlob(content, mime, filename) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+function exportLog(kind) {
+  if (!Array.isArray(messages.value) || messages.value.length === 0) {
+    alert('暂无日志记录，无法导出。')
+    return
+  }
+  const text = buildExportText()
+  if (kind === 'txt') {
+    downloadBlob(text, 'text/plain;charset=utf-8', `room-${props.roomId}-log.txt`)
+    return
+  }
+
+  const html = `<!doctype html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+  <pre style="white-space:pre-wrap; font-family: ui-sans-serif, system-ui, -apple-system, 'Microsoft YaHei', Arial;">
+${escapeHtml(text)}
+  </pre>
+</body>
+</html>`
+  downloadBlob(html, 'application/msword;charset=utf-8', `room-${props.roomId}-log.doc`)
+}
+
 function isPureOoc(msg) {
   const parts = getRenderableParts(msg) || []
   if (!parts.length) return false
@@ -226,11 +297,9 @@ function isPureOoc(msg) {
 }
 
 function getSpeakerName(msg) {
-  // 与聊天区域保持一致的命名规则
   if ([MESSAGE_TYPES.SYSTEM, MESSAGE_TYPES.HIDDEN_ROLL, MESSAGE_TYPES.HIDDEN_SKILL, MESSAGE_TYPES.CHECK_REQUEST].includes(msg.type))
     return '骰娘'
   if (msg.speakerRole === 'kp') return 'KP'
-  // 其余情况优先展示角色名（speakerName），没有则退回账号名（userName）
   if (msg.speakerName) return msg.speakerName
   return msg.userName || '未知'
 }
@@ -255,6 +324,24 @@ watch(() => props.roomId, () => {
     <!-- 顶部控制栏 -->
     <div class="shrink-0 px-4 py-2 flex justify-between items-center">
       <span class="text-sm font-medium text-base-content/70">日志记录</span>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-sm btn-outline btn-base-300 rounded-xl"
+          :disabled="loading"
+          @click="exportLog('txt')"
+        >
+          导出 TXT
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm btn-outline btn-base-300 rounded-xl"
+          :disabled="loading"
+          @click="exportLog('doc')"
+        >
+          导出 DOC
+        </button>
+      </div>
       <!-- <div class="join bg-base-200 p-1 rounded-xl">
         <button
           type="button"
@@ -356,14 +443,6 @@ watch(() => props.roomId, () => {
                       {{ getSpeakerName(msg) }}
                     </span>
                     <span class="text-xs text-base-content">{{ formatTime(msg.time) }}</span>
-                    <button
-                      v-if="isOwner && viewMode === 'dialogue'"
-                      type="button"
-                      class="ml-1 text-[10px] px-1.5 py-0.5 rounded border border-primary/40 text-primary/80 hover:bg-primary/10 transition-colors"
-                      @click="toggleNovelSelection(msg)"
-                    >
-                      {{ isSelectedForNovel(msg) ? '已选入小说' : '选入小说' }}
-                    </button>
                   </div>
                   <div class="pl-1 text-sm wrap-break-word whitespace-pre-wrap text-base-content">
                     <template v-for="(p, idx) in getRenderableParts(msg)" :key="idx">
@@ -393,14 +472,6 @@ watch(() => props.roomId, () => {
                       {{ getSpeakerBadge(msg).text }}
                     </span>
                     <span class="text-xs text-base-content italic">{{ formatTime(msg.time) }}</span>
-                    <button
-                      v-if="isOwner && viewMode === 'dialogue'"
-                      type="button"
-                      class="ml-1 text-[10px] px-1.5 py-0.5 rounded border border-primary/40 text-primary/80 hover:bg-primary/10 transition-colors"
-                      @click="toggleNovelSelection(msg)"
-                    >
-                      {{ isSelectedForNovel(msg) ? '已选入小说' : '选入小说' }}
-                    </button>
                   </div>
                   <div class="pl-3 text-sm wrap-break-word whitespace-pre-wrap text-[#a6adc8] italic border-l-2 border-blue-500/30">
                     <template v-for="(p, idx) in getRenderableParts(msg)" :key="idx">

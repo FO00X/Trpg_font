@@ -5,7 +5,7 @@ const STORAGE_KEY = 'trpg-dice-config'
 const SETTINGS_ID = 'dice_config'
 
 export const DICE_DEFAULTS = {
-  assetPath: '/assets/',
+  assetPath: '/trpg/assets/',
   theme: 'default',
   themeColor: '#4826F2',
   scale: 3,

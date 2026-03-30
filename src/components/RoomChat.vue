@@ -1036,9 +1036,13 @@ async function skillCheckByName(keyword, modifier = 0, hidden = false) {
     const target = baseTarget + (modifier || 0)
     const value = await randomD100()
     let result = '失败'
-    if (value <= Math.floor(target / 5)) result = '极难成功'
+    if (value === 1) result = '大成功'
+    else if (value === 100 || (value >= 96 && target < 50)) result = '大失败'
+    else if (value <= Math.floor(target / 5)) result = '极难成功'
     else if (value <= Math.floor(target / 2)) result = '困难成功'
     else if (value <= target) result = '成功'
+
+    achievementsStore.reportDiceResult(result, value, target)
 
     const charName = sheet.name?.trim() || '未命名角色'
     const displaySkillName = skillDisplayName(chosen)
@@ -1072,9 +1076,13 @@ async function skillCheckByName(keyword, modifier = 0, hidden = false) {
     const target = baseTarget + (modifier || 0)
     const value = await randomD100()
     let result = '失败'
-    if (value <= Math.floor(target / 5)) result = '极难成功'
+    if (value === 1) result = '大成功'
+    else if (value === 100 || (value >= 96 && target < 50)) result = '大失败'
+    else if (value <= Math.floor(target / 5)) result = '极难成功'
     else if (value <= Math.floor(target / 2)) result = '困难成功'
     else if (value <= target) result = '成功'
+
+    achievementsStore.reportDiceResult(result, value, target)
 
     const charName = sheet.name?.trim() || '未命名角色'
     const attrName = keyword
@@ -1170,6 +1178,8 @@ async function handleSanityCheckCommand(text) {
   let result = isSuccess ? '成功' : '失败'
   if (d100 === 1) result = '大成功'
   else if (d100 === 100) result = '大失败'
+
+  achievementsStore.reportDiceResult(result, d100, san)
 
   const sheetName = sheet.name?.trim() || '未命名角色'
   const textMsg =
@@ -1396,6 +1406,7 @@ async function handleLocalSkillCheck(meta, value) {
     const modText = modifier
       ? `（基础${baseTarget}${modifier > 0 ? `+${modifier}` : modifier} → 最终${target}）`
       : `（${target}）`
+    achievementsStore.reportDiceResult(result, value, target)
     const text = `【被请求技能检定】「${sheetName}」使用「${displaySkillName}」${modText}：1d100 = ${value}，${result}`
     await sendSystemMessage(text)
     return
@@ -1435,6 +1446,7 @@ async function handleLocalSkillCheck(meta, value) {
   const modText = modifier
     ? `（基础${baseTarget}${modifier > 0 ? `+${modifier}` : modifier} → 最终${target}）`
     : `（${target}）`
+  achievementsStore.reportDiceResult(result, value, target)
   const text = `【被请求属性检定】「${sheetName}」进行「${attrName}」检定${modText}：1d100 = ${value}，${result}`
   await sendSystemMessage(text)
 }
@@ -1453,6 +1465,8 @@ async function handleLocalSanCheck(meta, value) {
   let result = isSuccess ? '成功' : '失败'
   if (value === 1) result = '大成功'
   else if (value === 100) result = '大失败'
+
+  achievementsStore.reportDiceResult(result, value, san)
 
   const chosenExpr = isSuccess ? successExpr : failExpr
   const lossInfo = await rollAmount(chosenExpr)

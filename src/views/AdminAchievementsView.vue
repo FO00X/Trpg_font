@@ -34,7 +34,7 @@
         你没有权限查看此页面。
       </p>
       <template v-else>
-        <div class="max-w-4xl mx-auto space-y-4">
+        <div class="max-w-4xl mx-auto space-y-2">
           <div v-if="error" class="alert alert-error text-sm">
             {{ error }}
           </div>
@@ -74,7 +74,7 @@
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div class="form-control">
                   <label class="label">
                     <span class="label-text font-medium">成就 ID</span>
@@ -137,6 +137,11 @@
                   >
                     <option value="messagesSent">messagesSent（发送消息次数）</option>
                     <option value="diceRolls">diceRolls（掷骰次数）</option>
+                    <option value="diceCriticalSuccess">diceCriticalSuccess（大成功次数）</option>
+                    <option value="diceCriticalFail">diceCriticalFail（大失败次数）</option>
+                    <option value="diceSuccess">diceSuccess（检定成功次数）</option>
+                    <option value="diceFail">diceFail（检定失败次数）</option>
+                    <option value="diceOnTheLine">diceOnTheLine（卡线次数）</option>
                     <option value="notesCreated">notesCreated（创建笔记次数）</option>
                     <option value="roomsCreated">roomsCreated（创建房间次数）</option>
                   </select>
@@ -144,7 +149,7 @@
 
                 <div class="form-control">
                   <label class="label">
-                    <span class="label-text font-medium">阈值（threshold）</span>
+                    <span class="label-text font-medium">数值（threshold）</span>
                     <span class="label-text-alt text-xs text-base-content/50">达到此次数后解锁</span>
                   </label>
                   <input
@@ -205,11 +210,9 @@
               <table class="table table-zebra table-sm">
                 <thead>
                   <tr>
-                    <th class="text-base-content/70">ID</th>
                     <th class="text-base-content/70">名称</th>
                     <th class="text-base-content/70">分类</th>
-                    <th class="text-base-content/70">stat_key</th>
-                    <th class="text-base-content/70 text-right">阈值</th>
+                    <th class="text-base-content/70 text-right">数值</th>
                     <th class="text-base-content/70 text-center">启用</th>
                     <th class="text-base-content/70 w-28 text-center">操作</th>
                   </tr>
@@ -224,28 +227,24 @@
                     v-for="row in list"
                     :key="row.id"
                   >
-                    <td class="font-mono text-xs max-w-[120px] truncate">
-                      {{ row.id }}
-                    </td>
                     <td class="text-sm max-w-[160px] truncate">
                       {{ row.title }}
                     </td>
                     <td class="text-xs text-base-content/70 max-w-[100px] truncate">
                       {{ row.category || '—' }}
                     </td>
-                    <td class="font-mono text-[11px] text-base-content/70">
-                      {{ row.stat_key }}
-                    </td>
                     <td class="text-right text-sm">
                       {{ row.threshold }}
                     </td>
                     <td class="text-center">
-                      <span
-                        class="badge badge-xs"
-                        :class="row.enabled ? 'badge-success' : 'badge-ghost text-base-content/60'"
-                      >
-                        {{ row.enabled ? '启用' : '停用' }}
-                      </span>
+                      <input
+                        type="checkbox"
+                        class="toggle toggle-sm toggle-primary"
+                        :checked="row.enabled !== false"
+                        :disabled="saving"
+                        :aria-label="row.enabled !== false ? '启用' : '停用'"
+                        @change="toggleEnabled(row)"
+                      />
                     </td>
                     <td class="text-center">
                       <div class="flex items-center justify-center gap-1">
@@ -466,6 +465,34 @@ async function save() {
     editing.value = false
     creating.value = false
     editingId.value = null
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggleEnabled(row) {
+  if (!isAdmin.value || saving.value) return
+  const nextEnabled = !(row.enabled !== false)
+  saving.value = true
+  error.value = ''
+  try {
+    const { data, error: err } = await supabase
+      .from('achievements')
+      .update({ enabled: nextEnabled, updated_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .select('id, title, description, category, icon, stat_key, threshold, enabled, sort_order')
+      .single()
+    if (err) {
+      error.value = err.message || '更新失败'
+      return
+    }
+    const idx = list.value.findIndex((x) => x.id === row.id)
+    if (idx >= 0) {
+      const next = [...list.value]
+      next[idx] = { ...next[idx], ...data }
+      list.value = next
+    }
+    toast.success(nextEnabled ? '已启用' : '已停用')
   } finally {
     saving.value = false
   }

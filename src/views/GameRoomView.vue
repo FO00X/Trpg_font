@@ -457,7 +457,6 @@ const infoDescExpanded = ref(false)
 const infoBackstoryExpanded = ref(false)
 const membersOpen = ref(false)
 const ownerName = ref('')
-/** 房间内已通过审核的 PL 列表（用于「房间用户与角色」弹窗） */
 const roomAcceptedMembers = ref([])
 
 const toast = useToast()
@@ -516,9 +515,9 @@ const characterMenuLabel = computed(() => {
 })
 
 const selectableCharacters = computed(() => {
-  // 房主：可以自由选择任意角色卡作为 NPC
-  if (isOwner.value) return characters.value
-  // 其他玩家：只能选择被房主审核通过的角色卡
+  const uid = auth.user?.value?.id || null
+  const myCharacters = !uid ? characters.value : characters.value.filter((c) => !c.user_id || c.user_id === uid)
+  if (isOwner.value) return myCharacters
   if (!approvedCharacterIds.value.length) return []
   return characters.value.filter((c) => approvedCharacterIds.value.includes(c.id))
 })
@@ -689,7 +688,8 @@ async function load() {
 }
 
 onMounted(async () => {
-  fetchList()
+  // 确保角色列表加载完成后再渲染/计算下拉菜单内容
+  await fetchList()
   await load()
   // 非房主加载自己在本房间已被审核通过的角色卡，若仅有一张则默认绑定
   if (!isOwner.value && roomId.value) {

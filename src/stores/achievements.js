@@ -3,66 +3,8 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from './auth'
 import { useToast } from '../composables/useToast'
 
-// 成就基础默认配置：当后端 achievements 表不存在或无数据时作为兜底
-const DEFAULT_ACHIEVEMENTS = [
-  {
-    id: 'first_message',
-    title: '开口说话',
-    description: '在任意房间发送第一条聊天消息',
-    category: '聊天',
-    icon: 'mdi:chat-processing-outline',
-    statKey: 'messagesSent',
-    threshold: 1,
-  },
-  {
-    id: 'chatty',
-    title: '话唠',
-    description: '累计发送 50 条聊天消息',
-    category: '聊天',
-    icon: 'mdi:chat-outline',
-    statKey: 'messagesSent',
-    threshold: 50,
-  },
-  {
-    id: 'first_dice',
-    title: '第一次掷骰',
-    description: '完成一次公开掷骰',
-    category: '掷骰',
-    icon: 'mdi:dice-5-outline',
-    statKey: 'diceRolls',
-    threshold: 1,
-  },
-  {
-    id: 'dice_master',
-    title: '骰运加护',
-    description: '累计掷骰 100 次',
-    category: '掷骰',
-    icon: 'mdi:dice-multiple-outline',
-    statKey: 'diceRolls',
-    threshold: 100,
-  },
-  {
-    id: 'first_note',
-    title: '记录员',
-    description: '创建第一篇个人笔记',
-    category: '笔记',
-    icon: 'mdi:note-text-outline',
-    statKey: 'notesCreated',
-    threshold: 1,
-  },
-  {
-    id: 'first_room',
-    title: '开团者',
-    description: '成功创建第一个跑团房间',
-    category: '跑团',
-    icon: 'mdi:dice-multiple',
-    statKey: 'roomsCreated',
-    threshold: 1,
-  },
-]
-
-// 来自后端的成就配置列表（若后端无表/无数据，则回退为 DEFAULT_ACHIEVEMENTS）
-const configs = ref([...DEFAULT_ACHIEVEMENTS])
+// 成就配置仅从数据库 achievements 表加载
+const configs = ref([])
 
 // 用户已解锁成就列表：[{ id, unlockedAt }]
 const unlockedList = ref([])
@@ -73,6 +15,11 @@ const stats = ref({
   diceRolls: 0,
   notesCreated: 0,
   roomsCreated: 0,
+  diceCriticalSuccess: 0,
+  diceCriticalFail: 0,
+  diceSuccess: 0,
+  diceFail: 0,
+  diceOnTheLine: 0,
 })
 
 const initialized = ref(false)
@@ -163,7 +110,7 @@ export function useAchievementsStore() {
     }
   }
 
-  // 从后端 achievements 表加载成就配置；若表不存在则保持默认配置
+  // 从数据库 achievements 表加载成就配置
   async function loadConfigsFromServer() {
     try {
       const { data, error } = await supabase
@@ -173,8 +120,8 @@ export function useAchievementsStore() {
         .order('created_at', { ascending: true })
 
       if (error) {
-        // 若表尚未创建，则直接忽略，继续使用默认配置
         if (error.code === 'PGRST204' || (error.message && /achievements|relation .* does not exist/i.test(error.message))) {
+          configs.value = []
           return
         }
         console.warn('[achievements] loadConfigsFromServer error', error)
@@ -182,11 +129,6 @@ export function useAchievementsStore() {
       }
 
       const rows = Array.isArray(data) ? data : []
-      if (!rows.length) {
-        configs.value = [...DEFAULT_ACHIEVEMENTS]
-        return
-      }
-
       configs.value = rows.map((r) => ({
         id: r.id,
         title: r.title || '',
@@ -276,6 +218,38 @@ export function useAchievementsStore() {
     increaseStat('roomsCreated', 1)
   }
 
+  /**
+   * 掷骰检定结果上报（技能/属性/理智等 1d100 检定后调用）
+   * @param {string} result - '大成功' | '大失败' | '极难成功' | '困难成功' | '成功' | '失败'
+   * @param {number} [value] - 骰面值，用于卡线判定
+   * @param {number} [target] - 目标值，用于卡线判定（value === target 即卡线）
+   */
+  function reportDiceResult(result, value, target) {
+    if (result === '大成功') {
+      increaseStat('diceCriticalSuccess', 1)
+      increaseStat('diceSuccess', 1)
+      return
+    }
+    if (result === '大失败') {
+      increaseStat('diceCriticalFail', 1)
+      increaseStat('diceFail', 1)
+      return
+    }
+    if (result === '极难成功' || result === '困难成功' || result === '成功') {
+      increaseStat('diceSuccess', 1)
+      if (typeof value === 'number' && typeof target === 'number' && value === target) {
+        increaseStat('diceOnTheLine', 1)
+      }
+      return
+    }
+    if (result === '失败') {
+      increaseStat('diceFail', 1)
+      if (typeof value === 'number' && typeof target === 'number' && value === target) {
+        increaseStat('diceOnTheLine', 1)
+      }
+    }
+  }
+
   // 默认在首次使用时尝试同步一次历史成就
   ensureInitialized().catch(() => {})
 
@@ -295,6 +269,7 @@ export function useAchievementsStore() {
     onDiceRolled,
     onNoteCreated,
     onRoomCreated,
+    reportDiceResult,
   }
 }
 
